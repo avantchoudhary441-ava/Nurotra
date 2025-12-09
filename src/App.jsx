@@ -10,6 +10,12 @@ import AgentsGrid from "./components/AgentsGrid";
 import Footer from "./components/Footer";
 import BackgroundEffects from "./components/BackgroundEffects";
 import CollabLanding from "./pages/collabAI/collabLanding";
+import InfluencerForm from "./pages/Influencer/influencerForm";
+import BrandForm from "./pages/brand/brandForm";
+
+
+
+
 import "./styles/global.css";
 import "./styles/header.css";
 import "./styles/hero.css";
@@ -41,6 +47,8 @@ export default function App() {
       <Route path="/collab" element={<CollabLanding />} />
       <Route path="/login" element={<Login />} />
   <Route path="/signup" element={<Signup />} />
+  <Route path="/influencer-form" element={<InfluencerForm />} />
+  <Route path="/brand-form" element={<BrandForm />} />
 
     </Routes>
   );
