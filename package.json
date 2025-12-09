@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "homepage": "https://anujtiwari1406.github.io/Nurotra",
+    "homepage": "https://anujtiwari1406.github.io/Nurotra"
 
   },
   "dependencies": {
