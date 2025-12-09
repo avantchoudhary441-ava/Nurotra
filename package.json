@@ -3,12 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://anujtiwari1406.github.io/Nurotra",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "homepage": "https://anujtiwari1406.github.io/Nurotra"
+    "preview": "vite preview"
+   
 
   },
   "dependencies": {
