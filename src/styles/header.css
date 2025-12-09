@@ -1,0 +1,137 @@
+/* HEADER */
+header {
+  height: 72px;
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+
+  background: transparent;
+  backdrop-filter: none;
+  border-bottom: none;
+
+  transition: background 0.25s ease,
+              backdrop-filter 0.25s ease,
+              border 0.25s ease;
+}
+
+/* LIGHT MODE – Glassy Light Grey */
+:root[data-theme="light"] header.scrolled {
+  background: rgba(148, 148, 159, 0.65);
+  backdrop-filter: blur(18px) saturate(1.4);
+  border-bottom: 1px solid rgba(200, 200, 200, 0.35);
+}
+
+/* DARK MODE – Frosted Glass */
+:root[data-theme="dark"] header.scrolled {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(18px) saturate(1.4);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* LOGO CONTAINER */
+.logo-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Background glow behind logo */
+.logo-bg-glow {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  z-index: 1;
+  filter: blur(150px);
+}
+
+/* Light glow */
+:root[data-theme="light"] .logo-bg-glow {
+  background: radial-gradient(circle,
+    rgba(80,140,255,0.55),
+    rgba(180,120,255,0.35),
+    transparent 70%
+  );
+}
+
+/* Dark glow */
+:root[data-theme="dark"] .logo-bg-glow {
+  background: radial-gradient(circle,
+    rgba(120,150,255,0.75),
+    rgba(90,200,255,0.45),
+    transparent 70%
+  );
+  filter: blur(14px);
+}
+
+/* LOGO IMAGE */
+.nav-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  filter: brightness(5) saturate(0); /* makes logo white */
+  position: relative;
+  z-index: 2;
+}
+
+/* LOGO TEXT */
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* NAV ITEMS */
+nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+nav a {
+  text-decoration: none;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* THEME TOGGLE BUTTON */
+.theme-toggle {
+  background: transparent;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+/* SIGN UP BUTTON */
+.btn-primary {
+  padding: 9px 20px;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  color: white;
+  border-radius: 999px;
+  border: none;
+
+  cursor: pointer;
+  transition: 0.2s;
+  box-shadow: 0 10px 30px rgba(99,102,241,0.35);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  opacity: 0.95;
+  box-shadow: 0 16px 40px rgba(99,102,241,0.45);
+}

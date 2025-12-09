@@ -1,0 +1,116 @@
+.auth-container {
+  min-height: 100vh;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  color: var(--text-main);
+}
+
+/* Glow Background */
+.auth-glow {
+  position: absolute;
+  top: -200px;
+  left: 50%;
+  width: 900px;
+  height: 600px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(120,160,255,0.25), transparent 70%);
+  filter: blur(150px);
+  z-index: -1;
+}
+
+/* Top Bar */
+.auth-top {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.auth-back-btn {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,0.75);
+  cursor: pointer;
+}
+
+:root[data-theme="dark"] .auth-back-btn {
+  background: rgba(15,23,42,0.75);
+  color: white;
+}
+
+.auth-toggle {
+  font-size: 1rem;
+}
+
+/* Logo */
+.auth-logo-wrap {
+  text-align: center;
+  margin-top: 40px;
+}
+
+.auth-logo {
+  width: 100px;
+  margin-bottom: 10px;
+  filter: brightness(5) saturate(0);
+}
+
+.auth-title {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+/* Glass Form Card */
+.auth-card {
+  margin-top: 40px;
+  padding: 32px;
+  width: 100%;
+  max-width: 380px;
+
+  background: rgba(255,255,255,0.65);
+  border-radius: 18px;
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.4);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+
+:root[data-theme="dark"] .auth-card {
+  background: rgba(15,23,42,0.85);
+  border-color: rgba(255,255,255,0.1);
+}
+
+/* Inputs */
+.auth-input {
+  width: 100%;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,0.85);
+}
+
+:root[data-theme="dark"] .auth-input {
+  background: rgba(15,23,42,0.85);
+  color: white;
+}
+
+/* Buttons */
+.auth-btn {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.auth-switch {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.auth-switch span {
+  color: var(--accent-1);
+  cursor: pointer;
+}

@@ -1,0 +1,141 @@
+/* AGENT GRID */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 28px;
+  padding: 30px 40px 50px;
+}
+
+/* OUTER WRAPPER – GRADIENT BORDER */
+.agent-card {
+  border-radius: 18px;
+  padding: 1px;
+
+  /* ORIGINAL MULTI-COLOR GRADIENT BORDER */
+  background: linear-gradient(
+    135deg,
+    rgba(99,102,241,0.9),
+    rgba(16,185,129,0.5),
+    rgba(236,72,153,0.8)
+  );
+
+  /* ORIGINAL SOFT SHADOW */
+  box-shadow: var(--shadow-soft);
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.25s ease;
+}
+
+/* INNER CARD */
+.agent-inner {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 22px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* HOVER EFFECT (restore original glow) */
+.agent-card:hover {
+  transform: translateY(-6px);
+
+  /* RESTORED PURPLE GLOW */
+  box-shadow: 0 22px 45px rgba(79,70,229,0.45),
+              0 0 18px rgba(99,102,241,0.35);
+}
+
+/* ICON + TEXT */
+.agent-inner .icon {
+  font-size: 40px;
+}
+
+.agent-inner h3 {
+  font-size: 20px;
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+.role {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.skills {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* STATUS */
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid rgba(148,163,184,0.7);
+  background: rgba(15,23,42,0.9);
+  color: #e5e7eb;
+}
+
+:root[data-theme="light"] .status-pill {
+  background: #0f172a;
+}
+
+.status-pill .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.status-pill.online .dot {
+  background: #22c55e;
+}
+
+.status-pill.idle .dot {
+  background: #facc15;
+}
+
+.details-link {
+  font-size: 12px;
+  text-decoration: none;
+  color: #a5b4fc;
+}
+
+/* BUTTON */
+.btn-secondary {
+  padding: 9px 16px;
+  width: 100%;
+  margin-top: 14px;
+  border-radius: 999px;
+
+  /* Original gradient */
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  color: white;
+  border: none;
+
+  font-size: 0.9rem;
+  font-weight: 500;
+
+  cursor: pointer;
+  transition: 0.2s;
+  box-shadow: 0 10px 25px rgba(99,102,241,0.35);
+}
+
+.btn-secondary:hover {
+  transform: translateY(-1px);
+  opacity: 0.92;
+  box-shadow: 0 16px 35px rgba(99,102,241,0.45);
+}
