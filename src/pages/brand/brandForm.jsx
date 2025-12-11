@@ -1,12 +1,39 @@
-import "../../styles/influencerForm.css"; // reusing same premium styling
-import { useNavigate } from "react-router-dom";
+import "../../styles/brandForm.css";
+import { useState, useEffect } from "react";
 import logo from "../../assets/NurotraLogo.png";
-import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function BrandForm() {
   const navigate = useNavigate();
 
-  // 🌗 Theme Toggle
+  // ---------------------------------------
+  // FORM STATE (AUTO SAVE)
+  // ---------------------------------------
+  const [formData, setFormData] = useState({
+    website: "",
+    companyType: "Startup",
+    contact: "",
+    industry: "Tech",
+    contentType: "Reels",
+    budget: "",
+  });
+
+  // Load saved data if exists
+  useEffect(() => {
+    const saved = localStorage.getItem("brandForm");
+    if (saved) setFormData(JSON.parse(saved));
+  }, []);
+
+  // Save form data on every change
+  useEffect(() => {
+    localStorage.setItem("brandForm", JSON.stringify(formData));
+  }, [formData]);
+
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Theme Toggle
   const toggleTheme = () => {
     const current = document.documentElement.getAttribute("data-theme") || "light";
     const next = current === "light" ? "dark" : "light";
@@ -14,112 +41,154 @@ export default function BrandForm() {
     localStorage.setItem("theme", next);
   };
 
+  const submitForm = () => {
+    if (!formData.website.startsWith("https://")) {
+      alert("Website/Instagram link must start with https://");
+      return;
+    }
+
+    if (!formData.contact) {
+      alert("Please enter a valid email or phone number.");
+      return;
+    }
+
+    alert("Brand profile submitted successfully!");
+  };
+
   return (
-    <div className="inf-wrapper">
+    <div className="brand-wrapper">
 
       {/* Glow Background */}
-      <div className="inf-glow"></div>
+      <div className="brand-glow"></div>
 
-      {/* TOP BAR */}
-      <div className="inf-top">
-        <button onClick={() => navigate(-1)} className="inf-back-btn">← Back</button>
+      {/* Top Bar */}
+      <div className="brand-top">
+        <button className="brand-back-btn" onClick={() => navigate(-1)}>
+          ← Back
+        </button>
 
-        <div className="inf-top-right">
-          <button onClick={toggleTheme} className="inf-toggle-btn">🌙</button>
+        <div className="brand-top-right">
+          <button className="brand-toggle-btn" onClick={toggleTheme}>🌙</button>
+          <div className="brand-profile-icon">🏢</div>
+        </div>
+      </div>
 
-          <div className="inf-profile-icon">
-            <span>👤</span>
+      {/* Header */}
+      <div className="brand-header">
+        <img src={logo} alt="Logo" className="brand-logo" />
+        <h2 className="brand-title">CollabAI</h2>
+        <p className="brand-subtitle">Set up your Brand Profile</p>
+      </div>
+
+      {/* Form Card */}
+      <div className="brand-card">
+
+        {/* TWO COLUMN FORM */}
+        <div className="brand-columns">
+
+          {/* LEFT COLUMN — Basic Info */}
+          <div>
+            <h3 className="col-heading">Basic Info</h3>
+
+            {/* Nuro ID */}
+            <div className="brand-group">
+              <label>Nuro ID</label>
+              <input type="text" value="B-001" disabled className="brand-disabled" />
+            </div>
+
+            {/* Website / Instagram */}
+            <div className="brand-group">
+              <label>Website / Instagram Link</label>
+              <input
+                type="url"
+                value={formData.website}
+                onChange={(e) => updateField("website", e.target.value)}
+                placeholder="https://yourbrand.com"
+                className="brand-link"
+              />
+            </div>
+
+            {/* Company Type */}
+            <div className="brand-group">
+              <label>Company Type</label>
+              <select
+                value={formData.companyType}
+                onChange={(e) => updateField("companyType", e.target.value)}
+              >
+                <option>Startup</option>
+                <option>Small Business</option>
+                <option>Medium</option>
+                <option>Enterprise</option>
+              </select>
+            </div>
+
+            {/* Contact Info */}
+            <div className="brand-group">
+              <label>Email / Phone Number</label>
+              <input
+                type="text"
+                value={formData.contact}
+                onChange={(e) => updateField("contact", e.target.value)}
+                placeholder="yourmail@company.com / 9876543210"
+              />
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN — Preferences */}
+          <div>
+            <h3 className="col-heading">Collaboration Preferences</h3>
+
+            {/* Industry / Niche */}
+            <div className="brand-group">
+              <label>Industry / Niche</label>
+              <select
+                value={formData.industry}
+                onChange={(e) => updateField("industry", e.target.value)}
+              >
+                <option>Tech</option>
+                <option>Fitness</option>
+                <option>Fashion</option>
+                <option>Beauty</option>
+                <option>Food</option>
+                <option>Lifestyle</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            {/* Preferred Content Type */}
+            <div className="brand-group">
+              <label>Preferred Content Type</label>
+              <select
+                value={formData.contentType}
+                onChange={(e) => updateField("contentType", e.target.value)}
+              >
+                <option>Reels</option>
+                <option>Posts</option>
+                <option>Stories</option>
+                <option>ALL</option>
+              </select>
+            </div>
+
+            {/* Budget */}
+            <div className="brand-group">
+              <label>Budget</label>
+              <input
+                type="number"
+                value={formData.budget}
+                onChange={(e) => updateField("budget", e.target.value)}
+                placeholder="₹ Enter Budget"
+              />
+            </div>
+
           </div>
         </div>
+
+        {/* Submit Button */}
+        <button className="btn-primary brand-submit" onClick={submitForm}>
+          Submit Brand Profile
+        </button>
+
       </div>
-
-      {/* CENTER LOGO */}
-      <div className="inf-logo-center">
-        <img src={logo} className="inf-logo-big" alt="Logo" />
-        <h2 className="inf-logo-title">CollabAI</h2>
-      </div>
-
-      {/* HEADER TEXT */}
-      <div className="inf-header">
-        <h1>
-          Brand <span className="gradient-text">Collaboration Profile</span>
-        </h1>
-        <p>Help CollabAI find influencers that match your brand perfectly.</p>
-      </div>
-
-      {/* BRAND FORM */}
-      <form className="inf-form">
-
-        {/* Auto ID */}
-        <div className="inf-group">
-          <label>Nuro ID</label>
-          <input type="text" value="B-001" disabled className="inf-disabled" />
-        </div>
-
-        {/* Website / Instagram */}
-        <div className="inf-group">
-          <label>Website / Instagram Link</label>
-          <input
-            type="url"
-            placeholder="https://yourbrand.com or https://instagram.com/brand"
-            className="inf-link"
-            required
-          />
-        </div>
-
-        {/* Company Type */}
-        <div className="inf-group">
-          <label>Company Type</label>
-          <select>
-            <option>Startup</option>
-            <option>Small Business</option>
-            <option>Medium</option>
-            <option>Enterprise</option>
-          </select>
-        </div>
-
-        {/* Email or phone */}
-        <div className="inf-group">
-          <label>Contact Info</label>
-          <input type="text" placeholder="Email or mobile number" required />
-        </div>
-
-        <h2 className="inf-section">Collaboration Preferences</h2>
-
-        {/* Industry / Niche */}
-        <div className="inf-group">
-          <label>Industry / Niche</label>
-          <select>
-            <option>Fitness</option>
-            <option>Tech</option>
-            <option>Beauty</option>
-            <option>Lifestyle</option>
-            <option>Fashion</option>
-            <option>Food</option>
-            <option>Gaming</option>
-            <option>Education</option>
-          </select>
-        </div>
-
-        {/* Preferred Content Type */}
-        <div className="inf-group">
-          <label>Preferred Content Type</label>
-          <div className="inf-checkboxes">
-            <label><input type="checkbox" /> Reels</label>
-            <label><input type="checkbox" /> Posts</label>
-            <label><input type="checkbox" /> Stories</label>
-            <label><input type="checkbox" /> ALL</label>
-          </div>
-        </div>
-
-        {/* Budget */}
-        <div className="inf-group">
-          <label>Budget</label>
-          <input type="number" placeholder="₹ Enter budget amount" required />
-        </div>
-
-        <button className="btn-primary inf-submit">Submit Profile</button>
-      </form>
     </div>
   );
 }
