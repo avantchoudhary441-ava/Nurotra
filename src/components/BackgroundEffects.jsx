@@ -1,6 +1,7 @@
 export default function BackgroundEffects() {
   return (
     <>
+     <div className="background-grid"></div>
       <div className="background-glow"></div>
       <div className="orb orb-1"></div>
       <div className="orb orb-2"></div>

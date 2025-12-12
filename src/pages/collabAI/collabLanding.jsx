@@ -2,6 +2,7 @@ import { useState } from "react";
 import logo from "../../assets/NurotraLogo.png";
 import "../../styles/collabLanding.css";
 import { useNavigate } from "react-router-dom";
+import BackgroundEffects from "../../components/BackgroundEffects";
 
 export default function CollabLanding() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function CollabLanding() {
 
   return (
     <div className="collab-container">
+      <div><BackgroundEffects/></div>
 
       <div className="collab-glow"></div>
 

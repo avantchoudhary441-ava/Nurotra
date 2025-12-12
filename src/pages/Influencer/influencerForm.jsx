@@ -67,7 +67,11 @@ export default function InfluencerForm() {
     if (formData.workedBefore === "Yes" && !formData.brandName)
       return alert("Please enter the brand name.");
 
-    alert("Profile submitted successfully!");
+    
+  localStorage.setItem("influencerForm", JSON.stringify(formData));
+
+  //  Go to Dashboard
+  navigate("/influencer/dashboard");
   };
 
   return (
@@ -153,7 +157,7 @@ export default function InfluencerForm() {
                   onChange={(e) => updateField("followers", e.target.value)}
                 >
                   <option>1k – 10k</option>
-                  <option>10k – 50k</option>
+                  <option>10k - 50k</option>
                   <option>50k – 100k</option>
                   <option>100k+</option>
                 </select>

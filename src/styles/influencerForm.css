@@ -220,15 +220,14 @@
   margin-top: 24px;      /* increased from 24px */
 }
 
-
-
-
-
 .inf-section-title {
   margin: 0 0 10px 0;
   font-size: 16px;
   font-weight: 700;
-  color: var(--text-main);
+  
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 /* Inputs */

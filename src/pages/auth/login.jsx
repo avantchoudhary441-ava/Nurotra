@@ -1,12 +1,15 @@
 import logo from "../../assets/NurotraLogo.png";
 import "../../styles/auth.css";
+import BackgroundEffects from "../../components/BackgroundEffects";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const navigate = useNavigate();
 
   return (
+
     <div className="auth-container">
+      <div><BackgroundEffects/></div>
       <div className="auth-glow"></div>
 
       {/* Top Bar */}

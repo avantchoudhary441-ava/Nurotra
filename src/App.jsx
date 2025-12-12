@@ -13,6 +13,8 @@ import CollabLanding from "./pages/collabAI/collabLanding";
 import InfluencerForm from "./pages/Influencer/influencerForm";
 import BrandForm from "./pages/brand/brandForm";
 
+import BrandDashboard from "./pages/brand/brandDashboard";
+
 
 
 
@@ -23,6 +25,7 @@ import "./styles/categories.css";
 import "./styles/agents.css";
 import "./styles/footer.css";
 import "./styles/background.css";
+import InfluencerDashboard from "./pages/Influencer/influencerDashboard.jsx";
 
 export default function App() {
   return (
@@ -33,6 +36,7 @@ export default function App() {
         path="/"
         element={
           <>
+          <BackgroundEffects />
             <Header />
             <Hero />
             <Categories />
@@ -48,8 +52,11 @@ export default function App() {
       <Route path="/login" element={<Login />} />
   <Route path="/signup" element={<Signup />} />
   <Route path="/influencer-form" element={<InfluencerForm />} />
+  <Route path="/influencer/dashboard" element={<InfluencerDashboard/>} />
   <Route path="/brand-form" element={<BrandForm />} />
+  <Route path="/brand/dashboard" element={<BrandDashboard/>} />
 
     </Routes>
+
   );
 }
