@@ -1,19 +1,31 @@
 // src/pages/brand/brandDashboard.jsx
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import Sidebar from "../../components/Sidebar";
 import "../../styles/dashboard.css";
+import LineStatsChart from "../../components/charts/LineStatsChart";
+import BarRankChart from "../../components/charts/BarRankChart";
 import BackgroundEffects from "../../components/BackgroundEffects";
 
+
 export default function BrandDashboard() {
-  const navigate = useNavigate();
+  const [data, setData] = useState(null);
   const [scrolled, setScrolled] = useState(false);
 
+  /* ---------------- LOAD DATA ---------------- */
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
+    const saved = localStorage.getItem("brandForm");
+    setData(saved ? JSON.parse(saved) : null);
+  }, []);
+
+  /* ---------------- NAVBAR SCROLL GLASS ---------------- */
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 18);
     window.addEventListener("scroll", onScroll);
+    onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  /* ---------------- THEME TOGGLE ---------------- */
   const toggleTheme = () => {
     const current = document.documentElement.getAttribute("data-theme") || "light";
     const next = current === "light" ? "dark" : "light";
@@ -21,90 +33,137 @@ export default function BrandDashboard() {
     localStorage.setItem("theme", next);
   };
 
+  /* ---------------- MOCK ANALYTICS ---------------- */
+  const lineData = [20, 24, 22, 30, 28, 35, 42];
+  const barData = [60, 72, 48, 85, 70];
+
+  const badges = ["Verified Brand", "Top Recruiter", "Fast Payout", "Trusted"];
+
   return (
-    <div className="dashboard-page">
-      <div><BackgroundEffects/></div>
+    <div className="influencer-dashboard">
+      <div><BackgroundEffects /></div>
+      {/* SIDEBAR (same component) */}
+      <Sidebar role="brand" />
 
-      {/* NAVBAR */}
-      <nav className={`dashboard-navbar ${scrolled ? "scrolled" : ""}`}>
-        <div className="nav-left">
-          <span className="nav-logo">🤝</span>
-          <span className="nav-brand">CollabAI</span>
-        </div>
+      <div className="influencer-main">
+        {/* NAVBAR */}
+        <nav className={`influencer-navbar ${scrolled ? "scrolled" : ""}`}>
+          <div className="nav-left">
+            <div className="nav-logo">🏷️</div>
+            <div className="nav-brand">CollabAI</div>
+          </div>
 
-        <div className="nav-right">
-          <button className="theme-toggle" onClick={toggleTheme}>🌙</button>
-          <div className="nav-profile">🏢</div>
-        </div>
-      </nav>
-
-      {/* BODY */}
-      <div className="dashboard-body">
+          <div className="nav-right">
+            <div className="dash-sidebar-bottom">
+        <div className="dash-cta">Find Matches</div>
+      </div>
+            <button className="theme-toggle" onClick={toggleTheme}>
+              {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
+                ? "☀️"
+                : "🌙"}
+            </button>
+            <div className="nav-profile">🏢</div>
+          </div>
+        </nav>
 
         {/* PROFILE CARD */}
         <section className="profile-card">
           <div className="profile-right">
-            <div className="profile-photo brand-photo">🏢</div>
-            <div>
-              <div className="profile-name">Nike India</div>
-              <div className="profile-sub">Enterprise Brand</div>
+            <div className="profile-info">
+              <div className="profile-photo">🏢</div>
+              <div className="profile-meta">
+                <div className="profile-name">
+                  {data?.companyName || "Your Brand"}
+                </div>
+                <div className="profile-sub">
+                  {data?.companyType || "Brand Profile"}
+                </div>
+              </div>
             </div>
           </div>
 
           <div className="profile-left">
-            <button className="btn-outline">Edit Profile</button>
-            <button className="btn-outline">Settings</button>
-            <button className="btn-dots">⋯</button>
+            <div className="profile-actions">
+              <button className="btn-outline">Edit Profile</button>
+              <button className="btn-outline">Settings</button>
+              <button className="btn-dots">⋯</button>
+            </div>
           </div>
         </section>
 
-        {/* SIDEBAR + ANALYTICS */}
-        <div className="dashboard-row">
+        {/* ANALYTICS */}
+        <main className="analytics-area">
+          <div className="analytics-grid">
 
-          {/* SIDEBAR CARD */}
-          <aside className="sidebar-card">
-            {[
-              "Profile",
-              "Active Campaigns",
-              "Past Collaborations",
-              "Analytics",
-              "Settings",
-              "Logout",
-            ].map((item) => (
-              <div key={item} className="sidebar-item">
-                {item}
+            {/* CARD 1 — LINE GRAPH */}
+           <div className="card neon-card">
+           
+             {/* TEXT */}
+             <div className="rating-header">
+               <div className="rating-main">
+                 <div className="rating-label">Total Collaborations</div>
+                 <div className="rating-value">
+                   {data?.totalCollabs ?? 0}
+                 </div>
+               </div>
+             </div>
+           
+             {/* LINE CHART */}
+             <div className="line-chart-wrap">
+               <LineStatsChart />
+             </div>
+           
+             {/* DATE RANGE */}
+             <div className="chart-range">
+               <span>May 2025</span>
+               <span>Dec 2025</span>
+             </div>
+           
+           </div>
+
+
+            {/* CARD 2 — BAR GRAPH */}
+            <div className="card neon-card">
+  <div className="card-head">
+    <h4>Brand Reach</h4>
+    <div className="card-sub">Audience exposure</div>
+  </div>
+
+  <div className="line-chart-wrap">
+    <BarRankChart />
+  </div>
+</div>
+
+            {/* CARD 3 — ACTIVE CAMPAIGNS */}
+            <div className="card neon-card">
+              <div className="card-head">
+                <h4>Active Campaigns</h4>
+                <div className="card-sub">Currently running</div>
               </div>
-            ))}
-          </aside>
-
-          {/* ANALYTICS GRID */}
-          <main className="analytics-grid">
-            <div className="card neon-card">
-              <h4>Total Collaborations</h4>
-              <div className="big-number">42</div>
+              <div className="card-body center">
+                <div className="active-large">4</div>
+                <button className="btn-primary">Manage Campaigns</button>
+              </div>
             </div>
 
-            <div className="card neon-card center">
-              <h4>Brand Reach</h4>
-              <div className="big-number">Top 8%</div>
-            </div>
-
+            {/* CARD 4 — BADGES */}
             <div className="card neon-card">
-              <h4>Active Campaigns</h4>
-              <div className="big-number">5</div>
-            </div>
-
-            <div className="card neon-card">
-              <h4>Brand Badges</h4>
+              <div className="card-head">
+                <h4>Brand Badges</h4>
+                <div className="card-sub">Achievements</div>
+              </div>
               <div className="badges-grid">
-                <div className="badge">🔥 Trusted</div>
-                <div className="badge">⚡ Fast Pay</div>
-                <div className="badge">💎 Premium</div>
+                {badges.map((b, i) => (
+                  <div className="badge" key={i}>
+                    <div className="badge-icon badge-gradient">🏅</div>
+                    <div className="badge-name">{b}</div>
+                  </div>
+                ))}
               </div>
             </div>
-          </main>
 
-        </div>
+          </div>
+        </main>
       </div>
     </div>
   );

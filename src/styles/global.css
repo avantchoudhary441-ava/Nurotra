@@ -1,4 +1,100 @@
 /* ---------------- GLOBAL VARIABLES ---------------- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --font-main: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  font-family: var(--font-main) !important;
+  letter-spacing: -0.2px;
+}
+/* -----------------------------------------
+   GLOBAL PREMIUM TYPOGRAPHY SYSTEM
+   For entire CollabAI Project
+------------------------------------------ */
+
+/* 1) Base font variables */
+:root {
+  --font-main: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --text-main: #0b1120;
+  --text-muted: #6b7280;
+
+  --h1: 2.2rem;
+  --h2: 1.75rem;
+  --h3: 1.35rem;
+  --h4: 1.15rem;
+  --h5: 1rem;
+  --p: 0.92rem;
+
+  --fw-bold: 700;
+  --fw-medium: 600;
+  --fw-regular: 400;
+}
+
+/* Dark theme typography tones */
+:root[data-theme="dark"] {
+  --text-main: #f4f4f5;
+  --text-muted: #9ca3af;
+}
+
+/* 2) Apply globally */
+* {
+  font-family: var(--font-main) !important;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.2px;
+  margin: 0;
+  padding: 0;
+}
+
+/* 3) Global Heading Styles */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--fw-bold);
+  color: var(--text-main);
+  margin: 0;
+  line-height: 1.2;
+}
+
+h1 { font-size: var(--h1); }
+h2 { font-size: var(--h2); }
+h3 { font-size: var(--h3); }
+h4 { font-size: var(--h4); }
+h5 { font-size: var(--h5); }
+
+/* 4) Paragraph & Muted text */
+p {
+  font-size: var(--p);
+  font-weight: var(--fw-regular);
+  color: var(--text-main);
+  line-height: 1.6;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+/* 5) Labels (forms) */
+label {
+  font-size: 0.85rem;
+  font-weight: var(--fw-medium);
+  color: var(--text-main);
+}
+
+/* 6) Smooth transitions (light/dark switching) */
+body, h1, h2, h3, h4, p, label, span {
+  transition: color 0.25s ease, background 0.25s ease;
+}
+
+/* 7) Responsive improvements */
+@media (max-width: 768px) {
+  :root {
+    --h1: 1.8rem;
+    --h2: 1.5rem;
+    --h3: 1.2rem;
+  }
+}
+
 :root {
   --bg: #f5f6fa;
   --bg-soft: #f3f4ff;

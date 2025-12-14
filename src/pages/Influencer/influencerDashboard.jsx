@@ -4,6 +4,9 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import "../../styles/dashboard.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
+import LineStatsChart from "../../components/charts/LineStatsChart";
+import BarRankChart from "../../components/charts/BarRankChart";
+
  // small helpers (optional, included in combined CSS below)
 
 export default function InfluencerDashboard() {
@@ -95,6 +98,9 @@ export default function InfluencerDashboard() {
           </div>
 
           <div className="nav-right">
+            <div className="dash-sidebar-bottom">
+        <div className="dash-cta">Find Matches</div>
+      </div>
             <button
   id="theme-toggle"
   className="theme-toggle"
@@ -140,37 +146,42 @@ export default function InfluencerDashboard() {
         <main className="analytics-area">
           <div className="analytics-grid">
             {/* Card 1: Total Collaborations + small bar chart */}
-            <div className="card neon-card">
-              <div className="card-head">
-                <h4>Total Collaborations</h4>
-                <div className="card-sub">Last 6 months</div>
-              </div>
+            {/* Card 1: Total Collaborations (clean & minimal) */}
+<div className="card neon-card">
 
-              <div className="card-body chart-body">
-                <div className="big-number">{data?.totalCollabs ?? 0}</div>
+  {/* TEXT */}
+  <div className="rating-header">
+    <div className="rating-main">
+      <div className="rating-label">Total Collaborations</div>
+      <div className="rating-value">
+        {data?.totalCollabs ?? 0}
+      </div>
+    </div>
+  </div>
 
-                <div className="mini-bar-chart">
-                  {chartData.map((v, i) => {
-                    const max = Math.max(...chartData);
-                    const height = Math.round((v / max) * 100);
-                    return <div key={i} className="bar" style={{ height: `${height}%` }} />;
-                  })}
-                </div>
-              </div>
-            </div>
+  {/* LINE CHART */}
+  <div className="line-chart-wrap">
+    <LineStatsChart />
+  </div>
+
+  {/* DATE RANGE */}
+  <div className="chart-range">
+    <span>May 2025</span>
+    <span>Dec 2025</span>
+  </div>
+
+</div>
+
 
             {/* Card 2: Top X% circular progress */}
             <div className="card neon-card">
               <div className="card-head">
-                <h4>Your Rank</h4>
-                <div className="card-sub">Compare with all users</div>
+                <h4>Top</h4>
+                <div className="card-sub">Audience exposure</div>
               </div>
-
-              <div className="card-body center">
-                <CircularProgress percent={topPercentInfo().pct} label={topPercentInfo().text} />
-                <div style={{ marginTop: 12 }} className="rank-note">
-                  {data?.followers ?? "—"} followers
-                </div>
+            
+              <div className="line-chart-wrap">
+                <BarRankChart />
               </div>
             </div>
 

@@ -49,7 +49,7 @@ export default function CollabLanding() {
       {/* MAIN HERO LOGO (center of page) */}
       <div className="collab-hero-logo-wrap">
         <img src={logo} className="collab-hero-logo" alt="Nurotra Logo" />
-        <h2 className="collab-hero-title">CollabAI</h2>
+        <h2 className="collab-hero-title">Collaborator</h2>
       </div>
 
       {/* CONTENT */}

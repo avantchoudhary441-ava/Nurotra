@@ -6,8 +6,8 @@ export default function AgentsGrid() {
   const agents = [
     {
       id: 1,
-      name: "CollabAI",
-      role: "Brand ↔ Influencer Collaboration AI",
+      name: "Collaborator Agent",
+      role: "Brand ↔ Influencer Collaboration Agent",
       icon: "🤝",
       skills: "Influencer matching • Brand linking",
       status: "online",

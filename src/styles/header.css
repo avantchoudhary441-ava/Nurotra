@@ -72,8 +72,8 @@ header {
 
 /* LOGO IMAGE */
 .nav-logo {
-  width: 30px;
-  height: 30px;
+  width: 35px;
+  height: 35px;
   object-fit: contain;
   filter: brightness(5) saturate(0); /* makes logo white */
   position: relative;
@@ -82,7 +82,7 @@ header {
 
 /* LOGO TEXT */
 .logo {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 700;
   background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
   -webkit-background-clip: text;

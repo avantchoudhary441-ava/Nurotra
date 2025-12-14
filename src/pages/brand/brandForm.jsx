@@ -76,7 +76,7 @@ export default function BrandForm() {
       {/* Header */}
       <div className="brand-header">
         <img src={logo} alt="Logo" className="brand-logo" />
-        <h2 className="brand-title">CollabAI</h2>
+        <h2 className="brand-title">Collaborator</h2>
         <p className="brand-subtitle">Set up your Brand Profile</p>
       </div>
 

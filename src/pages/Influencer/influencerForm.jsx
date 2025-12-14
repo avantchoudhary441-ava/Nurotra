@@ -93,7 +93,7 @@ export default function InfluencerForm() {
       {/* Header Section */}
       <div className="inf-header">
         <img src={logo} className="inf-header-logo" />
-        <h2 className="inf-header-title">CollabAI</h2>
+        <h2 className="inf-header-title">Collaborator</h2>
         <p className="inf-header-subtitle">Set up your Influencer Profile</p>
       </div>
 
