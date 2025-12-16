@@ -2,9 +2,11 @@ import "../../styles/brandForm.css";
 import { useState, useEffect } from "react";
 import logo from "../../assets/NurotraLogo.png";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 export default function BrandForm() {
   const navigate = useNavigate();
+  const { user } = useAuth(); // Get user from context
 
   // ---------------------------------------
   // FORM STATE (AUTO SAVE)
@@ -16,7 +18,19 @@ export default function BrandForm() {
     industry: "Tech",
     contentType: "Reels",
     budget: "",
+    nuroId: "", // Renamed
   });
+
+  // Auto-fill effect
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        contact: prev.contact || user.email || "", // Auto-fill email
+        nuroId: user.uniqueId || user._id || "" // Auto-fill Nuro ID
+      }));
+    }
+  }, [user]);
 
   // Load saved data if exists
   useEffect(() => {
@@ -52,7 +66,8 @@ export default function BrandForm() {
       return;
     }
 
-    alert("Brand profile submitted successfully!");
+
+    navigate("/brand/dashboard");
   };
 
   return (
@@ -92,8 +107,14 @@ export default function BrandForm() {
 
             {/* Nuro ID */}
             <div className="brand-group">
-              <label>Nuro ID</label>
-              <input type="text" value="B-001" disabled className="brand-disabled" />
+              <label>Nuro ID (Auto-filled)</label>
+              <input
+                type="text"
+                value={formData.nuroId}
+                className="brand-disabled"
+                readOnly
+                style={{ cursor: 'not-allowed', opacity: 0.7 }}
+              />
             </div>
 
             {/* Website / Instagram */}
@@ -184,9 +205,11 @@ export default function BrandForm() {
         </div>
 
         {/* Submit Button */}
-        <button className="btn-primary brand-submit" onClick={submitForm}>
-          Submit Brand Profile
-        </button>
+        <div style={{ display: 'flex', justifySelf: 'center', width: '100%', justifyContent: 'center', marginTop: '2rem' }}>
+          <button className="btn-primary brand-submit" onClick={submitForm}>
+            Submit Brand Profile
+          </button>
+        </div>
 
       </div>
     </div>

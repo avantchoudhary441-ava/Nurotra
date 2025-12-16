@@ -1,5 +1,6 @@
 // src/pages/brand/brandDashboard.jsx
 import React, { useEffect, useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 import Sidebar from "../../components/Sidebar";
 import "../../styles/dashboard.css";
 import LineStatsChart from "../../components/charts/LineStatsChart";
@@ -8,14 +9,10 @@ import BackgroundEffects from "../../components/BackgroundEffects";
 
 
 export default function BrandDashboard() {
-  const [data, setData] = useState(null);
-  const [scrolled, setScrolled] = useState(false);
+  const { user, logout } = useAuth();
+  const data = user || {};
 
-  /* ---------------- LOAD DATA ---------------- */
-  useEffect(() => {
-    const saved = localStorage.getItem("brandForm");
-    setData(saved ? JSON.parse(saved) : null);
-  }, []);
+  const [scrolled, setScrolled] = useState(false);
 
   /* ---------------- NAVBAR SCROLL GLASS ---------------- */
   useEffect(() => {
@@ -55,14 +52,14 @@ export default function BrandDashboard() {
 
           <div className="nav-right">
             <div className="dash-sidebar-bottom">
-        <div className="dash-cta">Find Matches</div>
-      </div>
+              <div className="dash-cta">Find Matches</div>
+            </div>
             <button className="theme-toggle" onClick={toggleTheme}>
               {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
                 ? "☀️"
                 : "🌙"}
             </button>
-            <div className="nav-profile">🏢</div>
+            <div className="nav-profile" onClick={logout} style={{ cursor: 'pointer' }} title="Logout">🚪</div>
           </div>
         </nav>
 
@@ -73,7 +70,7 @@ export default function BrandDashboard() {
               <div className="profile-photo">🏢</div>
               <div className="profile-meta">
                 <div className="profile-name">
-                  {data?.companyName || "Your Brand"}
+                  {data?.name || data?.companyName || "Your Brand"}
                 </div>
                 <div className="profile-sub">
                   {data?.companyType || "Brand Profile"}
@@ -96,43 +93,43 @@ export default function BrandDashboard() {
           <div className="analytics-grid">
 
             {/* CARD 1 — LINE GRAPH */}
-           <div className="card neon-card">
-           
-             {/* TEXT */}
-             <div className="rating-header">
-               <div className="rating-main">
-                 <div className="rating-label">Total Collaborations</div>
-                 <div className="rating-value">
-                   {data?.totalCollabs ?? 0}
-                 </div>
-               </div>
-             </div>
-           
-             {/* LINE CHART */}
-             <div className="line-chart-wrap">
-               <LineStatsChart />
-             </div>
-           
-             {/* DATE RANGE */}
-             <div className="chart-range">
-               <span>May 2025</span>
-               <span>Dec 2025</span>
-             </div>
-           
-           </div>
+            <div className="card neon-card">
+
+              {/* TEXT */}
+              <div className="rating-header">
+                <div className="rating-main">
+                  <div className="rating-label">Total Collaborations</div>
+                  <div className="rating-value">
+                    {data?.totalCollabs ?? 0}
+                  </div>
+                </div>
+              </div>
+
+              {/* LINE CHART */}
+              <div className="line-chart-wrap">
+                <LineStatsChart />
+              </div>
+
+              {/* DATE RANGE */}
+              <div className="chart-range">
+                <span>May 2025</span>
+                <span>Dec 2025</span>
+              </div>
+
+            </div>
 
 
             {/* CARD 2 — BAR GRAPH */}
             <div className="card neon-card">
-  <div className="card-head">
-    <h4>Brand Reach</h4>
-    <div className="card-sub">Audience exposure</div>
-  </div>
+              <div className="card-head">
+                <h4>Brand Reach</h4>
+                <div className="card-sub">Audience exposure</div>
+              </div>
 
-  <div className="line-chart-wrap">
-    <BarRankChart />
-  </div>
-</div>
+              <div className="line-chart-wrap">
+                <BarRankChart />
+              </div>
+            </div>
 
             {/* CARD 3 — ACTIVE CAMPAIGNS */}
             <div className="card neon-card">

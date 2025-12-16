@@ -1,25 +1,24 @@
 // src/pages/influencer/influencerDashboard.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import Sidebar from "../../components/Sidebar";
 import "../../styles/dashboard.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import LineStatsChart from "../../components/charts/LineStatsChart";
 import BarRankChart from "../../components/charts/BarRankChart";
 
- // small helpers (optional, included in combined CSS below)
+// small helpers (optional, included in combined CSS below)
 
 export default function InfluencerDashboard() {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
+  const { user, logout } = useAuth();
+
+  // Use user context data, fallback to defaults if needed
+  const data = user || {};
 
   // UI state
   const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("influencerForm");
-    setData(saved ? JSON.parse(saved) : null);
-  }, []);
 
   // scroll handler for navbar glass effect
   useEffect(() => {
@@ -69,11 +68,11 @@ export default function InfluencerDashboard() {
 
   // Theme toggle
   const toggleTheme = () => {
-  const current = document.documentElement.getAttribute("data-theme") || "light";
-  const next = current === "light" ? "dark" : "light";
-  document.documentElement.setAttribute("data-theme", next);
-  localStorage.setItem("theme", next);
-};
+    const current = document.documentElement.getAttribute("data-theme") || "light";
+    const next = current === "light" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+  };
 
 
   // Menu dropdown for three-dots
@@ -84,7 +83,7 @@ export default function InfluencerDashboard() {
 
   return (
     <div className="influencer-dashboard">
-      <div><BackgroundEffects/></div>
+      <div><BackgroundEffects /></div>
       {/* Sidebar */}
       <Sidebar role="influencer" />
 
@@ -99,78 +98,81 @@ export default function InfluencerDashboard() {
 
           <div className="nav-right">
             <div className="dash-sidebar-bottom">
-        <div className="dash-cta">Find Matches</div>
-      </div>
+              <div className="dash-cta">Find Matches</div>
+            </div>
             <button
-  id="theme-toggle"
-  className="theme-toggle"
-  aria-label="Toggle theme"
-  onClick={toggleTheme}
->
-  {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
-    ? "☀️"
-    : "🌙"}
-</button>
+              id="theme-toggle"
+              className="theme-toggle"
+              aria-label="Toggle theme"
+              onClick={toggleTheme}
+            >
+              {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
+                ? "☀️"
+                : "🌙"}
+            </button>
 
-            <div className="nav-profile" onClick={() => navigate("/influencer/profile")}>👤</div>
+            <div className="nav-profile" onClick={logout} style={{ cursor: 'pointer' }} title="Logout">
+              {/* Simple logout trigger for now */}
+              🚪
+            </div>
           </div>
         </nav>
 
         {/* Horizontal profile card */}
         <section className="profile-card">
-  {/* RIGHT SIDE (now left) - profile image + name */}
-  <div className="profile-right"> 
-    <div className="profile-info">
-      <div className="profile-photo">
-        {data?.profileImg ? <img src={data.profileImg} alt="profile" /> : <span>👤</span>}
-      </div>
+          {/* RIGHT SIDE (now left) - profile image + name */}
+          <div className="profile-right">
+            <div className="profile-info">
+              <div className="profile-photo">
+                {data?.profileImg ? <img src={data.profileImg} alt="profile" /> : <span>👤</span>}
+              </div>
 
-      <div className="profile-meta">
-        <div className="profile-name">{data?.instagram?.split("/").pop() || "Anonymous"}</div>
-        <div className="profile-sub">{followerCategory()}</div>
-      </div>
-    </div>
-  </div>
+              <div className="profile-meta">
+                <div className="profile-name">{data?.name || "Anonymous"}</div>
+                <div className="profile-sub">{followerCategory()}</div>
+              </div>
+            </div>
+          </div>
 
-  {/* LEFT SIDE (now right) - action buttons */}
-  <div className="profile-left">
-    <div className="profile-actions">
-      <button className="btn-outline" onClick={() => navigate("/influencer/profile")}>Edit Profile</button>
-      <button className="btn-outline" onClick={() => navigate("/influencer/settings")}>Settings</button>
-      <button className="btn-dots" onClick={onThreeDots}>⋯</button>
-    </div>
-  </div>
-</section>
+          {/* LEFT SIDE (now right) - action buttons */}
+          <div className="profile-left">
+            <div className="profile-actions">
+              <button className="btn-outline" onClick={() => navigate("/influencer/profile")}>Edit Profile</button>
+              <button className="btn-outline" onClick={() => navigate("/influencer/settings")}>Settings</button>
+              <button className="btn-dots" onClick={onThreeDots}>⋯</button>
+            </div>
+          </div>
+        </section>
 
         {/* Main analytics grid */}
         <main className="analytics-area">
           <div className="analytics-grid">
             {/* Card 1: Total Collaborations + small bar chart */}
             {/* Card 1: Total Collaborations (clean & minimal) */}
-<div className="card neon-card">
+            <div className="card neon-card">
 
-  {/* TEXT */}
-  <div className="rating-header">
-    <div className="rating-main">
-      <div className="rating-label">Total Collaborations</div>
-      <div className="rating-value">
-        {data?.totalCollabs ?? 0}
-      </div>
-    </div>
-  </div>
+              {/* TEXT */}
+              <div className="rating-header">
+                <div className="rating-main">
+                  <div className="rating-label">Total Collaborations</div>
+                  <div className="rating-value">
+                    {data?.totalCollabs ?? 0}
+                  </div>
+                </div>
+              </div>
 
-  {/* LINE CHART */}
-  <div className="line-chart-wrap">
-    <LineStatsChart />
-  </div>
+              {/* LINE CHART */}
+              <div className="line-chart-wrap">
+                <LineStatsChart />
+              </div>
 
-  {/* DATE RANGE */}
-  <div className="chart-range">
-    <span>May 2025</span>
-    <span>Dec 2025</span>
-  </div>
+              {/* DATE RANGE */}
+              <div className="chart-range">
+                <span>May 2025</span>
+                <span>Dec 2025</span>
+              </div>
 
-</div>
+            </div>
 
 
             {/* Card 2: Top X% circular progress */}
@@ -179,7 +181,7 @@ export default function InfluencerDashboard() {
                 <h4>Top</h4>
                 <div className="card-sub">Audience exposure</div>
               </div>
-            
+
               <div className="line-chart-wrap">
                 <BarRankChart />
               </div>
@@ -223,7 +225,7 @@ export default function InfluencerDashboard() {
         </main>
 
       </div>
-      </div>
+    </div>
   );
 }
 

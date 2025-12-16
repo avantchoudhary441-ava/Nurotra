@@ -14,6 +14,7 @@ import InfluencerForm from "./pages/Influencer/influencerForm";
 import BrandForm from "./pages/brand/brandForm";
 
 import BrandDashboard from "./pages/brand/brandDashboard";
+import UserProfile from "./pages/UserProfile";
 
 
 
@@ -36,7 +37,7 @@ export default function App() {
         path="/"
         element={
           <>
-          <BackgroundEffects />
+            <BackgroundEffects />
             <Header />
             <Hero />
             <Categories />
@@ -50,11 +51,12 @@ export default function App() {
       {/* COLLBAI AGENT PAGE */}
       <Route path="/collab" element={<CollabLanding />} />
       <Route path="/login" element={<Login />} />
-  <Route path="/signup" element={<Signup />} />
-  <Route path="/influencer-form" element={<InfluencerForm />} />
-  <Route path="/influencer/dashboard" element={<InfluencerDashboard/>} />
-  <Route path="/brand-form" element={<BrandForm />} />
-  <Route path="/brand/dashboard" element={<BrandDashboard/>} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/influencer-form" element={<InfluencerForm />} />
+      <Route path="/influencer/dashboard" element={<InfluencerDashboard />} />
+      <Route path="/brand-form" element={<BrandForm />} />
+      <Route path="/brand/dashboard" element={<BrandDashboard />} />
+      <Route path="/profile" element={<UserProfile />} />
 
     </Routes>
 

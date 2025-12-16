@@ -2,9 +2,11 @@ import "../../styles/influencerForm.css";
 import { useState, useEffect } from "react";
 import logo from "../../assets/NurotraLogo.png";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 export default function InfluencerForm() {
   const navigate = useNavigate();
+  const { user } = useAuth(); // Get user from context
 
   // -----------------------------
   // FORM STATE + LOCAL STORAGE
@@ -20,7 +22,19 @@ export default function InfluencerForm() {
     brandType: "Fitness",
     niche: "",
     profileImg: "",
+    nuroId: "", // Renamed
   });
+
+  // Auto-fill effect
+  useEffect(() => {
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        email: user.email || "", // Auto-fill email
+        nuroId: user.uniqueId || user._id || "" // Auto-fill Nuro ID
+      }));
+    }
+  }, [user]);
 
   useEffect(() => {
     const saved = localStorage.getItem("influencerForm");
@@ -67,11 +81,11 @@ export default function InfluencerForm() {
     if (formData.workedBefore === "Yes" && !formData.brandName)
       return alert("Please enter the brand name.");
 
-    
-  localStorage.setItem("influencerForm", JSON.stringify(formData));
 
-  //  Go to Dashboard
-  navigate("/influencer/dashboard");
+    localStorage.setItem("influencerForm", JSON.stringify(formData));
+
+    //  Go to Dashboard
+    navigate("/influencer/dashboard");
   };
 
   return (
@@ -126,8 +140,14 @@ export default function InfluencerForm() {
               <h3 className="inf-section-title">Basic Info</h3>
 
               <div className="inf-group">
-                <label>Nuro ID</label>
-                <input type="text" value="I-001" disabled className="inf-disabled" />
+                <label>Nuro ID (Auto-filled)</label>
+                <input
+                  type="text"
+                  value={formData.nuroId}
+                  className="inf-disabled"
+                  readOnly
+                  style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                />
               </div>
 
               <div className="inf-group">
