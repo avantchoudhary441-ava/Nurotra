@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import logo from "../assets/NurotraLogo.png";
 import { useNavigate } from "react-router-dom";
-import "../styles/Header.css";
+import "../styles/header.css";
 
 export default function Header() {
   const navigate = useNavigate();
