@@ -3,10 +3,11 @@ import { useState, useEffect } from "react";
 import logo from "../../assets/NurotraLogo.png";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { profileService } from "../../services/apiService";
 
 export default function BrandForm() {
   const navigate = useNavigate();
-  const { user } = useAuth(); // Get user from context
+  const { user, updateUser } = useAuth(); // Get user from context
 
   // ---------------------------------------
   // FORM STATE (AUTO SAVE)
@@ -19,15 +20,18 @@ export default function BrandForm() {
     contentType: "Reels",
     budget: "",
     nuroId: "", // Renamed
+    profileImg: "", // Added for Google Auth Profile Pic
   });
 
-  // Auto-fill effect
+  // Auto-fill effect (Enforces User Data)
   useEffect(() => {
     if (user) {
       setFormData(prev => ({
         ...prev,
-        contact: prev.contact || user.email || "", // Auto-fill email
-        nuroId: user.uniqueId || user._id || "" // Auto-fill Nuro ID
+        // Prioritize User Identity Data
+        contact: (prev.contact && prev.contact !== user.email) ? prev.contact : (user.email || ""),
+        nuroId: user.uniqueId || user._id || "",
+        // profileImg: Manually uploaded only (Requested by user)
       }));
     }
   }, [user]);
@@ -35,11 +39,20 @@ export default function BrandForm() {
   // Load saved data if exists
   useEffect(() => {
     const saved = localStorage.getItem("brandForm");
-    if (saved) setFormData(JSON.parse(saved));
-  }, []);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Smart Merge: Don't overwrite identity with empty saved data
+      if (user) {
+        parsed.contact = (parsed.contact && parsed.contact !== user.email) ? parsed.contact : (user.email || "");
+        parsed.nuroId = user.uniqueId || user._id || "";
+      }
+      setFormData(parsed);
+    }
+  }, [user]);
 
   // Save form data on every change
   useEffect(() => {
+    // console.log("Saving form data:", formData); // Commented out to avoid spam
     localStorage.setItem("brandForm", JSON.stringify(formData));
   }, [formData]);
 
@@ -55,7 +68,7 @@ export default function BrandForm() {
     localStorage.setItem("theme", next);
   };
 
-  const submitForm = () => {
+  const submitForm = async () => {
     if (!formData.website.startsWith("https://")) {
       alert("Website/Instagram link must start with https://");
       return;
@@ -67,7 +80,26 @@ export default function BrandForm() {
     }
 
 
-    navigate("/brand/dashboard");
+    try {
+      console.log("Submitting Brand Profile...", formData);
+
+      const payload = { ...formData, contentTypes: [formData.contentType] };
+      // Call API
+      await profileService.saveBrand(payload, user.token);
+
+      // Update Local User Role so they can access dashboard immediately
+      updateUser({ role: "brand" });
+
+      // Clear Form Draft
+      localStorage.removeItem("brandForm");
+
+      alert("Profile Created Successfully! Welcome to Nurotra.");
+      navigate("/brand/dashboard");
+
+    } catch (error) {
+      console.error("Brand Creation Error:", error);
+      alert("Failed to create profile. Please try again.");
+    }
   };
 
   return (
@@ -84,7 +116,15 @@ export default function BrandForm() {
 
         <div className="brand-top-right">
           <button className="brand-toggle-btn" onClick={toggleTheme}>🌙</button>
-          <div className="brand-profile-icon">🏢</div>
+          {formData.profileImg && (
+            <div className="brand-profile-icon">
+              <img
+                src={formData.profileImg}
+                alt="Profile"
+                className="brand-profile-img-inner"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -113,7 +153,6 @@ export default function BrandForm() {
                 value={formData.nuroId}
                 className="brand-disabled"
                 readOnly
-                style={{ cursor: 'not-allowed', opacity: 0.7 }}
               />
             </div>
 
@@ -145,12 +184,14 @@ export default function BrandForm() {
 
             {/* Contact Info */}
             <div className="brand-group">
-              <label>Email / Phone Number</label>
+              <label>Email (Auto-filled)</label>
               <input
                 type="text"
                 value={formData.contact}
-                onChange={(e) => updateField("contact", e.target.value)}
-                placeholder="yourmail@company.com / 9876543210"
+                onChange={(e) => !user && updateField("contact", e.target.value)}
+                placeholder="yourmail@company.com"
+                readOnly={!!user}
+                className={user ? "brand-disabled" : ""}
               />
             </div>
           </div>
@@ -205,7 +246,7 @@ export default function BrandForm() {
         </div>
 
         {/* Submit Button */}
-        <div style={{ display: 'flex', justifySelf: 'center', width: '100%', justifyContent: 'center', marginTop: '2rem' }}>
+        <div className="brand-submit-wrapper">
           <button className="btn-primary brand-submit" onClick={submitForm}>
             Submit Brand Profile
           </button>

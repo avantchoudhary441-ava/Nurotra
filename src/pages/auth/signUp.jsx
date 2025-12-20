@@ -1,7 +1,6 @@
 import logo from "../../assets/NurotraLogo.png";
 import "../../styles/auth.css";
 import { useNavigate } from "react-router-dom";
-
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -13,7 +12,7 @@ export default function SignUp() {
     name: "",
     email: "",
     password: "",
-    role: "influencer" // default
+    role: "user" // consolidated role
   });
   const [error, setError] = useState("");
 
@@ -25,9 +24,9 @@ export default function SignUp() {
     e.preventDefault();
     setError("");
     try {
-      const user = await signup(formData); // mockService adds ID/default stats
-      // Redirect to Main Landing Page as requested
-      navigate("/");
+      const res = await signup(formData);
+      // Redirect to OTP page
+      navigate(`/verify-otp?email=${formData.email}`);
     } catch (err) {
       setError(err.message);
     }
@@ -66,9 +65,9 @@ export default function SignUp() {
 
       {/* Form */}
       <div className="auth-card">
-        {error && <p className="auth-error" style={{ color: 'red', marginBottom: '1rem' }}>{error}</p>}
+        {error && <p className="auth-error-msg">{error}</p>}
 
-        <form onSubmit={handleSignup} style={{ width: '100%' }}>
+        <form onSubmit={handleSignup} className="auth-form-full">
           <input
             type="text"
             name="name"
@@ -97,30 +96,18 @@ export default function SignUp() {
             required
           />
 
-          {/* Role Selection */}
-          <div style={{ display: 'flex', gap: '1rem', margin: '1rem 0', justifyContent: 'center' }}>
-            <label style={{ color: formData.role === 'influencer' ? '#fff' : '#888', cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="role"
-                value="influencer"
-                checked={formData.role === "influencer"}
-                onChange={handleChange}
-              /> Influencer
-            </label>
-            <label style={{ color: formData.role === 'brand' ? '#fff' : '#888', cursor: 'pointer' }}>
-              <input
-                type="radio"
-                name="role"
-                value="brand"
-                checked={formData.role === "brand"}
-                onChange={handleChange}
-              /> Brand
-            </label>
-          </div>
-
           <button type="submit" className="btn-primary auth-btn">Sign Up</button>
         </form>
+
+        <div className="auth-separator">OR</div>
+
+        <button
+          onClick={() => window.location.href = "http://localhost:5000/api/auth/google"}
+          className="btn-secondary auth-btn btn-google"
+        >
+          <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="google-icon" />
+          Continue with Google
+        </button>
 
         <p className="auth-switch">
           Already have an account?{" "}

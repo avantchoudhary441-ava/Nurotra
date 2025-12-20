@@ -8,21 +8,53 @@
 
 .categories span {
   padding: 8px 18px;
-  background: rgba(255,255,255,0.9);
+  background: rgba(255, 255, 255, 0.9);
   border-radius: 999px;
   font-size: 0.85rem;
   cursor: pointer;
   border: 1px solid var(--border-subtle);
   color: var(--text-muted);
   transition: 0.2s;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
+/* Dark mode adjustment */
+:root[data-theme="dark"] .categories span {
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.8);
+}
+
+/* HOVER EFFECT */
 .categories span:hover {
   transform: translateY(-3px);
-  box-shadow: 0 10px 22px rgba(120,170,255,0.25);
+  box-shadow:
+    0 10px 22px rgba(120, 170, 255, 0.25),
+    inset 0 0 14px rgba(150, 200, 255, 0.15);
+  border-color: rgba(120, 170, 255, 0.5);
+  color: var(--text-main);
 }
 
+:root[data-theme="dark"] .categories span:hover {
+  box-shadow:
+    0 12px 26px rgba(80, 130, 255, 0.35),
+    inset 0 0 18px rgba(120, 160, 255, 0.18);
+  border-color: rgba(140, 170, 255, 0.4);
+}
+
+/* ACTIVE STATE */
 .categories .active {
-  background: linear-gradient(145deg, var(--accent-1), var(--accent-2));
+  background: linear-gradient(145deg,
+      var(--accent-1),
+      var(--accent-2));
   color: #fff;
+  border-color: transparent;
+  box-shadow:
+    0 12px 26px rgba(120, 170, 255, 0.35),
+    inset 0 0 18px rgba(255, 255, 255, 0.18);
+}
+
+:root[data-theme="dark"] .categories .active {
+  box-shadow:
+    0 14px 28px rgba(80, 130, 255, 0.45),
+    inset 0 0 20px rgba(140, 170, 255, 0.22);
 }

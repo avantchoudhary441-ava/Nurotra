@@ -2,27 +2,73 @@ import logo from "../../assets/NurotraLogo.png";
 import "../../styles/auth.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, loginWithToken } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isGoogleAuth, setIsGoogleAuth] = useState(false);
+
+  // Check for Google Auth Token
+  const processingRef = useRef(false);
+
+  // Check for Google Auth Token
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    if (token && !processingRef.current) {
+      processingRef.current = true;
+      setIsGoogleAuth(true);
+
+      console.log("Token found, attempting login...");
+      loginWithToken(token)
+        .then((userData) => {
+          console.log("Login successful:", userData);
+          // Only clear URL on success to avoid aggressive cleanup
+          window.history.replaceState({}, document.title, "/login");
+          navigate("/");
+        })
+        .catch(err => {
+          console.error("Google Login Error:", err);
+          setError("Google Login Failed: " + err.message);
+          setIsGoogleAuth(false);
+          processingRef.current = false; // Allow retry
+        });
+    }
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
     try {
       const user = await login(email, password);
-      // Redirect to Main Landing Page as requested
-      navigate("/");
+      // Redirect Admin to Dashboard
+      if (user.role === "admin") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       setError(err.message);
     }
   };
+
+  if (isGoogleAuth) {
+    return (
+      <div className="auth-container auth-loading-container">
+        <BackgroundEffects />
+        <div className="auth-card auth-loading-card">
+          <h2 className="auth-title">Authenticating...</h2>
+          <p>Please wait while we verify your Google account.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
 
@@ -59,8 +105,8 @@ export default function Login() {
 
       {/* Form */}
       <div className="auth-card">
-        {error && <p className="auth-error" style={{ color: 'red', marginBottom: '1rem' }}>{error}</p>}
-        <form onSubmit={handleLogin} style={{ width: '100%' }}>
+        {error && <p className="auth-error-msg">{error}</p>}
+        <form onSubmit={handleLogin} className="auth-form-full">
           <input
             type="email"
             placeholder="Email"
@@ -80,6 +126,16 @@ export default function Login() {
 
           <button type="submit" className="btn-primary auth-btn">Login</button>
         </form>
+
+        <div className="auth-separator">OR</div>
+
+        <button
+          onClick={() => window.location.href = "http://localhost:5000/api/auth/google"}
+          className="btn-secondary auth-btn btn-google"
+        >
+          <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="google-icon" />
+          Continue with Google
+        </button>
 
         <p className="auth-switch">
           Don’t have an account?{" "}

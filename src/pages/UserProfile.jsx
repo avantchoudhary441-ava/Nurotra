@@ -20,7 +20,7 @@ export default function UserProfile() {
 
     if (!user) {
         return (
-            <div className="profile-container" style={{ textAlign: "center", paddingTop: "5rem", color: "white" }}>
+            <div className="profile-container profile-login-warning">
                 <h2>Please log in to view your profile.</h2>
                 <button className="btn-primary" onClick={() => navigate("/login")}>Login</button>
             </div>
@@ -37,23 +37,10 @@ export default function UserProfile() {
             <BackgroundEffects />
 
             {/* Theme Toggle Button (Top Right) */}
-            <div style={{ position: 'absolute', top: '2rem', right: '2rem', zIndex: 20 }}>
+            <div className="profile-theme-toggle-wrapper">
                 <button
-                    className="theme-toggle"
+                    className="theme-toggle profile-theme-toggle-btn"
                     onClick={toggleTheme}
-                    style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        border: '1px solid rgba(255,255,255,0.2)',
-                        padding: '0.5rem',
-                        borderRadius: '50%',
-                        cursor: 'pointer',
-                        fontSize: '1.2rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '40px',
-                        height: '40px'
-                    }}
                     title="Toggle Theme"
                 >
                     {theme === "light" ? "🌙" : "☀️"}
@@ -83,7 +70,7 @@ export default function UserProfile() {
 
                     <div className="detail-item">
                         <label>Account Status</label>
-                        <div className="detail-value" style={{ color: '#4ade80' }}>Active</div>
+                        <div className="detail-value status-active">Active</div>
                     </div>
                 </div>
 

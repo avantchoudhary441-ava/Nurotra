@@ -1,10 +1,10 @@
-
 /* TOP BAR — LEFT + RIGHT ONLY */
 .collab-top {
   width: 100%;
-  
+
   display: flex;
-  justify-content: space-between; /* LEFT + RIGHT */
+  justify-content: space-between;
+  /* LEFT + RIGHT */
   align-items: center;
   margin-bottom: 20px;
 }
@@ -60,14 +60,14 @@
   margin-top: 20px;
   border-radius: 999px;
   cursor: pointer;
-  background: rgba(255,255,255,0.85);
+  background: rgba(255, 255, 255, 0.85);
   color: var(--text-main);
   font-size: 0.9rem;
   transition: 0.2s;
 }
 
 :root[data-theme="dark"] .back-btn {
-  background: rgba(15,23,42,0.85);
+  background: rgba(15, 23, 42, 0.85);
   color: #fff;
 }
 
@@ -75,6 +75,7 @@
   transform: translateY(-2px);
   opacity: 0.95;
 }
+
 /* HERO LOGO SECTION */
 .collab-hero-logo-wrap {
   display: flex;
@@ -85,13 +86,13 @@
 
 
 .collab-hero-logo {
-  width: 110px;           /* increased size */
+  width: 110px;
+  /* increased size */
   height: auto;
   filter:
-    drop-shadow(0 8px 22px rgba(0,0,0,0.45))
-    drop-shadow(0 0 20px rgba(99,102,241,0.45));
+    drop-shadow(0 8px 22px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 20px rgba(99, 102, 241, 0.45));
   animation: leafDrop 1.4s ease-out forwards,
-             leafFloat 7s ease-in-out 1.4s infinite;
+    leafFloat 7s ease-in-out 1.4s infinite;
 }
 
 .collab-hero-title {
@@ -99,6 +100,7 @@
   font-size: 28px;
   font-weight: 700;
   background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
 }
@@ -109,6 +111,7 @@
     transform: translateY(-40px) rotate(-8deg);
     opacity: 0;
   }
+
   100% {
     transform: translateY(0) rotate(0deg);
     opacity: 1;
@@ -116,9 +119,17 @@
 }
 
 @keyframes leafFloat {
-  0% { transform: translateY(0);}
-  50% { transform: translateY(8px);}
-  100% { transform: translateY(0);}
+  0% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(8px);
+  }
+
+  100% {
+    transform: translateY(0);
+  }
 }
 
 /* MAIN CONTENT SECTION */
@@ -168,9 +179,9 @@
   align-items: center;
 
   background: linear-gradient(90deg, var(--accent-1), var(--accent-2)) !important;
-  color: white ;
-  border: none ;
-  padding: 14px 32px ;
+  color: white;
+  border: none;
+  padding: 14px 32px;
   font-size: 1rem;
   border-radius: 999px;
   font-weight: 500;
@@ -178,14 +189,14 @@
   white-space: nowrap;
   cursor: pointer;
 
-  box-shadow: 0 12px 30px rgba(99,102,241,0.35);
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.35);
   transition: 0.2s ease;
 }
 
 
 .big-btn:hover {
   transform: translateY(-3px);
-  box-shadow: 0 18px 40px rgba(99,102,241,0.35);
+  box-shadow: 0 18px 40px rgba(99, 102, 241, 0.35);
   opacity: 0.95;
 }
 
@@ -193,6 +204,21 @@
 
 /* Fade animation */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Helpers for removal of inline styles */
+.collab-profile-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }

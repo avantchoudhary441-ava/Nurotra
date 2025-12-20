@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import logo from "../assets/NurotraLogo.png";
 import { useNavigate } from "react-router-dom";
+import "../styles/Header.css";
 
 export default function Header() {
   const navigate = useNavigate();
@@ -58,23 +59,19 @@ export default function Header() {
         </button>
 
         {user ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <span className="welcome-text" style={{ fontSize: '0.9rem', opacity: 0.8 }}>Hi, {user.name}</span>
+          <div className="header-user-section">
+            {user.role === 'admin' && (
+              <button
+                className="btn-outline header-admin-btn"
+                onClick={() => navigate("/admin/dashboard")}
+              >
+                Admin Dashboard
+              </button>
+            )}
+            <span className="welcome-text header-welcome-text">Hi, {user.name}</span>
 
             <div
               onClick={() => navigate("/profile")}
-              style={{
-                cursor: 'pointer',
-                fontSize: '1.5rem',
-                background: 'rgba(255,255,255,0.1)',
-                width: '40px',
-                height: '40px',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s'
-              }}
               className="header-profile-icon"
               title="View Profile"
             >

@@ -1,4 +1,6 @@
-/* HEADER */
+/* src/styles/Header.css */
+
+/* HEADER CONTAINER - PREMIUM GLASS */
 header {
   height: 72px;
   padding: 0 40px;
@@ -11,85 +13,83 @@ header {
   z-index: 1000;
 
   background: transparent;
+  /* Fully transparent initially */
   backdrop-filter: none;
   border-bottom: none;
 
-  transition: background 0.25s ease,
-              backdrop-filter 0.25s ease,
-              border 0.25s ease;
+  transition: background 0.25s ease, backdrop-filter 0.25s ease, border 0.25s ease;
 }
 
-/* LIGHT MODE – Glassy Light Grey */
+/* LIGHT MODE – Glassy Light Grey Navbar */
 :root[data-theme="light"] header.scrolled {
   background: rgba(148, 148, 159, 0.65);
+  /* soft grey glass */
   backdrop-filter: blur(18px) saturate(1.4);
   border-bottom: 1px solid rgba(200, 200, 200, 0.35);
 }
 
-/* DARK MODE – Frosted Glass */
+/* DARK MODE – Dark Frosted Glass */
 :root[data-theme="dark"] header.scrolled {
   background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(18px) saturate(1.4);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* LOGO CONTAINER */
+/* LOGO SECTION */
 .logo-wrap {
   position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
+  cursor: pointer;
 }
 
-/* Background glow behind logo */
 .logo-bg-glow {
   position: absolute;
   width: 38px;
   height: 38px;
   border-radius: 50%;
   z-index: 1;
-  filter: blur(150px);
+  filter: blur(15px);
 }
 
-/* Light glow */
+/* Light mode tint */
 :root[data-theme="light"] .logo-bg-glow {
   background: radial-gradient(circle,
-    rgba(80,140,255,0.55),
-    rgba(180,120,255,0.35),
-    transparent 70%
-  );
+      rgba(80, 140, 255, 0.55),
+      rgba(180, 120, 255, 0.35),
+      transparent 70%);
 }
 
-/* Dark glow */
+/* Dark mode tint */
 :root[data-theme="dark"] .logo-bg-glow {
   background: radial-gradient(circle,
-    rgba(120,150,255,0.75),
-    rgba(90,200,255,0.45),
-    transparent 70%
-  );
+      rgba(120, 150, 255, 0.75),
+      rgba(90, 200, 255, 0.45),
+      transparent 70%);
   filter: blur(14px);
 }
 
-/* LOGO IMAGE */
 .nav-logo {
-  width: 35px;
-  height: 35px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
-  filter: brightness(5) saturate(0); /* makes logo white */
+  /* makes any logo completely WHITE in dark mode style cleanliness, or keep original if preferred */
+  /* filter: brightness(5) saturate(0);  <-- Optional: Remove if you want original colors */
   position: relative;
   z-index: 2;
 }
 
-/* LOGO TEXT */
 .logo {
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 700;
   background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
   -webkit-background-clip: text;
+  background-clip: text;
   color: transparent;
 }
 
-/* NAV ITEMS */
+/* NAVIGATION */
 nav {
   display: flex;
   align-items: center;
@@ -98,13 +98,18 @@ nav {
 
 nav a {
   text-decoration: none;
-  color: var(--text-muted);
   font-weight: 500;
   font-size: 0.9rem;
   cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.2s;
 }
 
-/* THEME TOGGLE BUTTON */
+nav a:hover {
+  color: var(--text-main);
+}
+
+/* THEME TOGGLE */
 .theme-toggle {
   background: transparent;
   border-radius: 999px;
@@ -113,25 +118,72 @@ nav a {
   cursor: pointer;
   font-size: 0.9rem;
   color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
 }
 
-/* SIGN UP BUTTON */
-.btn-primary {
-  padding: 9px 20px;
-  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
-  color: white;
-  border-radius: 999px;
-  border: none;
+.theme-toggle:hover {
+  background: rgba(125, 125, 125, 0.1);
+}
 
-  cursor: pointer;
-  transition: 0.2s;
-  box-shadow: 0 10px 30px rgba(99,102,241,0.35);
+/* ---------------- LOGGED IN USER SECTION ---------------- */
+/* Preserving these for Dashboard/Logged-in state functionality */
+
+.header-user-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header-admin-btn {
+  padding: 0.4rem 0.8rem;
   font-size: 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.header-admin-btn:hover {
+  background: rgba(125, 125, 125, 0.1);
+}
+
+.header-welcome-text {
+  font-size: 0.9rem;
+  opacity: 0.8;
   font-weight: 500;
 }
 
-.btn-primary:hover {
-  transform: translateY(-1px);
-  opacity: 0.95;
-  box-shadow: 0 16px 40px rgba(99,102,241,0.45);
+.header-profile-icon {
+  cursor: pointer;
+  font-size: 1.2rem;
+  background: rgba(255, 255, 255, 0.1);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  border: 1px solid var(--border-subtle);
+}
+
+.header-profile-icon:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+/* RESPONISVE */
+@media (max-width: 768px) {
+  header {
+    padding: 0 16px;
+  }
+
+  nav a {
+    display: none;
+    /* Hide links on mobile */
+  }
 }

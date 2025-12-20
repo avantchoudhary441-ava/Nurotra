@@ -1,14 +1,18 @@
 :root {
-  --grid-line: rgba(0,0,0,0.06);      /* Light mode grid lines */
+  --grid-line: rgba(0, 0, 0, 0.06);
+  /* Light mode grid lines - DARKER for visibility */
 }
 
 [data-theme="dark"] {
-  --grid-line: rgba(255,255,255,0.08); /* Dark mode grid lines */
+  --grid-line: rgba(255, 255, 255, 0.08);
+  /* Dark mode grid lines - WHITE */
 }
+
 .background-grid {
   position: fixed;
   inset: 0;
   z-index: -3;
+  /* Behind everything */
   pointer-events: none;
 
   background-image:
@@ -16,12 +20,14 @@
     linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
 
   background-size: 40px 40px;
-  animation: gridFloat 16s linear infinite;
+  animation: gridFloat 25s linear infinite;
 }
+
 @keyframes gridFloat {
   0% {
     background-position: 0 0;
   }
+
   100% {
     background-position: 40px 40px;
   }
@@ -34,7 +40,7 @@
   width: 900px;
   height: 600px;
   transform: translateX(-50%);
-  background: radial-gradient(circle, rgba(120,160,255,0.15), transparent 70%);
+  background: radial-gradient(circle, rgba(120, 160, 255, 0.15), transparent 70%);
   filter: blur(120px);
   z-index: -2;
   pointer-events: none;
@@ -53,7 +59,7 @@
 .orb-1 {
   width: 360px;
   height: 360px;
-  background: radial-gradient(circle, rgba(99,102,241,0.9), transparent 60%);
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.9), transparent 60%);
   top: -120px;
   left: -80px;
 }
@@ -61,7 +67,7 @@
 .orb-2 {
   width: 320px;
   height: 320px;
-  background: radial-gradient(circle, rgba(16,185,129,0.9), transparent 65%);
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.9), transparent 65%);
   top: 35%;
   right: -140px;
   animation-delay: 4s;
@@ -70,14 +76,22 @@
 .orb-3 {
   width: 280px;
   height: 280px;
-  background: radial-gradient(circle, rgba(139,92,246,0.9), transparent 65%);
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.9), transparent 65%);
   bottom: -140px;
   left: 20%;
   animation-delay: 8s;
 }
 
 @keyframes float {
-  0% { transform: translateY(0) translateX(0) scale(1); }
-  50% { transform: translateY(-20px) translateX(15px) scale(1.05); }
-  100% { transform: translateY(15px) translateX(-20px) scale(1.08); }
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-20px) translateX(15px) scale(1.05);
+  }
+
+  100% {
+    transform: translateY(15px) translateX(-20px) scale(1.08);
+  }
 }
