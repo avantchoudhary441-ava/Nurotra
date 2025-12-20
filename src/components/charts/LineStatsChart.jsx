@@ -51,11 +51,9 @@ export default function LineStatsChart() {
             stroke: "rgba(99,102,241,0.25)",
             strokeWidth: 1,
           }}
-          contentStyle={{
-            background: "var(--card-bg)",
-            borderRadius: "10px",
-            border: "1px solid var(--border-subtle)",
-          }}
+
+          wrapperClassName="chart-tooltip-wrapper"
+          contentStyle={{ backgroundColor: 'transparent', border: 'none' }}
         />
 
         <Line

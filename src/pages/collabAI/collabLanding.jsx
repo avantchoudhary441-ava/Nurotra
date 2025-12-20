@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 import logo from "../../assets/NurotraLogo.png";
 import "../../styles/collabLanding.css";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +7,7 @@ import BackgroundEffects from "../../components/BackgroundEffects";
 
 export default function CollabLanding() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [theme, setTheme] = useState(
     localStorage.getItem("theme") || "light"
@@ -22,7 +24,7 @@ export default function CollabLanding() {
 
   return (
     <div className="collab-container">
-      <div><BackgroundEffects/></div>
+      <div><BackgroundEffects /></div>
 
       <div className="collab-glow"></div>
 
@@ -31,7 +33,7 @@ export default function CollabLanding() {
 
         {/* LEFT: BACK BUTTON */}
         <button onClick={() => navigate(-1)} className="back-btn">
-             ← Back
+          ← Back
         </button>
 
 
@@ -41,7 +43,15 @@ export default function CollabLanding() {
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
 
-          <div className="profile-icon">👤</div>
+          {user && user.profileImg && (
+            <div className="profile-icon">
+              <img
+                src={user.profileImg}
+                alt="Profile"
+                className="collab-profile-img"
+              />
+            </div>
+          )}
         </div>
 
       </div>
@@ -65,17 +75,17 @@ export default function CollabLanding() {
         <div className="collab-actions">
           <button
             className="btn-primary big-btn" onClick={() => navigate("/influencer-form")} >
-             I'm an Influencer
+            I'm an Influencer
           </button>
 
-          <button 
+          <button
             className="btn-secondary big-btn" onClick={() => navigate("/brand-form")}>
             I'm a Brand
           </button>
 
         </div>
       </div>
-      
+
     </div>
   );
 }

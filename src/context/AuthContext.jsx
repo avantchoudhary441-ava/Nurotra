@@ -39,13 +39,32 @@ export function AuthProvider({ children }) {
         }
     };
 
+    const loginWithToken = async (token) => {
+        try {
+            const userData = await authService.getMe(token);
+            setUser(userData);
+            return userData;
+        } catch (error) {
+            console.error("Token login failed", error);
+            throw error;
+        }
+    };
+
     const logout = () => {
         authService.logout();
         setUser(null);
     };
 
+    const updateUser = (updates) => {
+        setUser(prev => {
+            const updated = { ...prev, ...updates };
+            localStorage.setItem("nurotra_user", JSON.stringify(updated));
+            return updated;
+        });
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, signup, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, signup, logout, loginWithToken, updateUser, loading }}>
             {!loading && children}
         </AuthContext.Provider>
     );

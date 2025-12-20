@@ -45,13 +45,8 @@ export default function BarRankChart() {
 
         <Tooltip
           cursor={false}
-          contentStyle={{
-            background: "var(--card-bg)",
-            borderRadius: "8px",
-            border: "1px solid var(--border-subtle)",
-            fontSize: "12px",
-            color: "var(--text-main)",
-          }}
+          wrapperClassName="chart-tooltip-wrapper"
+          contentStyle={{ backgroundColor: 'transparent', border: 'none' }}
         />
 
         <Bar dataKey="value" radius={[6, 6, 0, 0]}>

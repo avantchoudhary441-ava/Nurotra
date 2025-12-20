@@ -1,0 +1,110 @@
+/* LoginModal.css */
+.login-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.login-modal-content {
+  background: rgba(20, 20, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 40px;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
+  position: relative;
+  overflow: hidden;
+  animation: scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Glow Effect */
+.login-modal-content::before {
+  content: "";
+  position: absolute;
+  top: -50px;
+  left: -50px;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.5), transparent 70%);
+  filter: blur(20px);
+  z-index: 0;
+}
+
+.login-modal-title {
+  font-size: 1.8rem;
+  margin-bottom: 15px;
+  color: #fff;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+}
+
+.login-modal-text {
+  color: #ccc;
+  margin-bottom: 30px;
+  font-size: 1rem;
+  line-height: 1.5;
+  position: relative;
+  z-index: 1;
+}
+
+.login-modal-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.btn-modal-login {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  color: white;
+  padding: 12px 30px;
+  border-radius: 12px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  text-decoration: none;
+}
+
+.btn-modal-login:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(99, 102, 241, 0.4);
+}
+
+.btn-modal-cancel {
+  background: transparent;
+  color: #aaa;
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-modal-cancel:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

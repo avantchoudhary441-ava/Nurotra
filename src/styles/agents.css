@@ -6,56 +6,46 @@
   padding: 30px 40px 50px;
 }
 
-/* OUTER WRAPPER – GRADIENT BORDER */
+/* AGENT CARDS WITH GRADIENT BORDER */
 .agent-card {
   border-radius: 18px;
   padding: 1px;
-
-  /* ORIGINAL MULTI-COLOR GRADIENT BORDER */
-  background: linear-gradient(
-    135deg,
-    rgba(99,102,241,0.9),
-    rgba(16,185,129,0.5),
-    rgba(236,72,153,0.8)
-  );
-
-  /* ORIGINAL SOFT SHADOW */
+  /* The "border" width */
+  background: linear-gradient(135deg,
+      rgba(99, 102, 241, 0.9),
+      rgba(16, 185, 129, 0.5),
+      rgba(236, 72, 153, 0.8));
   box-shadow: var(--shadow-soft);
-
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.25s ease;
+  transition: transform 0.2s ease, box-shadow 0.25s ease;
+  height: 100%;
 }
 
-/* INNER CARD */
 .agent-inner {
   background: var(--card-bg);
   border-radius: 16px;
+  /* slightly smaller than card radius */
   padding: 22px;
-
   display: flex;
   flex-direction: column;
   gap: 4px;
+  height: 100%;
 }
 
-/* HOVER EFFECT (restore original glow) */
 .agent-card:hover {
   transform: translateY(-6px);
-
-  /* RESTORED PURPLE GLOW */
-  box-shadow: 0 22px 45px rgba(79,70,229,0.45),
-              0 0 18px rgba(99,102,241,0.35);
+  box-shadow: 0 22px 45px rgba(79, 70, 229, 0.45);
 }
 
-/* ICON + TEXT */
 .agent-inner .icon {
   font-size: 40px;
+  margin-bottom: 8px;
 }
 
 .agent-inner h3 {
   font-size: 20px;
   margin-top: 10px;
   font-weight: 600;
+  color: var(--text-main);
 }
 
 .role {
@@ -68,14 +58,17 @@
   font-size: 13px;
   color: var(--text-muted);
   margin-top: 4px;
+  margin-bottom: 12px;
 }
 
-/* STATUS */
+/* STATUS + DETAILS */
 .status-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 10px;
+  margin-top: auto;
+  /* push to bottom if flex column */
+  margin-bottom: 16px;
 }
 
 .status-pill {
@@ -85,13 +78,15 @@
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 11px;
-  border: 1px solid rgba(148,163,184,0.7);
-  background: rgba(15,23,42,0.9);
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background: rgba(15, 23, 42, 0.9);
   color: #e5e7eb;
 }
 
+/* Light mode specific override for pill background if needed */
 :root[data-theme="light"] .status-pill {
   background: #0f172a;
+  color: #fff;
 }
 
 .status-pill .dot {
@@ -111,31 +106,19 @@
 .details-link {
   font-size: 12px;
   text-decoration: none;
-  color: #a5b4fc;
-}
-
-/* BUTTON */
-.btn-secondary {
-  padding: 9px 16px;
-  width: 100%;
-  margin-top: 14px;
-  border-radius: 999px;
-
-  /* Original gradient */
-  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
-  color: white;
-  border: none;
-
-  font-size: 0.9rem;
+  color: #6366f1;
+  /* Accent color */
   font-weight: 500;
-
-  cursor: pointer;
-  transition: 0.2s;
-  box-shadow: 0 10px 25px rgba(99,102,241,0.35);
+  transition: color 0.2s;
 }
 
-.btn-secondary:hover {
-  transform: translateY(-1px);
-  opacity: 0.92;
-  box-shadow: 0 16px 35px rgba(99,102,241,0.45);
+.details-link:hover {
+  color: #818cf8;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .agents-grid {
+    padding: 20px 16px 40px;
+  }
 }

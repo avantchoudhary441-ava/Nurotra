@@ -1,0 +1,523 @@
+/* ---------------------------------------------------------
+   Matching Forms (Brand & Influencer) — Premium Glass UI
+   Matches Nurotra / CollabAI aesthetic
+--------------------------------------------------------- */
+
+.inf-page {
+  position: relative;
+  min-height: 100vh;
+  padding: 10px 20px;
+  margin-top: -10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Background Glow */
+.inf-glow {
+  position: fixed;
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(120, 160, 255, 0.18), transparent 65%);
+  filter: blur(130px);
+  z-index: -1;
+  animation: floatGlow 18s infinite ease-in-out alternate;
+}
+
+@keyframes floatGlow {
+  0% {
+    transform: translateX(-50%) translateY(0);
+  }
+
+  100% {
+    transform: translateX(-50%) translateY(12px);
+  }
+}
+
+/* Top Bar */
+.inf-top {
+  width: 100%;
+  max-width: 1100px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.inf-back-btn {
+  padding: 7px 14px;
+  font-size: 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+:root[data-theme="dark"] .inf-back-btn {
+  background: rgba(15, 23, 42, 0.7);
+  color: white;
+}
+
+.inf-back-btn:hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
+}
+
+/* Header Section */
+.inf-header {
+  text-align: center;
+  margin-top: -6px;
+  margin-bottom: 3rem;
+  /* Extracted inline style */
+}
+
+.inf-header-title {
+  font-size: 2.5rem;
+  /* Extracted inline style (was 22px in old css, updated to match JSX) */
+  font-weight: 800;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin: 0;
+}
+
+.inf-header-subtitle {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ----------------------------------------------
+   CARD (Medium Blur Glass Panel)
+----------------------------------------------- */
+
+.inf-card {
+  margin-top: 18px;
+  width: 100%;
+  max-width: 900px;
+  /* Match JSX inline */
+  padding: 3rem;
+  /* Match JSX inline */
+  gap: 2rem;
+  /* Match JSX inline */
+  border-radius: 26px;
+  display: flex;
+  /* Added for gap support if not blocked */
+  flex-direction: column;
+
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(12px) saturate(1.2);
+
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.12);
+  transition: 0.25s ease;
+}
+
+:root[data-theme="dark"] .inf-card {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px) saturate(1.4);
+}
+
+/* Two Columns Inside Card */
+.inf-two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  /* Match JSX inline */
+  margin-bottom: 2rem;
+  /* Match JSX inline */
+}
+
+.inf-section-title {
+  margin: 0;
+  margin-bottom: 1.5rem;
+  /* Match JSX inline */
+  font-size: 16px;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+
+  /* Underlying border style extracted */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.5rem;
+}
+
+.inf-section-title.mt-large {
+  margin-top: 1rem;
+}
+
+/* Inputs */
+.inf-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inf-group.mb-large {
+  margin-bottom: 2rem;
+}
+
+.inf-group label {
+  font-size: 13px;
+  color: var(--text-main);
+  font-weight: 600;
+  padding-left: 2px;
+}
+
+.inf-group label.block-mb {
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.inf-group input,
+.inf-group select,
+.inf-group textarea {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--card-bg);
+  /* Fallback or variable */
+  font-size: 14px;
+  color: var(--text-main);
+  transition: 0.2s ease;
+  width: 100%;
+}
+
+.inf-group textarea {
+  /* Specific overrides from JSX */
+  padding: 1rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  /* Assuming text-primary maps to white-ish in dark mode */
+  font-size: 1rem;
+  line-height: 1.5;
+  /* In dark mode this might need check, but using vars is safer if they exist. 
+       The removed inline style had explicit 'white' color. 
+       We will use a generic color var or inherit. */
+}
+
+:root[data-theme="dark"] .inf-group textarea {
+  color: white;
+}
+
+.inf-group input:focus,
+.inf-group select:focus,
+.inf-group textarea:focus {
+  border-color: var(--accent-1);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.16);
+  transform: translateY(-2px);
+  outline: none;
+}
+
+/* Checkboxes & Grids */
+.inf-checkboxes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.inf-checkboxes-flex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.inf-checkbox-card {
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.inf-checkbox-pill {
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Tags / Locations */
+.inf-tags-container {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.inf-tag-item {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.inf-tag-item:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Submit Button & Footer */
+.inf-footer {
+  text-align: center;
+  margin-top: 3rem;
+}
+
+.inf-submit {
+  padding: 12px 34px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 10px 28px rgba(99, 102, 241, 0.25);
+  transition: 0.25s ease;
+  background: var(--primary);
+  /* Assuming var exists, else use standard color */
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.inf-submit.large {
+  padding: 1rem 3rem;
+  font-size: 1.1rem;
+}
+
+.inf-submit:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 50px rgba(99, 102, 241, 0.35);
+}
+
+/* Theme Toggle */
+.inf-theme-toggle {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  transition: all 0.2s ease;
+}
+
+.inf-theme-toggle:hover {
+  transform: scale(1.05);
+}
+
+/* Responsiveness */
+@media (max-width: 900px) {
+  .inf-card {
+    padding: 2rem;
+    gap: 1.5rem;
+  }
+
+  .inf-two-columns {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+.inf-range-input {
+  width: 100%;
+  accent-color: var(--primary);
+  margin-top: 10px;
+}
+
+/* MATCH RESULT OVERLAY */
+.match-results-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.match-results-container {
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 20px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+:root[data-theme="dark"] .match-results-container {
+  background: rgba(30, 41, 59, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Header */
+.match-header {
+  padding: 20px 24px;
+  background: rgba(var(--accent-1-rgb), 0.1);
+  /* fallback or simple border */
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.match-header h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+/* List */
+.matches-list {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.match-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border-subtle);
+  transition: transform 0.2s;
+}
+
+:root[data-theme="dark"] .match-card {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.match-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-1);
+}
+
+/* Score Circle */
+.match-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.score-val {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.score-label {
+  font-size: 8px;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+/* Info */
+.match-info {
+  flex-grow: 1;
+}
+
+.match-info h3 {
+  font-size: 16px;
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.match-role {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.match-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.match-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(100, 100, 100, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* Actions */
+.match-actions {
+  flex-shrink: 0;
+}
+
+.btn-primary-sm {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  background: var(--accent-1);
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.no-matches {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

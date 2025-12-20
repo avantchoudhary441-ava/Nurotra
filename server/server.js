@@ -8,13 +8,20 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(cors());
+const passport = require("./config/passport");
+app.use(passport.initialize());
 
 // Database Connection
 connectDB();
 
 // Routes
 app.use("/api/auth", require("./routes/authRoutes"));
-// app.use("/api/user", require("./routes/userRoutes"));
+app.use("/api/brand", require("./routes/brandRoutes"));
+app.use("/api/influencer", require("./routes/influencerRoutes"));
+app.use("/api/match", require("./routes/matchRoutes"));
+app.use("/api/chat", require("./routes/chatRoutes"));
+app.use("/api/message", require("./routes/messageRoutes"));
+app.use("/api/upload", require("./routes/uploadRoutes"));
 
 const PORT = process.env.PORT || 5000;
 

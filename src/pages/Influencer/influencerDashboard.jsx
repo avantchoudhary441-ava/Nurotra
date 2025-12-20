@@ -7,15 +7,39 @@ import "../../styles/dashboard.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import LineStatsChart from "../../components/charts/LineStatsChart";
 import BarRankChart from "../../components/charts/BarRankChart";
-
-// small helpers (optional, included in combined CSS below)
+import { profileService, matchService } from "../../services/apiService"; // Import matchService
+import InfluencerMatchResults from "./InfluencerMatchResults"; // Import Results Overlay
+import LeafTransition from "../../components/LeafTransition"; // Import Animation
 
 export default function InfluencerDashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
+  const [profile, setProfile] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+
+  // Direct matching states
+  const [matches, setMatches] = useState(null);
+  const [findingMatches, setFindingMatches] = useState(false);
+  const [showTransition, setShowTransition] = useState(false);
+
+  // Fetch Real Profile Data
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user?.token) {
+        try {
+          const data = await profileService.getInfluencer(user.token);
+          setProfile(data);
+        } catch (err) {
+          console.error("Failed to fetch influencer profile", err);
+        }
+      }
+    };
+    fetchProfile();
+  }, [user]);
+
   // Use user context data, fallback to defaults if needed
-  const data = user || {};
+  const data = profile || user || {};
 
   // UI state
   const [scrolled, setScrolled] = useState(false);
@@ -29,6 +53,40 @@ export default function InfluencerDashboard() {
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  /* ---------------- FIND MATCH ACTION ---------------- */
+  const handleFindMatches = async () => {
+    // SMART MATCH LOGIC
+    // Check if profile has key indicator like 'niche' and 'primaryPlatform'
+    // Check if profile exists
+    if (profile && Object.keys(profile).length > 0) {
+      // Trigger Animation FIRST
+      setShowTransition(true);
+    } else {
+      // Incomplete profile -> Form
+      navigate("/influencer/matching");
+    }
+  };
+
+  const handleTransitionComplete = async () => {
+    // Hidden internal function to actually fetch data after animation
+    setShowTransition(false); // Can keep overlay/leaf until navigate happens to prevent blink
+    setFindingMatches(true);
+    try {
+      const results = await matchService.getInfluencerMatches(user.uniqueId || "INF-TEMP");
+      // Navigate to Results Page with Data
+      navigate("/match-results", { state: { matches: results, role: 'influencer' } });
+    } catch (err) {
+      console.error("Match failed", err);
+      // Fallback or error msg
+    } finally {
+      setFindingMatches(false);
+    }
+  };
+
+  const closeMatches = () => {
+    setMatches(null);
+  };
 
   // Helpers: compute beginner/intermediate/expert by followers
   const followerCategory = () => {
@@ -84,6 +142,13 @@ export default function InfluencerDashboard() {
   return (
     <div className="influencer-dashboard">
       <div><BackgroundEffects /></div>
+
+      {/* MATCH RESULTS OVERLAY - MOVED TO PAGE */}
+      {/* {matches && <InfluencerMatchResults matches={matches} onClose={closeMatches} />} */}
+
+      {/* TRANSITION ANIMATION */}
+      <LeafTransition isActive={showTransition} onComplete={handleTransitionComplete} />
+
       {/* Sidebar */}
       <Sidebar role="influencer" />
 
@@ -92,13 +157,18 @@ export default function InfluencerDashboard() {
         {/* Top navbar */}
         <nav className={`influencer-navbar ${scrolled ? "scrolled" : ""}`}>
           <div className="nav-left">
-            <div className="nav-logo">🤝</div>
-            <div className="nav-brand">CollabAI</div>
+            <div className="nav-brand">Collaborator</div>
           </div>
 
           <div className="nav-right">
             <div className="dash-sidebar-bottom">
-              <div className="dash-cta">Find Matches</div>
+              <div
+                className="dash-cta dash-cursor-pointer"
+                onClick={handleFindMatches}
+                style={{ opacity: findingMatches ? 0.7 : 1, cursor: findingMatches ? 'wait' : 'pointer' }}
+              >
+                {findingMatches ? "Finding..." : "Find Matches"}
+              </div>
             </div>
             <button
               id="theme-toggle"
@@ -110,13 +180,58 @@ export default function InfluencerDashboard() {
                 ? "☀️"
                 : "🌙"}
             </button>
-
-            <div className="nav-profile" onClick={logout} style={{ cursor: 'pointer' }} title="Logout">
-              {/* Simple logout trigger for now */}
-              🚪
+            <div
+              className="nav-profile-icon"
+              onClick={() => setShowModal(true)}
+              title="View Profile"
+            >
+              {data?.profileImg ? (
+                <img src={data.profileImg} alt="Profile" className="nav-profile-img-inner" />
+              ) : (
+                <div className="nav-profile-placeholder">👤</div>
+              )}
             </div>
           </div>
         </nav>
+
+        {/* PROFILE MODAL */}
+        {showModal && (
+          <div className="modal-overlay" onClick={() => setShowModal(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setShowModal(false)} className="modal-close-btn">×</button>
+
+              <div className="modal-header-center">
+                <div className="modal-profile-img-container">
+                  {data?.profileImg ? <img src={data.profileImg} className="nav-profile-img-inner" /> : <div className="modal-profile-placeholder"></div>}
+                </div>
+                <h2>{data?.userId?.name || "Influencer Name"}</h2>
+                <p className="text-muted-custom">{data?.niche}</p>
+              </div>
+
+              <div className="modal-details-grid">
+                <div className="modal-info-row">
+                  <strong>{data?.primaryPlatform || "Platform"}:</strong> <a href={data?.platformUrl} target="_blank" rel="noreferrer" className="text-accent-1">View Profile</a>
+                </div>
+                <div className="modal-info-row">
+                  <strong>Followers:</strong> {data?.followers}
+                </div>
+                <div className="modal-info-row">
+                  <strong>Content Offered:</strong> {data?.contentTypes?.join(", ")}
+                </div>
+                <div className="modal-info-row">
+                  <strong>Min Budget:</strong> {data?.budget}
+                </div>
+                <div className="modal-info-row">
+                  <strong>Email:</strong> {data?.email}
+                </div>
+              </div>
+
+              <button onClick={logout} className="modal-logout-btn">
+                Log Out
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Horizontal profile card */}
         <section className="profile-card">
@@ -128,7 +243,7 @@ export default function InfluencerDashboard() {
               </div>
 
               <div className="profile-meta">
-                <div className="profile-name">{data?.name || "Anonymous"}</div>
+                <div className="profile-name">{data?.userId?.name || "Anonymous"}</div>
                 <div className="profile-sub">{followerCategory()}</div>
               </div>
             </div>
@@ -266,7 +381,7 @@ function CircularProgress({ percent = 50, label = "Top 50%" }) {
           fill="transparent"
           strokeWidth={stroke}
           strokeLinecap="round"
-          style={{ transition: "stroke-dashoffset 0.6s ease" }}
+          className="circular-progress-svg-circle"
           strokeDasharray={`${circumference} ${circumference}`}
           strokeDashoffset={strokeDashoffset}
           r={normalizedRadius}
