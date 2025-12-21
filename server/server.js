@@ -4,6 +4,7 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 
 const app = express();
+app.set("trust proxy", 1); // Trust first key for HTTPS on Render/Vercel
 
 // Middleware
 app.use(express.json());
