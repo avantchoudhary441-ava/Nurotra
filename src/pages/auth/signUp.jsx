@@ -102,7 +102,7 @@ export default function SignUp() {
         <div className="auth-separator">OR</div>
 
         <button
-          onClick={() => window.location.href = "http://localhost:5000/api/auth/google"}
+          onClick={() => window.location.href = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/auth/google`}
           className="btn-secondary auth-btn btn-google"
         >
           <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="google-icon" />

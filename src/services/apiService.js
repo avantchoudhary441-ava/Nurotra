@@ -1,10 +1,11 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api/auth";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = `${BASE_URL}/api/auth`;
 
 // Create axios instance
 const api = axios.create({
-    baseURL: "http://localhost:5000/api",
+    baseURL: `${BASE_URL}/api`,
 });
 
 // Add token to headers if it exists
