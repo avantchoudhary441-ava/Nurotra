@@ -51,7 +51,7 @@ export default function OtpVerify() {
         setMsg("");
 
         try {
-            const { data } = await axios.post("http://localhost:5000/api/auth/verify-otp", {
+            const { data } = await axios.post(`${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/auth/verify-otp`, {
                 email,
                 otp: code
             });
@@ -78,7 +78,7 @@ export default function OtpVerify() {
         setError("");
         setMsg("Sending code...");
         try {
-            await axios.post("http://localhost:5000/api/auth/resend-otp", { email });
+            await axios.post(`${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/auth/resend-otp`, { email });
             setMsg("New code sent to your email.");
         } catch (err) {
             setError(err.response?.data?.message || "Failed to resend");
