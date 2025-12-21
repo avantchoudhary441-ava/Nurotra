@@ -160,6 +160,7 @@ const resendOtp = async (req, res) => {
 
         res.status(200).json({ message: "OTP resent successfully" });
     } catch (error) {
+        console.error("Resend OTP Error:", error);
         res.status(500).json({ message: error.message });
     }
 };

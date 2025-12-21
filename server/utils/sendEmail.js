@@ -1,6 +1,10 @@
 const nodemailer = require("nodemailer");
 
 const sendEmail = async (options) => {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        throw new Error("Email credentials (EMAIL_USER/EMAIL_PASS) are missing in environment variables.");
+    }
+
     // 1. Create Transporter
     const transporter = nodemailer.createTransport({
         service: "gmail",
