@@ -22,15 +22,21 @@ router.get(
     "/google/callback",
     passport.authenticate("google", { failureRedirect: "/login", session: false }),
     (req, res) => {
-        // Generate JWT
-        const token = jwt.sign({ id: req.user._id }, process.env.JWT_SECRET, {
-            expiresIn: "30d",
-        });
+        try {
+            // Generate JWT
+            const token = jwt.sign({ id: req.user._id }, process.env.JWT_SECRET, {
+                expiresIn: "30d",
+            });
 
-        // Redirect to Frontend with Token
-        // In production, use client URL from env
-        const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
-        res.redirect(`${clientURL}/login?token=${token}`);
+            // Redirect to Frontend with Token
+            // In production, use client URL from env
+            const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
+            res.redirect(`${clientURL}/login?token=${token}`);
+        } catch (error) {
+            console.error("Google Callback Error:", error);
+            const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
+            res.redirect(`${clientURL}/login?error=AuthFailed`);
+        }
     }
 );
 
