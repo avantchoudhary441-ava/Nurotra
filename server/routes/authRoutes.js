@@ -29,7 +29,8 @@ router.get(
 
         // Redirect to Frontend with Token
         // In production, use client URL from env
-        res.redirect(`http://localhost:5173/login?token=${token}`);
+        const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
+        res.redirect(`${clientURL}/login?token=${token}`);
     }
 );
 
