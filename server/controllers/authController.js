@@ -219,17 +219,57 @@ const getMe = async (req, res) => {
     }
 }
 
+const net = require("net");
+
+// Helper to test connection
+const checkConnection = (host, port) => {
+    return new Promise((resolve) => {
+        console.log(`Debug: Testing connection to ${host}:${port}...`);
+        const socket = new net.Socket();
+        socket.setTimeout(5000); // 5s timeout
+
+        const start = Date.now();
+        socket.connect(port, host, () => {
+            const time = Date.now() - start;
+            console.log(`Debug: Connected to ${host}:${port} in ${time}ms`);
+            socket.end();
+            resolve({ port, success: true, time, error: null });
+        });
+
+        socket.on('error', (err) => {
+            console.log(`Debug: Failed to connect to ${host}:${port}:`, err.message);
+            resolve({ port, success: false, time: null, error: err.message });
+        });
+
+        socket.on('timeout', () => {
+            console.log(`Debug: Timeout connecting to ${host}:${port}`);
+            socket.destroy();
+            resolve({ port, success: false, time: null, error: "Timeout" });
+        });
+    });
+};
+
 // @desc    Test Email Sending (Debug)
 // @route   GET /api/auth/test-email/:email
 // @access  Public
 const testEmail = async (req, res) => {
     const { email } = req.params;
+    const diagnostics = [];
+
     try {
-        console.log(`Debug: Attempting to send test email to ${email} with timeouts...`);
+        console.log(`Debug: Starting comprehensive email test for ${email}`);
+
+        // 1. Test Raw Connectivity
+        diagnostics.push(await checkConnection("smtp.gmail.com", 587));
+        diagnostics.push(await checkConnection("smtp.gmail.com", 465));
 
         // Log environment (masking pass)
-        console.log("Debug: Email User:", process.env.EMAIL_USER);
-        console.log("Debug: Email Pass Length:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0);
+        const envCheck = {
+            hasUser: !!process.env.EMAIL_USER,
+            passLength: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0,
+            userType: typeof process.env.EMAIL_USER
+        };
+        console.log("Debug: Env Check:", envCheck);
 
         const message = `
             <div>
@@ -245,11 +285,16 @@ const testEmail = async (req, res) => {
             message
         });
 
-        res.status(200).json({ message: "Test email sent successfully" });
+        res.status(200).json({
+            message: "Test email sent successfully",
+            diagnostics,
+            envCheck
+        });
     } catch (error) {
         console.error("Debug: Test Email Failed:", error);
         res.status(500).json({
             message: "Test email failed",
+            diagnostics, // Return connection test results even on failure
             error: error.message,
             stack: error.stack
         });
