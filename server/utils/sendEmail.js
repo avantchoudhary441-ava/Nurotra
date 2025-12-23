@@ -6,13 +6,30 @@ const sendEmail = async (options) => {
     }
 
     // 1. Create Transporter
+    // 1. Create Transporter
+    // Use explicit settings for better control and debugging
     const transporter = nodemailer.createTransport({
-        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465, // Use 465 for secure, or 587 for TLS
+        secure: true, // true for 465, false for other ports
         auth: {
-            user: process.env.EMAIL_USER, // Your Gmail
-            pass: process.env.EMAIL_PASS, // Your App Password
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
         },
+        // Add timeouts to prevent hanging 
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 5000,    // 5 seconds
+        socketTimeout: 10000,     // 10 seconds
     });
+
+    // Verify connection configuration
+    try {
+        await transporter.verify();
+        console.log("Nodemailer connection verified successfully");
+    } catch (error) {
+        console.error("Nodemailer connection failed:", error);
+        throw new Error("Email service connection failed: " + error.message);
+    }
 
     // 2. Define Email Options
     const mailOptions = {
@@ -23,7 +40,14 @@ const sendEmail = async (options) => {
     };
 
     // 3. Send Email
-    await transporter.sendMail(mailOptions);
+    try {
+        console.log(`Attempting to send email to ${options.email}...`);
+        const info = await transporter.sendMail(mailOptions);
+        console.log("Email sent successfully:", info.messageId);
+    } catch (error) {
+        console.error("Error sending email:", error);
+        throw new Error("Failed to send email: " + error.message);
+    }
 };
 
 module.exports = sendEmail;

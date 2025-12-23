@@ -29,7 +29,7 @@ import "./styles/footer.css";
 import "./styles/background.css";
 import InfluencerDashboard from "./pages/Influencer/InfluencerDashboard.jsx";
 import MatchResultPage from "./pages/match/MatchResultPage";
-import ChatPage from "./pages/chat/ChatPage"; // Import Match Results
+import ChatPage from "./pages/chat/ChatPage"; 
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import InfluencerMatchingForm from "./pages/Influencer/InfluencerMatchingForm";
 import BrandMatchingForm from "./pages/brand/BrandMatchingForm";
@@ -76,3 +76,4 @@ export default function App() {
 
   );
 }
+ 
