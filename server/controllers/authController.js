@@ -219,4 +219,41 @@ const getMe = async (req, res) => {
     }
 }
 
-module.exports = { registerUser, loginUser, getMe, verifyOtp, resendOtp };
+// @desc    Test Email Sending (Debug)
+// @route   GET /api/auth/test-email/:email
+// @access  Public
+const testEmail = async (req, res) => {
+    const { email } = req.params;
+    try {
+        console.log(`Debug: Attempting to send test email to ${email} with timeouts...`);
+
+        // Log environment (masking pass)
+        console.log("Debug: Email User:", process.env.EMAIL_USER);
+        console.log("Debug: Email Pass Length:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0);
+
+        const message = `
+            <div>
+                <h1>Test Email</h1>
+                <p>If you received this, the email service is working!</p>
+                <p>Timestamp: ${new Date().toISOString()}</p>
+            </div>
+        `;
+
+        await sendEmail({
+            email,
+            subject: "Nurotra - Debug Test Email",
+            message
+        });
+
+        res.status(200).json({ message: "Test email sent successfully" });
+    } catch (error) {
+        console.error("Debug: Test Email Failed:", error);
+        res.status(500).json({
+            message: "Test email failed",
+            error: error.message,
+            stack: error.stack
+        });
+    }
+};
+
+module.exports = { registerUser, loginUser, getMe, verifyOtp, resendOtp, testEmail };

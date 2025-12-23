@@ -1,11 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const { registerUser, loginUser, getMe, verifyOtp, resendOtp } = require("../controllers/authController");
+const { registerUser, loginUser, getMe, verifyOtp, resendOtp, testEmail } = require("../controllers/authController");
 
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/verify-otp", verifyOtp);
 router.post("/resend-otp", resendOtp);
+router.get("/test-email/:email", testEmail);
 
 // Google Auth
 const passport = require("passport");
