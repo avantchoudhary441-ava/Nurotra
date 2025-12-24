@@ -1,57 +1,39 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
 const sendEmail = async (options) => {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        throw new Error("Email credentials (EMAIL_USER/EMAIL_PASS) are missing in environment variables.");
+    // Check for API key (critical for Resend)
+    if (!process.env.RESEND_API_KEY) {
+        throw new Error("RESEND_API_KEY is missing in environment variables.");
     }
 
-    // 1. Create Transporter
-    // 1. Create Transporter
-    // Use explicit settings for better control and debugging
-    const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 587,
-        secure: false,
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-        },
-        // Force IPv4 to avoid Node 17+ IPv6 issues
-        family: 4,
-        // Detailed logging
-        logger: true,
-        debug: true,
-        // Increased timeouts (30s)
-        connectionTimeout: 30000,
-        greetingTimeout: 30000,
-        socketTimeout: 30000,
-    });
+    const resend = new Resend(process.env.RESEND_API_KEY);
 
-    // Verify connection configuration
+    // Default to 'onboarding@resend.dev' if no custom domain is set.
+    // This allows immediate testing without domain verification.
+    // Once a domain is verified in Resend, process.env.EMAIL_FROM can be set to 'support@yourdomain.com'
+    const fromEmail = process.env.EMAIL_FROM || "onboarding@resend.dev";
+
     try {
-        await transporter.verify();
-        console.log("Nodemailer connection verified successfully");
-    } catch (error) {
-        console.error("Nodemailer connection failed:", error);
-        throw new Error("Email service connection failed: " + error.message);
-    }
+        console.log(`Resend: Attempting to send email to ${options.email} from ${fromEmail}...`);
 
-    // 2. Define Email Options
-    const mailOptions = {
-        from: `"Nurotra Support" <${process.env.EMAIL_USER}>`,
-        to: options.email,
-        subject: options.subject,
-        html: options.message,
-    };
+        const { data, error } = await resend.emails.send({
+            from: fromEmail,
+            to: [options.email], // Resend expects an array for 'to'
+            subject: options.subject,
+            html: options.message,
+        });
 
-    // 3. Send Email
-    try {
-        console.log(`Attempting to send email to ${options.email}...`);
-        const info = await transporter.sendMail(mailOptions);
-        console.log("Email sent successfully:", info.messageId);
+        if (error) {
+            console.error("Resend API Error:", error);
+            throw new Error(`Resend Error: ${error.message} - ${error.name}`);
+        }
+
+        console.log("Resend Success:", data);
+        return data;
     } catch (error) {
-        console.error("Error sending email:", error);
-        throw new Error("Failed to send email: " + error.message);
+        // Catch-all for network or other unexpected errors
+        console.error("Resend Send Failed:", error);
+        throw new Error("Failed to send email via Resend: " + error.message);
     }
 };
 
