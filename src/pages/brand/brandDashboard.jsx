@@ -1,5 +1,6 @@
 // src/pages/brand/brandDashboard.jsx
 import React, { useEffect, useState } from "react";
+import { MessageCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import Sidebar from "../../components/Sidebar";
 import "../../styles/dashboard.css";
@@ -285,6 +286,16 @@ export default function BrandDashboard() {
           </div>
         </main>
       </div>
-    </div>
+
+      {/* FLOATING CHAT BUTTON */}
+      <button
+        onClick={() => navigate('/chat')}
+        className="floating-chat-btn"
+        title="Open Chat Inbox"
+      >
+        <MessageCircle size={28} />
+      </button>
+
+    </div >
   );
 }

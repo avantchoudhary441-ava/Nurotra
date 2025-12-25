@@ -1,16 +1,22 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { chatService } from "../../services/apiService";
+import { chatService, aiService } from "../../services/apiService";
 import "../../styles/chat.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import GrowthPathModal from "../../components/GrowthPathModal";
-import { useNavigate } from "react-router-dom";
-import { Paperclip, Sun, Moon, CheckCircle, XCircle } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Paperclip, Sun, Moon, CheckCircle, XCircle, Wand2, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ChatPage() {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // AI State
+    const [suggestions, setSuggestions] = useState([]);
+    const [enhancedText, setEnhancedText] = useState(null);
+    const [isThinking, setIsThinking] = useState(false);
 
     // State
     const [chats, setChats] = useState([]);
@@ -41,16 +47,63 @@ export default function ChatPage() {
         setLoadingChats(false);
     };
 
-    // Fetch Messages when chat selected
+
     const fetchMessages = async () => {
         if (!selectedChat) return;
         try {
             const data = await chatService.fetchMessages(selectedChat._id);
             setMessages(data);
             scrollToBottom();
+
+            // Trigger Smart Replies if last message is NOT from me
+            if (data.length > 0 && data[data.length - 1].sender._id !== user._id) {
+                fetchSmartReplies(selectedChat._id);
+            }
         } catch (error) {
             console.error("Failed to load messages", error);
         }
+    };
+
+    // AI: Fetch Smart Replies
+    const fetchSmartReplies = async (chatId) => {
+        try {
+            const replies = await aiService.suggestReplies(chatId);
+            setSuggestions(replies);
+        } catch (error) {
+            console.error("AI Reply Error", error);
+        }
+    };
+
+    // AI: Generate Opener if New Match
+    useEffect(() => {
+        const initNegotiation = async () => {
+            if (location.state?.startNegotiation && location.state?.matchContext && !newMessage) {
+                setIsThinking(true);
+                try {
+                    const opener = await aiService.generateOpener(location.state.matchContext);
+                    setNewMessage(opener);
+                    // Clear state so it doesn't re-trigger on refresh
+                    window.history.replaceState({}, document.title);
+                } catch (error) {
+                    console.error("Opener Error", error);
+                }
+                setIsThinking(false);
+            }
+        };
+        initNegotiation();
+    }, [location.state]);
+
+    // AI: Enhance Text
+    const handleEnhanceText = async () => {
+        if (!newMessage.trim()) return;
+        setIsThinking(true);
+        try {
+            const improved = await aiService.enhanceText(newMessage);
+            setEnhancedText(improved);
+        } catch (error) {
+            console.error("Enhance Error", error);
+        }
+        setIsThinking(false);
     };
 
     // Send Message
@@ -59,6 +112,8 @@ export default function ChatPage() {
         try {
             const contentToSend = newMessage;
             setNewMessage("");
+            setSuggestions([]); // Clear suggestions
+            setEnhancedText(null); // Clear enhanced text
             if (textareaRef.current) {
                 textareaRef.current.style.height = "auto";
             }
@@ -80,11 +135,20 @@ export default function ChatPage() {
 
     const handleInput = (e) => {
         setNewMessage(e.target.value);
+        setEnhancedText(null); // Hide enhanced suggestion if user types
         // Auto-expand
         if (textareaRef.current) {
             textareaRef.current.style.height = "auto";
             textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
         }
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
+    }
+
+
+    const applySuggestion = (text) => {
+        setNewMessage(text);
+        setSuggestions([]);
+        if (textareaRef.current) textareaRef.current.focus();
     };
 
     const handleCollaborationTrigger = (type) => {
@@ -241,10 +305,55 @@ export default function ChatPage() {
                                         )}
                                     </AnimatePresence>
 
+                                    {/* AI Smart Reply Chips */}
+                                    {suggestions.length > 0 && (
+                                        <div className="smart-replies-container">
+                                            <div className="smart-chips-scroll">
+                                                {suggestions.map((reply, idx) => (
+                                                    <button
+                                                        key={idx}
+                                                        className="smart-chip"
+                                                        onClick={() => applySuggestion(reply)}
+                                                    >
+                                                        ✨ {reply}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* AI Enhanced Text Bubble */}
+                                    {enhancedText && (
+                                        <motion.div
+                                            className="enhanced-bubble"
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                        >
+                                            <div className="enhanced-label">
+                                                <Sparkles size={14} color="#ffd700" /> Professional Suggestion:
+                                            </div>
+                                            <div className="enhanced-content">"{enhancedText}"</div>
+                                            <div className="enhanced-actions">
+                                                <button onClick={() => { setNewMessage(enhancedText); setEnhancedText(null); }}>Apply</button>
+                                                <button onClick={() => setEnhancedText(null)} className="dismiss">Dismiss</button>
+                                            </div>
+                                        </motion.div>
+                                    )}
+
                                     <div className="input-area-wrapper">
                                         {/* File Upload Icon */}
                                         <button className="icon-btn upload-btn" title="Upload File">
                                             <Paperclip size={20} />
+                                        </button>
+
+                                        {/* Magic Wand Enhance */}
+                                        <button
+                                            className={`icon-btn magic-btn ${isThinking ? "thinking" : ""}`}
+                                            title="Enhance Text w/ AI"
+                                            onClick={handleEnhanceText}
+                                            disabled={!newMessage.trim()}
+                                        >
+                                            <Wand2 size={20} />
                                         </button>
 
                                         {/* Auto-expanding Input */}
@@ -288,3 +397,4 @@ export default function ChatPage() {
         </div>
     );
 }
+

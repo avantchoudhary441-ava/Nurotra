@@ -116,4 +116,24 @@ export const chatService = {
     }
 };
 
+
+export const aiService = {
+    suggestReplies: async (chatId) => {
+        const response = await api.post("/ai/suggest", { chatId });
+        return response.data.suggestions;
+    },
+    generateOpener: async (matchContext) => {
+        const response = await api.post("/ai/opener", { matchContext });
+        return response.data.opener;
+    },
+    enhanceText: async (text) => {
+        const response = await api.post("/ai/enhance", { text });
+        return response.data.enhancedText;
+    },
+    summarizeChat: async (chatId) => {
+        const response = await api.post("/ai/summarize", { chatId });
+        return response.data;
+    }
+};
+
 export default api;

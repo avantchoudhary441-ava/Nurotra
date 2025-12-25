@@ -48,15 +48,30 @@ export default function MatchResultPage() {
         visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 80 } }
     };
 
-    const handleConnect = async (targetUserId) => {
+    const handleConnect = async (matchItem) => {
         try {
+            // Unify ID extraction
+            const targetUserId = matchItem.userId || matchItem.user?._id || matchItem._id;
+
             if (!targetUserId) {
                 console.error("No User ID to connect");
                 return;
             }
-            // Create/Access Chat and Navigate
+            // Create/Access Chat
             await chatService.accessChat(targetUserId);
-            navigate("/chat");
+
+            // Navigate with AI Context State
+            navigate("/chat", {
+                state: {
+                    startNegotiation: true,
+                    matchContext: {
+                        name: matchItem.user?.name || matchItem.companyName,
+                        niche: matchItem.niche || matchItem.industry,
+                        matchScore: matchItem.matchScore,
+                        focus: matchItem.focus || "Collaboration"
+                    }
+                }
+            });
         } catch (error) {
             console.error("Connect failed", error);
             // Optionally show toast
@@ -164,7 +179,7 @@ export default function MatchResultPage() {
                                     {/* CONNECT BUTTON */}
                                     <button
                                         className="connect-btn"
-                                        onClick={() => handleConnect(match.userId || match.user._id || match._id)}
+                                        onClick={() => handleConnect(match)}
                                     >
                                         Connect 💬
                                     </button>

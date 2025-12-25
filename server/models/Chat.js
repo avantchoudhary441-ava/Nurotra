@@ -10,6 +10,15 @@ const ChatSchema = new mongoose.Schema(
             ref: "Message",
         },
         groupAdmin: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+        // AI Negotiation Fields
+        negotiationStatus: {
+            type: String,
+            enum: ['new', 'negotiating', 'agreed', 'stalled'],
+            default: 'new'
+        },
+        summary: { type: String, default: "" },
+        matchContext: { type: Object } // Snapshot of match data
     },
     { timestamps: true }
 );

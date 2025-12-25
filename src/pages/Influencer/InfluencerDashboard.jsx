@@ -1,5 +1,6 @@
 // src/pages/influencer/influencerDashboard.jsx
 import React, { useEffect, useState } from "react";
+import { MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Sidebar from "../../components/Sidebar";
@@ -340,6 +341,16 @@ export default function InfluencerDashboard() {
         </main>
 
       </div>
+
+      {/* FLOATING CHAT BUTTON */}
+      <button
+        onClick={() => navigate('/chat')}
+        className="floating-chat-btn"
+        title="Open Chat Inbox"
+      >
+        <MessageCircle size={28} />
+      </button>
+
     </div>
   );
 }
