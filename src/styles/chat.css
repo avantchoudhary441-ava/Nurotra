@@ -393,3 +393,18 @@
     background: var(--chat-border);
     border-radius: 3px;
 }
+
+/* Nurotra AI Glow Effect */
+.nurotra-ai-glow {
+    border: 1px solid rgba(255, 215, 0, 0.5); /* Gold border */
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+    transition: all 0.3s ease;
+    background: linear-gradient(90deg, rgba(255,215,0,0.05), transparent);
+}
+
+.nurotra-ai-glow:hover {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 0 0 40px rgba(255, 215, 0, 0.3);
+    border-color: rgba(255, 215, 0, 0.8);
+    transform: scale(1.02);
+}
+

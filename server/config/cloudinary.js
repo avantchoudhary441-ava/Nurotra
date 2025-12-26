@@ -9,9 +9,23 @@ cloudinary.config({
 
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
-    params: {
-        folder: 'nurotra_chat',
-        allowed_formats: ['jpg', 'png', 'jpeg', 'pdf', 'doc', 'docx'],
+    params: async (req, file) => {
+        // PRODUCTION CONFIGURATION
+        // 1. Sanitize filename: remove extension, keep only alphanumeric to prevent URL encoding errors (401)
+        let cleanName = file.originalname.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9]/g, "_");
+        if (!cleanName) cleanName = "file";
+
+        return {
+            folder: 'nurotra_chat',
+            // 'auto' mode allows Cloudinary to automatically classify files:
+            // - Images/PDFs -> Viewable
+            // - Zips/Others -> Raw/Download
+            resource_type: 'auto',
+            type: 'upload',
+            // We do NOT manually set format or extension here. 
+            // Cloudinary's 'auto' mode handles it safest matching the uploaded content.
+            public_id: cleanName + '_' + Date.now(),
+        };
     },
 });
 

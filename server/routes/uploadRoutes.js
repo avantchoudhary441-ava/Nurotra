@@ -4,12 +4,24 @@ const multer = require('multer');
 const { storage } = require('../config/cloudinary');
 const upload = multer({ storage });
 
-router.post('/', upload.single('file'), (req, res) => {
+// Debug wrapper or middleware logging
+router.post('/', (req, res, next) => {
+    console.log("Upload request received");
+    next();
+}, upload.single('file'), (req, res) => {
     if (!req.file) {
+        console.error("No file in req");
         return res.status(400).json({ message: 'No file uploaded' });
     }
-    // Cloudinary returns the url in req.file.path
-    res.json({ url: req.file.path, filename: req.file.filename });
+    console.log("Full Cloudinary File Object:", req.file);
+
+    // Prefer secure_url if available, otherwise force https on path
+    let fileUrl = req.file.secure_url || req.file.path;
+    if (fileUrl && fileUrl.startsWith('http:')) {
+        fileUrl = fileUrl.replace('http:', 'https:');
+    }
+
+    res.json({ url: fileUrl, filename: req.file.filename });
 });
 
 module.exports = router;

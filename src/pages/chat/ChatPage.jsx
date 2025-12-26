@@ -34,6 +34,7 @@ export default function ChatPage() {
     // Refs
     const scrollRef = useRef();
     const textareaRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     // Fetch My Chats
     const fetchChats = async () => {
@@ -143,6 +144,28 @@ export default function ChatPage() {
         }
         textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
     }
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            // 1. Upload
+            const uploadRes = await chatService.uploadFile(file);
+            const fileUrl = uploadRes.url;
+
+            // 2. Determine type
+            const type = file.type.startsWith("image/") ? "image" : "file";
+
+            // 3. Send Message
+            const data = await chatService.sendMessage(type === 'image' ? "Sent an image" : "Sent a file", selectedChat._id, [fileUrl], type);
+            setMessages([...messages, data]);
+            scrollToBottom();
+        } catch (error) {
+            console.error("File Upload Error:", error);
+            alert("Failed to upload file");
+        }
+    };
 
 
     const applySuggestion = (text) => {
@@ -277,7 +300,45 @@ export default function ChatPage() {
                                             className={`message-row ${m.sender._id === user._id ? "my-message" : "other-message"}`}
                                         >
                                             <div className="message-bubble">
-                                                {m.content}
+                                                {m.type === 'image' && m.attachments?.length > 0 ? (
+                                                    <div className="msg-attachment">
+                                                        <img
+                                                            src={m.attachments[0]}
+                                                            alt="sent"
+                                                            className="chat-msg-img"
+                                                            style={{ maxWidth: '200px', borderRadius: '8px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}
+                                                            onClick={() => window.open(m.attachments[0], '_blank')}
+                                                        />
+                                                    </div>
+                                                ) : m.type === 'file' && m.attachments?.length > 0 ? (
+                                                    <div
+                                                        className="msg-file-card"
+                                                        style={{
+                                                            background: 'rgba(0,0,0,0.2)',
+                                                            padding: '10px',
+                                                            borderRadius: '8px',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '10px',
+                                                            maxWidth: '250px',
+                                                            cursor: 'pointer',
+                                                            border: '1px solid rgba(255,255,255,0.1)'
+                                                        }}
+                                                        onClick={() => window.open(m.attachments[0], '_blank')}
+                                                    >
+                                                        <div style={{ background: '#3b82f6', padding: '8px', borderRadius: '50%', display: 'flex', minWidth: '36px', justifyContent: 'center' }}>
+                                                            <Paperclip size={20} color="white" />
+                                                        </div>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                                            <span style={{ fontSize: '0.9rem', fontWeight: '500', color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                {m.attachments[0].split('/').pop()}
+                                                            </span>
+                                                            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)' }}>Click to open</span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    m.content
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -330,9 +391,9 @@ export default function ChatPage() {
                                             animate={{ opacity: 1, scale: 1 }}
                                         >
                                             <div className="enhanced-label">
-                                                <Sparkles size={14} color="#ffd700" /> Professional Suggestion:
+                                                <Sparkles size={14} color="#ffd700" /> Nurotra AI Suggestion:
                                             </div>
-                                            <div className="enhanced-content">"{enhancedText}"</div>
+                                            <div className="enhanced-content nurotra-ai-glow">"{enhancedText}"</div>
                                             <div className="enhanced-actions">
                                                 <button onClick={() => { setNewMessage(enhancedText); setEnhancedText(null); }}>Apply</button>
                                                 <button onClick={() => setEnhancedText(null)} className="dismiss">Dismiss</button>
@@ -342,7 +403,17 @@ export default function ChatPage() {
 
                                     <div className="input-area-wrapper">
                                         {/* File Upload Icon */}
-                                        <button className="icon-btn upload-btn" title="Upload File">
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            style={{ display: "none" }}
+                                            onChange={handleFileUpload}
+                                        />
+                                        <button
+                                            className="icon-btn upload-btn"
+                                            title="Upload File"
+                                            onClick={() => fileInputRef.current.click()}
+                                        >
                                             <Paperclip size={20} />
                                         </button>
 

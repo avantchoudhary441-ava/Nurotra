@@ -8,7 +8,27 @@ app.set("trust proxy", 1); // Trust first key for HTTPS on Render/Vercel
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+// Production CORS Configuration
+const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    process.env.CLIENT_URL,
+    process.env.VERCEL_URL
+].filter(Boolean);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.some(o => origin.startsWith(o))) {
+            callback(null, true);
+        } else {
+            console.warn(`Blocked CORS request from: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+}));
 const passport = require("./config/passport");
 app.use(passport.initialize());
 

@@ -43,8 +43,8 @@ const suggestReplies = async (req, res) => {
  * Route: POST /api/chat/ai/opener
  */
 const generateOpener = async (req, res) => {
-    const { matchData } = req.body;
-    // matchData should contain: name, niche, matchScore, focus
+    const { matchContext } = req.body;
+    // matchContext should contain: name, niche, matchScore, focus
 
     try {
         const senderData = {
@@ -52,7 +52,7 @@ const generateOpener = async (req, res) => {
             role: req.user.role
         };
 
-        const opener = await aiService.generateOpener(matchData, senderData);
+        const opener = await aiService.generateOpener(matchContext, senderData);
         res.json({ opener });
     } catch (error) {
         console.error("Opener Error:", error);

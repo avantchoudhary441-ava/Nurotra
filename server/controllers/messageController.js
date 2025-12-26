@@ -6,17 +6,19 @@ const Chat = require("../models/Chat");
 // @route   POST /api/message
 // @access  Protected
 const sendMessage = async (req, res) => {
-    const { content, chatId } = req.body;
+    const { content, chatId, attachments, type } = req.body;
 
-    if (!content || !chatId) {
+    if ((!content && (!attachments || attachments.length === 0)) || !chatId) {
         console.log("Invalid data passed into request");
         return res.sendStatus(400);
     }
 
     var newMessage = {
         sender: req.user._id,
-        content: content,
+        content: content || (attachments && attachments.length > 0 ? "Attachment" : ""),
         chat: chatId,
+        attachments: attachments || [],
+        type: type || "text"
     };
 
     try {

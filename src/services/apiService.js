@@ -106,12 +106,20 @@ export const chatService = {
         const response = await api.get("/chat");
         return response.data;
     },
-    sendMessage: async (content, chatId) => {
-        const response = await api.post("/message", { content, chatId });
+    sendMessage: async (content, chatId, attachments = [], type = "text") => {
+        const response = await api.post("/message", { content, chatId, attachments, type });
         return response.data;
     },
     fetchMessages: async (chatId) => {
         const response = await api.get(`/message/${chatId}`);
+        return response.data;
+    },
+    uploadFile: async (file) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await api.post("/upload", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+        });
         return response.data;
     }
 };
@@ -119,19 +127,19 @@ export const chatService = {
 
 export const aiService = {
     suggestReplies: async (chatId) => {
-        const response = await api.post("/ai/suggest", { chatId });
+        const response = await api.post("/chat/ai/suggest", { chatId });
         return response.data.suggestions;
     },
     generateOpener: async (matchContext) => {
-        const response = await api.post("/ai/opener", { matchContext });
+        const response = await api.post("/chat/ai/opener", { matchContext });
         return response.data.opener;
     },
     enhanceText: async (text) => {
-        const response = await api.post("/ai/enhance", { text });
+        const response = await api.post("/chat/ai/enhance", { text });
         return response.data.enhancedText;
     },
     summarizeChat: async (chatId) => {
-        const response = await api.post("/ai/summarize", { chatId });
+        const response = await api.post("/chat/ai/summarize", { chatId });
         return response.data;
     }
 };
