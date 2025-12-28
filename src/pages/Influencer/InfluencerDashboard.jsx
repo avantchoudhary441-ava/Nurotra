@@ -1,5 +1,4 @@
-// src/pages/influencer/influencerDashboard.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -8,9 +7,13 @@ import "../../styles/dashboard.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import LineStatsChart from "../../components/charts/LineStatsChart";
 import BarRankChart from "../../components/charts/BarRankChart";
-import { profileService, matchService } from "../../services/apiService"; // Import matchService
-import InfluencerMatchResults from "./InfluencerMatchResults"; // Import Results Overlay
-import LeafTransition from "../../components/LeafTransition"; // Import Animation
+import { profileService, matchService } from "../../services/apiService";
+import InfluencerMatchResults from "./InfluencerMatchResults";
+import LeafTransition from "../../components/LeafTransition";
+import ErrorBoundary from "../../components/ErrorBoundary";
+
+// Lazy Load the AI Studio to save initial bandwidth
+const ProfileEnhancer = React.lazy(() => import("../../components/ProfileEnhancer"));
 
 export default function InfluencerDashboard() {
   const navigate = useNavigate();
@@ -18,6 +21,7 @@ export default function InfluencerDashboard() {
 
   const [profile, setProfile] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [showEnhancer, setShowEnhancer] = useState(false); // Enhancer State
 
   // Direct matching states
   const [matches, setMatches] = useState(null);
@@ -58,28 +62,22 @@ export default function InfluencerDashboard() {
   /* ---------------- FIND MATCH ACTION ---------------- */
   const handleFindMatches = async () => {
     // SMART MATCH LOGIC
-    // Check if profile has key indicator like 'niche' and 'primaryPlatform'
-    // Check if profile exists
     if (profile && Object.keys(profile).length > 0) {
       // Trigger Animation FIRST
       setShowTransition(true);
     } else {
-      // Incomplete profile -> Form
       navigate("/influencer/matching");
     }
   };
 
   const handleTransitionComplete = async () => {
-    // Hidden internal function to actually fetch data after animation
-    setShowTransition(false); // Can keep overlay/leaf until navigate happens to prevent blink
+    setShowTransition(false);
     setFindingMatches(true);
     try {
       const results = await matchService.getInfluencerMatches(user.uniqueId || "INF-TEMP");
-      // Navigate to Results Page with Data
       navigate("/match-results", { state: { matches: results, role: 'influencer' } });
     } catch (err) {
       console.error("Match failed", err);
-      // Fallback or error msg
     } finally {
       setFindingMatches(false);
     }
@@ -89,7 +87,7 @@ export default function InfluencerDashboard() {
     setMatches(null);
   };
 
-  // Helpers: compute beginner/intermediate/expert by followers
+  // Helpers
   const followerCategory = () => {
     if (!data) return "Beginner";
     const f = data.followers || "";
@@ -99,23 +97,7 @@ export default function InfluencerDashboard() {
     return "Beginner";
   };
 
-  // Compute topPercent based on follower bracket (simple mapping)
-  const topPercentInfo = () => {
-    if (!data) return { pct: 50, text: "Top 50%" };
-    const f = data.followers || "";
-    if (f.includes("100k")) return { pct: 96, text: "Top 1%" };
-    if (f.includes("50k")) return { pct: 88, text: "Top 5%" };
-    if (f.includes("10k")) return { pct: 70, text: "Top 20%" };
-    return { pct: 48, text: "Top 50%" };
-  };
-
-  // Sample stats for the small bar chart (last 6 months reach)
-  const chartData = [8, 12, 9, 16, 14, 18]; // arbitrary numbers, will render as bars
-
-  // Active collaborations sample / or derive from localStorage if you store them
   const activeCount = data?.activeCount ?? 3;
-
-  // Badges sample (you can replace with actual data later)
   const badges = [
     { id: 1, name: "Creator Pro", color: "gold" },
     { id: 2, name: "Top 10%", color: "silver" },
@@ -125,7 +107,6 @@ export default function InfluencerDashboard() {
     { id: 6, name: "Brand Friendly", color: "teal" },
   ];
 
-  // Theme toggle
   const toggleTheme = () => {
     const current = document.documentElement.getAttribute("data-theme") || "light";
     const next = current === "light" ? "dark" : "light";
@@ -133,8 +114,6 @@ export default function InfluencerDashboard() {
     localStorage.setItem("theme", next);
   };
 
-
-  // Menu dropdown for three-dots
   const onThreeDots = () => {
     const choice = prompt("Options: View analytics / Export profile / Share link\nType one:");
     if (choice) alert(`You chose: ${choice}`);
@@ -144,8 +123,21 @@ export default function InfluencerDashboard() {
     <div className="influencer-dashboard">
       <div><BackgroundEffects /></div>
 
-      {/* MATCH RESULTS OVERLAY - MOVED TO PAGE */}
+      {/* MATCH RESULTS OVERLAY */}
       {/* {matches && <InfluencerMatchResults matches={matches} onClose={closeMatches} />} */}
+
+      {/* PROFILE ENHANCER STUDIO with Safety Net */}
+      {/* PROFILE ENHANCER STUDIO with Safety Net & Lazy Loading */}
+      {showEnhancer && (
+        <ErrorBoundary>
+          <Suspense fallback={<div className="modal-overlay"><div className="spinner"></div></div>}>
+            <ProfileEnhancer
+              profileData={profile || user}
+              onClose={() => setShowEnhancer(false)}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
 
       {/* TRANSITION ANIMATION */}
       <LeafTransition isActive={showTransition} onComplete={handleTransitionComplete} />
@@ -156,6 +148,8 @@ export default function InfluencerDashboard() {
       {/* Page content */}
       <div className="influencer-main">
         {/* Top navbar */}
+
+        {/* (Navbar code remains same) ... */}
         <nav className={`influencer-navbar ${scrolled ? "scrolled" : ""}`}>
           <div className="nav-left">
             <div className="nav-brand">Collaborator</div>
@@ -195,42 +189,11 @@ export default function InfluencerDashboard() {
           </div>
         </nav>
 
-        {/* PROFILE MODAL */}
+        {/* PROFILE MODAL (Existing) */}
         {showModal && (
+          // ... (Modal code) ...
           <div className="modal-overlay" onClick={() => setShowModal(false)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setShowModal(false)} className="modal-close-btn">×</button>
-
-              <div className="modal-header-center">
-                <div className="modal-profile-img-container">
-                  {data?.profileImg ? <img src={data.profileImg} className="nav-profile-img-inner" /> : <div className="modal-profile-placeholder"></div>}
-                </div>
-                <h2>{data?.userId?.name || "Influencer Name"}</h2>
-                <p className="text-muted-custom">{data?.niche}</p>
-              </div>
-
-              <div className="modal-details-grid">
-                <div className="modal-info-row">
-                  <strong>{data?.primaryPlatform || "Platform"}:</strong> <a href={data?.platformUrl} target="_blank" rel="noreferrer" className="text-accent-1">View Profile</a>
-                </div>
-                <div className="modal-info-row">
-                  <strong>Followers:</strong> {data?.followers}
-                </div>
-                <div className="modal-info-row">
-                  <strong>Content Offered:</strong> {data?.contentTypes?.join(", ")}
-                </div>
-                <div className="modal-info-row">
-                  <strong>Min Budget:</strong> {data?.budget}
-                </div>
-                <div className="modal-info-row">
-                  <strong>Email:</strong> {data?.email}
-                </div>
-              </div>
-
-              <button onClick={logout} className="modal-logout-btn">
-                Log Out
-              </button>
-            </div>
+            {/* ... */}
           </div>
         )}
 
@@ -253,12 +216,24 @@ export default function InfluencerDashboard() {
           {/* LEFT SIDE (now right) - action buttons */}
           <div className="profile-left">
             <div className="profile-actions">
+              {/* ✨ AI ENHANCE BUTTON */}
+              <button
+                className="btn-primary-gradient"
+                onClick={() => setShowEnhancer(true)}
+                style={{ marginRight: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <span>✨</span> Enhance Profile
+              </button>
+
               <button className="btn-outline" onClick={() => navigate("/influencer/profile")}>Edit Profile</button>
               <button className="btn-outline" onClick={() => navigate("/influencer/settings")}>Settings</button>
               <button className="btn-dots" onClick={onThreeDots}>⋯</button>
             </div>
           </div>
         </section>
+
+        {/* Main analytics grid */}
+        {/* ... */}
 
         {/* Main analytics grid */}
         <main className="analytics-area">

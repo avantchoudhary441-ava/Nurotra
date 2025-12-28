@@ -5,7 +5,8 @@ const {
     suggestReplies,
     generateOpener,
     summarizeChat,
-    enhanceText
+    enhanceText,
+    analyzeUserProfile
 } = require("../controllers/aiController");
 
 const router = express.Router();
@@ -18,5 +19,6 @@ router.route("/ai/suggest").post(protect, suggestReplies);
 router.route("/ai/opener").post(protect, generateOpener);
 router.route("/ai/summarize").post(protect, summarizeChat);
 router.route("/ai/enhance").post(protect, enhanceText);
+router.route("/ai/analyze-profile").post(protect, analyzeUserProfile);
 
 module.exports = router;

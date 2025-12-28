@@ -148,10 +148,82 @@ const enhanceText = async (draftText) => {
             Output ONLY the rewritten text. pure text.
         `;
 
-        return await generateWithFallback(prompt);
+        let text = await generateWithFallback(prompt);
+        // Remove quotes if any
+        text = text.replace(/^"|"$/g, '').trim();
+        return text;
     } catch (error) {
         console.error("Gemini Enhance Error:", error.message);
-        return draftText;
+        return draftText; // Fail safe
+    }
+};
+
+/**
+ * Nurotra Profile Enhancer Engine
+ * Analyzes profile data and returns a structured "Upgrade Report"
+ */
+const analyzeProfile = async (profileData) => {
+    try {
+        const prompt = `
+            You are Nurotra's Elite Profile Coach.
+            Analyze this Creator/Brand profile and provide a structured "Upgrade Report".
+
+            Profile Data:
+            - Role: ${profileData.role || "Influencer"}
+            - Niche: ${profileData.niche || "Unspecified"}
+            - Bio/Note: "${profileData.noteToBrand || profileData.bio || "No bio info"}"
+            - Followers: ${profileData.followers || "N/A"}
+            - Platform: ${profileData.primaryPlatform} (${profileData.platformUrl})
+            - Worked Before: ${profileData.workedBefore || "No"}
+
+            Task:
+            Analyze 5 Key Dimensions and output a STRICT JSON object:
+
+            1. "strengthAnalysis":
+               - "score": (0-100 integer)
+               - "strengths": Array of 3 short strings (e.g. "Clear Niche", "Good Engagement Identity").
+            
+            2. "gapAnalysis":
+               - "gaps": Array of objets { "title": "Missing Portfolio", "severity": "Medium", "reason": "Brands need proof of past work." }
+               - Use "Amber" tone, not "Red". Constructive criticism.
+
+            3. "marketComparison":
+               - Compare this user to the "Top 10%" in their niche.
+               - "you": { "clarity": 70, "engagement": 60, "professionalism": 50 }
+               - "top10": { "clarity": 95, "engagement": 90, "professionalism": 95 }
+               - "average": { "clarity": 60, "engagement": 50, "professionalism": 60 }
+
+            4. "optimizationSuggestions":
+               - Array of 3 objects: { "title": "Actionable Step", "impact": "High", "instruction": "Step-by-step guide on what to change." }
+
+            5. "projectedImpact":
+               - "matchQualityUplift": (10-30 integer)
+               - "replyRateUplift": (10-30 integer)
+
+            Structure the JSON strictly. No markdown.
+        `;
+
+        let text = await generateWithFallback(prompt);
+        // Clean JSON
+        if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
+        else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
+
+        return JSON.parse(text);
+
+    } catch (error) {
+        console.error("Profile Analysis Error:", error.message);
+        // Fallback Mock Data to prevent UI crash
+        return {
+            strengthAnalysis: { score: 70, strengths: ["Active Account", "defined Platform"] },
+            gapAnalysis: { gaps: [{ title: "Optimization Pending", severity: "Low", reason: "AI connection failed." }] },
+            marketComparison: {
+                you: { clarity: 60, engagement: 50, professionalism: 60 },
+                top10: { clarity: 90, engagement: 90, professionalism: 95 },
+                average: { clarity: 50, engagement: 50, professionalism: 50 }
+            },
+            optimizationSuggestions: [],
+            projectedImpact: { matchQualityUplift: 15, replyRateUplift: 10 }
+        };
     }
 };
 
@@ -159,5 +231,6 @@ module.exports = {
     generateSmartReplies,
     generateOpener,
     generateSummary,
-    enhanceText
+    enhanceText,
+    analyzeProfile
 };

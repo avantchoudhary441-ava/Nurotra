@@ -141,6 +141,10 @@ export const aiService = {
     summarizeChat: async (chatId) => {
         const response = await api.post("/chat/ai/summarize", { chatId });
         return response.data;
+    },
+    analyzeProfile: async (profileData) => {
+        const response = await api.post("/chat/ai/analyze-profile", { profileData });
+        return response.data;
     }
 };
 

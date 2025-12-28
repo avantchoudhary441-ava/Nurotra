@@ -107,9 +107,36 @@ const enhanceText = async (req, res) => {
     }
 };
 
+/**
+ * Analyze Profile (AI Studio)
+ * Route: POST /api/chat/ai/analyze-profile
+ */
+const analyzeUserProfile = async (req, res) => {
+    const { profileData } = req.body;
+
+    if (!profileData) return res.status(400).send("Profile data required");
+
+    try {
+        const analysis = await aiService.analyzeProfile(profileData);
+        res.json(analysis);
+    } catch (error) {
+        console.error("Profile Analysis Error:", error);
+        res.status(500).send("Failed to analyze profile");
+    }
+};
+
 module.exports = {
     suggestReplies,
     generateOpener,
     summarizeChat,
-    enhanceText
+    enhanceText,
+    analyzeUserProfile
+};
+
+module.exports = {
+    suggestReplies,
+    generateOpener,
+    summarizeChat,
+    enhanceText,
+    analyzeUserProfile
 };
