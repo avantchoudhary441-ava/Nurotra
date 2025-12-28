@@ -176,13 +176,39 @@ export default function MatchResultPage() {
                                         )}
                                     </div>
 
-                                    {/* CONNECT BUTTON */}
-                                    <button
-                                        className="connect-btn"
-                                        onClick={() => handleConnect(match)}
-                                    >
-                                        Connect 💬
-                                    </button>
+                                    {/* ACTION BUTTONS ROW */}
+                                    <div className="card-actions-row">
+                                        <button
+                                            className="connect-btn"
+                                            onClick={() => handleConnect(match)}
+                                        >
+                                            Connect 💬
+                                        </button>
+
+                                        {/* Inspact Button (Glassy, Shows on Hover) */}
+                                        {/* Inspact Button (Glassy, Shows on Hover) */}
+                                        <a
+                                            href={(match.platformUrl || match.user?.platformUrl) ?
+                                                (match.platformUrl || match.user?.platformUrl).startsWith('http') ?
+                                                    (match.platformUrl || match.user?.platformUrl) :
+                                                    `https://${match.platformUrl || match.user?.platformUrl}`
+                                                : "#"}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inspact-btn"
+                                            title="Inspect Platform Profile"
+                                            onClick={(e) => {
+                                                const url = match.platformUrl || match.user?.platformUrl;
+                                                if (!url) {
+                                                    e.preventDefault();
+                                                    alert("No platform profile URL found for this user.");
+                                                    console.warn("Inspact: Missing URL", match);
+                                                }
+                                            }}
+                                        >
+                                            Inspact 👁️
+                                        </a>
+                                    </div>
                                 </div>
                             </motion.div>
                         );

@@ -391,7 +391,7 @@ export default function ChatPage() {
                                             animate={{ opacity: 1, scale: 1 }}
                                         >
                                             <div className="enhanced-label">
-                                                <Sparkles size={14} color="#ffd700" /> Nurotra AI Suggestion:
+                                                <Sparkles size={14} color="#8b5cf6" /> Nurotra AI Suggestion:
                                             </div>
                                             <div className="enhanced-content nurotra-ai-glow">"{enhancedText}"</div>
                                             <div className="enhanced-actions">
@@ -417,14 +417,14 @@ export default function ChatPage() {
                                             <Paperclip size={20} />
                                         </button>
 
-                                        {/* Magic Wand Enhance */}
+                                        {/* Magic Sparkles Enhance (Nurotra Theme) */}
                                         <button
                                             className={`icon-btn magic-btn ${isThinking ? "thinking" : ""}`}
                                             title="Enhance Text w/ AI"
                                             onClick={handleEnhanceText}
                                             disabled={!newMessage.trim()}
                                         >
-                                            <Wand2 size={20} />
+                                            <Sparkles size={20} color={newMessage.trim() ? "#8b5cf6" : "currentColor"} />
                                         </button>
 
                                         {/* Auto-expanding Input */}

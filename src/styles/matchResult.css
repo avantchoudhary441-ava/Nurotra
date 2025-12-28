@@ -269,6 +269,64 @@
     box-shadow: 0 5px 15px rgba(139, 92, 246, 0.4);
 }
 
+/* Action Buttons Row */
+.card-actions-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 1.5rem;
+    width: 100%;
+}
+
+.card-actions-row .connect-btn {
+    margin-top: 0;
+    flex: 2;
+    /* Takes more space */
+}
+
+/* Glassy Inspact Button */
+.inspact-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    padding: 0.8rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.05);
+    /* Glass base */
+    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(4px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    /* Hidden by default */
+    transform: translateY(10px);
+}
+
+/* Show Inspact on Card Hover */
+.premium-card:hover .inspact-btn {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Mobile: Always visible */
+@media (max-width: 768px) {
+    .inspact-btn {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.inspact-btn:hover {
+    background: rgba(139, 92, 246, 0.15);
+    /* Purple tint */
+    border-color: var(--accent-2);
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+    color: var(--accent-2);
+}
+
 
 /* White Glow Text Class - Adapted for Theme */
 .white-glow-text {
