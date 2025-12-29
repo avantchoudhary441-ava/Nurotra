@@ -10,12 +10,16 @@ import { HashRouter } from "react-router-dom";
 const savedTheme = localStorage.getItem("theme") || "light";
 document.documentElement.setAttribute("data-theme", savedTheme);
 
+import { NuroProvider } from "./context/NuroContext";
+
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <AuthProvider>
-      <HashRouter>
-        <App />
-      </HashRouter>
+      <NuroProvider>
+        <HashRouter>
+          <App />
+        </HashRouter>
+      </NuroProvider>
     </AuthProvider>
   </StrictMode>
 );

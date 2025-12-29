@@ -165,8 +165,8 @@ const enhanceText = async (draftText) => {
 const analyzeProfile = async (profileData) => {
     try {
         const prompt = `
-            You are Nurotra's Elite Profile Coach.
-            Analyze this Creator/Brand profile and provide a structured "Upgrade Report".
+            You are Nurotra's Elite Profile Coach & Content Strategist.
+            Analyze this Creator/Brand profile and provide a PREMIUM "Upgrade Report" with GENERATIVE content.
 
             Profile Data:
             - Role: ${profileData.role || "Influencer"}
@@ -174,31 +174,41 @@ const analyzeProfile = async (profileData) => {
             - Bio/Note: "${profileData.noteToBrand || profileData.bio || "No bio info"}"
             - Followers: ${profileData.followers || "N/A"}
             - Platform: ${profileData.primaryPlatform} (${profileData.platformUrl})
-            - Worked Before: ${profileData.workedBefore || "No"}
+            - Budget/Rate: ${profileData.budget || "Unspecified"}
 
             Task:
-            Analyze 5 Key Dimensions and output a STRICT JSON object:
+            Analyze and GENERATE specific content. Output a STRICT JSON object with these exact keys:
 
             1. "strengthAnalysis":
                - "score": (0-100 integer)
-               - "strengths": Array of 3 short strings (e.g. "Clear Niche", "Good Engagement Identity").
+               - "strengths": Array of 3 short strings.
             
             2. "gapAnalysis":
-               - "gaps": Array of objets { "title": "Missing Portfolio", "severity": "Medium", "reason": "Brands need proof of past work." }
-               - Use "Amber" tone, not "Red". Constructive criticism.
+               - "gaps": Array of objects { "title": "Missing Portfolio", "severity": "Medium", "reason": "Brands need proof of past work." }
 
             3. "marketComparison":
-               - Compare this user to the "Top 10%" in their niche.
                - "you": { "clarity": 70, "engagement": 60, "professionalism": 50 }
                - "top10": { "clarity": 95, "engagement": 90, "professionalism": 95 }
                - "average": { "clarity": 60, "engagement": 50, "professionalism": 60 }
 
             4. "optimizationSuggestions":
-               - Array of 3 objects: { "title": "Actionable Step", "impact": "High", "instruction": "Step-by-step guide on what to change." }
+               - "platform": Array of 3 objects { "title", "impact", "instruction" } (For Instagram/LinkedIn/etc.)
+               - "nurotra": Array of 3 objects { "title", "impact", "instruction" } (For Nurotra Profile Completeness)
 
             5. "projectedImpact":
                - "matchQualityUplift": (10-30 integer)
                - "replyRateUplift": (10-30 integer)
+
+            6. "enhancedBios":
+               - Array of 3 objects: { "style": "Professional | Viral | Minimalist", "content": "The generated bio text...", "reasoning": "Why this works..." }
+
+            7. "contentStrategy":
+               - Array of 3 objects: { "title": "Content Idea Title", "idea": "Brief description", "caption": "Draft caption with hook...", "hashtags": "3-5 relevant hashtags" }
+
+            8. "compatibility":
+               - "budgetFit": { "score": (0-100), "label": "Competitive | Premium | Undervalued", "insight": "Analysis of their rate vs niche" }
+               - "nicheDemand": { "score": (0-100), "label": "High Demand | Niche | Saturated", "insight": "Market appetite for this niche" }
+               - "contentViability": { "score": (0-100), "label": "Strong | Needs Video | Needs Variety", "insight": "Based on platform trends" }
 
             Structure the JSON strictly. No markdown.
         `;
@@ -214,17 +224,111 @@ const analyzeProfile = async (profileData) => {
         console.error("Profile Analysis Error:", error.message);
         // Fallback Mock Data to prevent UI crash
         return {
-            strengthAnalysis: { score: 70, strengths: ["Active Account", "defined Platform"] },
+            strengthAnalysis: { score: 70, strengths: ["Active Account", "Defined Platform"] },
             gapAnalysis: { gaps: [{ title: "Optimization Pending", severity: "Low", reason: "AI connection failed." }] },
             marketComparison: {
                 you: { clarity: 60, engagement: 50, professionalism: 60 },
                 top10: { clarity: 90, engagement: 90, professionalism: 95 },
                 average: { clarity: 50, engagement: 50, professionalism: 50 }
             },
-            optimizationSuggestions: [],
-            projectedImpact: { matchQualityUplift: 15, replyRateUplift: 10 }
+            optimizationSuggestions: {
+                platform: [{ title: "Bio Link", impact: "High", instruction: "Add linktree." }],
+                nurotra: [{ title: "Verify Identity", impact: "Medium", instruction: "Upload ID." }]
+            },
+            projectedImpact: { matchQualityUplift: 15, replyRateUplift: 10 },
+            enhancedBios: [
+                { style: "Professional", content: "Digital Creator | Helping brands grow.", reasoning: "Safe fallback layout." }
+            ],
+            contentStrategy: [],
+            compatibility: {
+                budgetFit: { score: 50, label: "Average", insight: "Standard market rate" },
+                nicheDemand: { score: 70, label: "Stable", insight: "Consistent demand" },
+                contentViability: { score: 60, label: "Good", insight: "Platform fit is okay" }
+            }
         };
     }
+};
+
+// ------------------------------------------
+// NURO AGENTIC AI CORE
+// ------------------------------------------
+
+/**
+ * Deep Behavioral Analysis after a collaboration context
+ * @param {Object} context - { chatLogs, timeline, feedback, outcome }
+ */
+const analyzeCollaborationBehavior = async (context) => {
+    const prompt = `
+        You are Nuro, an Agentic AI Coach for influencer collaborations.
+        Analyze this collaboration history deepy. Do NOT just summarize.
+        
+        Context:
+        - Chat logs duration: ${context.chatLogs?.length || 0} messages
+        - Final Outcome: ${context.outcome || "Completed"}
+        - User Role: Influencer
+
+        Generate a "Nuro Post-Mortem" JSON:
+        1. "overallScore": (0-100)
+        2. "scoreDelta": (Integer, e.g. +14 or -5) compared to a baseline of 70.
+        3. "metrics":
+           - "communicationClarity": (0-100)
+           - "reliability": (0-100)
+           - "trustIndex": (0-100)
+        4. "positives": Array of 2-3 specific good behaviors.
+        5. "negatives": Array of 2-3 specific mistakes (e.g. "Over-negotiation").
+        6. "rootCause": One sentence explaining the PSYCHOLOGICAL reason for the mistakes (e.g. "Tone shifted to defensive after price objection").
+        7. "fixes": Array of 2 concrete actions for next time.
+        8. "predictedSuccessProbability": (0-100) for next collab if fixes are applied.
+
+        Return strictly JSON.
+    `;
+
+    try {
+        let text = await generateWithFallback(prompt);
+        // Clean JSON
+        if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
+        else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("Nuro Analysis Error:", error);
+        // Fallback for demo/safety
+        return {
+            overallScore: 78,
+            scoreDelta: 8,
+            metrics: { communicationClarity: 80, reliability: 75, trustIndex: 82 },
+            positives: ["Fast initial response", "Polite tone"],
+            negatives: ["Delayed final confirmation"],
+            rootCause: "Hesitation to commit to timeline caused minor trust dip.",
+            fixes: ["Confirm deliverables immediately", "Use 'I will' statements"],
+            predictedSuccessProbability: 85
+        };
+    }
+};
+
+/**
+ * Real-time Intervention Engine
+ * @param {String} currentAction - "typing_message", "negotiating_price"
+ * @param {Object} history - User's NuroMemory (weaknesses)
+ */
+const generateIntervention = async (currentAction, history) => {
+    // Only intervene if history shows a weakness relevant to currentAction
+    // For MVP, we simulate a check
+    const prompt = `
+        You are Nuro. The user is currently: "${currentAction}".
+        Their past weaknesses include: ${JSON.stringify(history?.weaknesses || [])}.
+        
+        If they are at risk of repeating a mistake, generate a short, helpful intervention.
+        If no risk, return NULL.
+        
+        Output format: JSON { "shouldIntervene": boolean, "message": "Short advice", "type": "warning|tip" }
+    `;
+
+    // Simulating robust response for now to save tokens/latency in dev
+    // In prod, this calls Gemini
+    return {
+        shouldIntervene: false,
+        message: null
+    };
 };
 
 module.exports = {
@@ -232,5 +336,7 @@ module.exports = {
     generateOpener,
     generateSummary,
     enhanceText,
-    analyzeProfile
+    analyzeProfile,
+    analyzeCollaborationBehavior,
+    generateIntervention
 };

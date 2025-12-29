@@ -3,10 +3,15 @@ const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
 
+const helmet = require("helmet");
+const compression = require("compression");
+
 const app = express();
 app.set("trust proxy", 1); // Trust first key for HTTPS on Render/Vercel
 
 // Middleware
+app.use(helmet());
+app.use(compression());
 app.use(express.json());
 // Production CORS Configuration
 const allowedOrigins = [
@@ -43,6 +48,7 @@ app.use("/api/match", require("./routes/matchRoutes"));
 app.use("/api/chat", require("./routes/chatRoutes"));
 app.use("/api/message", require("./routes/messageRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
+app.use("/api/nuro", require("./routes/nuroRoutes"));
 
 const PORT = process.env.PORT || 5000;
 

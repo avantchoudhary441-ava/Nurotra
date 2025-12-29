@@ -29,51 +29,54 @@ import "./styles/footer.css";
 import "./styles/background.css";
 import InfluencerDashboard from "./pages/Influencer/InfluencerDashboard.jsx";
 import MatchResultPage from "./pages/match/MatchResultPage";
-import ChatPage from "./pages/chat/ChatPage"; 
+import ChatPage from "./pages/chat/ChatPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import InfluencerMatchingForm from "./pages/Influencer/InfluencerMatchingForm";
 import BrandMatchingForm from "./pages/brand/BrandMatchingForm";
 
+import NuroOrb from "./components/Nuro/NuroOrb";
+
 export default function App() {
   return (
-    <Routes>
+    <>
+      <NuroOrb />
+      <Routes>
 
-      {/* MAIN LANDING PAGE */}
-      <Route
-        path="/"
-        element={
-          <>
-            <BackgroundEffects />
-            <Header />
-            <Hero />
-            <Categories />
-            <AgentsGrid />
-            <Footer />
+        {/* MAIN LANDING PAGE */}
+        <Route
+          path="/"
+          element={
+            <>
+              <BackgroundEffects />
+              <Header />
+              <Hero />
+              <Categories />
+              <AgentsGrid />
+              <Footer />
 
-          </>
-        }
-      />
+            </>
+          }
+        />
 
-      {/* COLLBAI AGENT PAGE */}
-      <Route path="/collab" element={<CollabLanding />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/verify-otp" element={<OtpVerify />} />
-      <Route path="/influencer-form" element={<InfluencerForm />} />
-      <Route path="/influencer/dashboard" element={<InfluencerDashboard />} />
-      <Route path="/brand-form" element={<BrandForm />} />
-      <Route path="/brand/dashboard" element={<BrandDashboard />} />
-      <Route path="/brand/matching" element={<BrandMatchingForm />} />
-      <Route path="/brand/matching-standards" element={<BrandMatchingForm />} />
-      <Route path="/match-results" element={<MatchResultPage />} />
-      <Route path="/chat" element={<ChatPage />} />
-      <Route path="/influencer/matching" element={<InfluencerMatchingForm />} />
-      <Route path="/influencer/matching-standards" element={<InfluencerMatchingForm />} />
-      <Route path="/admin/dashboard" element={<AdminDashboard />} />
-      <Route path="/profile" element={<UserProfile />} />
+        {/* COLLBAI AGENT PAGE */}
+        <Route path="/collab" element={<CollabLanding />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/verify-otp" element={<OtpVerify />} />
+        <Route path="/influencer-form" element={<InfluencerForm />} />
+        <Route path="/influencer/dashboard" element={<InfluencerDashboard />} />
+        <Route path="/brand-form" element={<BrandForm />} />
+        <Route path="/brand/dashboard" element={<BrandDashboard />} />
+        <Route path="/brand/matching" element={<BrandMatchingForm />} />
+        <Route path="/brand/matching-standards" element={<BrandMatchingForm />} />
+        <Route path="/match-results" element={<MatchResultPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/influencer/matching" element={<InfluencerMatchingForm />} />
+        <Route path="/influencer/matching-standards" element={<InfluencerMatchingForm />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/profile" element={<UserProfile />} />
 
-    </Routes>
-
+      </Routes>
+    </>
   );
 }
- 
