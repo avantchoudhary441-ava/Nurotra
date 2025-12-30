@@ -25,26 +25,56 @@
 }
 
 .nuro-orb {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, var(--nuro-blue), var(--nuro-purple));
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+    /* 3D Red Sphere */
+    background: radial-gradient(circle at 30% 30%, #ff6b6b, #991b1b);
+    box-shadow:
+        /* Core Shadow (Depth) */
+        inset -10px -10px 20px rgba(0, 0, 0, 0.5),
+        /* Rim Light (Reflection) */
+        inset 5px 5px 15px rgba(255, 255, 255, 0.4),
+        /* Outer Glows */
+        0 0 20px rgba(239, 68, 68, 0.6),
+        0 0 40px rgba(239, 68, 68, 0.3);
+
     cursor: pointer;
     position: relative;
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* Continuous Orbit Motion */
+    animation: morph 6s ease-in-out infinite alternate, orbit 10s linear infinite;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+}
+
+/* Specular Highlight (The Glossy Reflection) */
+.nuro-orb::after {
+    content: '';
+    position: absolute;
+    top: 20%;
+    left: 20%;
+    width: 25%;
+    height: 15%;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0));
+    filter: blur(2px);
+    transform: rotate(-45deg);
+    pointer-events: none;
 }
 
 .nuro-orb:hover {
     transform: scale(1.1);
+    box-shadow: 0 0 50px rgba(239, 68, 68, 0.8);
+    animation-play-state: paused;
 }
 
 /* States */
 .nuro-orb.thinking {
-    animation: pulse-think 2s infinite;
+    /* Speed up organic motion for thinking */
+    animation: morph 2s ease-in-out infinite alternate, orbit 4s linear infinite;
 }
 
 .nuro-orb.alert {
@@ -59,6 +89,8 @@
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
     backdrop-filter: blur(4px);
+    /* Heartbeat Animation */
+    animation: heartbeat 3s ease-in-out infinite;
 }
 
 /* Tooltip / Speech Bubble */
@@ -145,9 +177,14 @@
     flex: 1;
     overflow-y: auto;
     padding: 2rem;
+    /* Removed fixed grid to allow flexible layouts per mode */
+}
+
+.nuro-learning-grid {
     display: grid;
     grid-template-columns: 300px 1fr;
     gap: 2rem;
+    height: 100%;
 }
 
 /* LEFT COL */
@@ -299,6 +336,17 @@
 }
 
 /* Animations */
+/* Orbit Animation */
+@keyframes orbit {
+    0% {
+        transform: rotate(0deg) translateX(12px) rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg) translateX(12px) rotate(-360deg);
+    }
+}
+
 @keyframes pulse-think {
     0% {
         transform: scale(1);
@@ -330,4 +378,385 @@
     75% {
         transform: translateX(5px);
     }
+}
+
+/* Heartbeat Animation (Lub-Dub) */
+@keyframes heartbeat {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.7;
+    }
+
+    5% {
+        transform: scale(1.1);
+        opacity: 1;
+    }
+
+    /* Lub */
+    10% {
+        transform: scale(0.95);
+        opacity: 0.7;
+    }
+
+    15% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+
+    /* Dub */
+    50% {
+        transform: scale(0.95);
+        opacity: 0.7;
+    }
+
+    /* Pause */
+    100% {
+        transform: scale(0.95);
+        opacity: 0.7;
+    }
+}
+
+/* Morph Animation (Organic Shape) */
+@keyframes morph {
+    0% {
+        border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+    }
+
+    50% {
+        border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+    }
+
+    100% {
+        border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+    }
+}
+
+/* ------------------------------- */
+/* NURO LAB (Memory Window) */
+/* ------------------------------- */
+.nuro-lab-container {
+    padding: 2rem;
+    height: 100vh;
+    overflow-y: auto;
+    background: #0f172a;
+    color: white;
+    font-family: 'Inter', sans-serif;
+}
+
+.nuro-lab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lab-title h1 {
+    font-size: 2.5rem;
+    margin: 0;
+    background: linear-gradient(to right, #fff, #94a3b8);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.lab-title p {
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0.5rem 0 0;
+}
+
+.lab-stats {
+    display: flex;
+    gap: 2rem;
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-card span {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stat-card strong {
+    font-size: 1.5rem;
+    color: var(--nuro-blue);
+    margin-top: 5px;
+}
+
+/* LAB GRID */
+.nuro-lab-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+}
+
+.lab-section h2 {
+    font-size: 1.4rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.subtext {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 2rem;
+    font-style: italic;
+}
+
+/* TIMELINE (Last 7 Matches) */
+.timeline-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    position: relative;
+    padding-left: 20px;
+}
+
+.timeline-list::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 10px;
+    bottom: 10px;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.timeline-item {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 1.2rem;
+    border-radius: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+    transition: transform 0.2s;
+}
+
+.timeline-item:hover {
+    transform: translateX(5px);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.timeline-dot {
+    position: absolute;
+    left: -21px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #334155;
+    border: 2px solid #0f172a;
+}
+
+/* Outcomes Colors */
+.timeline-item.success .timeline-dot {
+    background: var(--nuro-green);
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.4);
+}
+
+.timeline-item.failed .timeline-dot {
+    background: var(--nuro-amber);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+
+.timeline-item.keep .timeline-dot {
+    background: var(--nuro-blue);
+}
+
+.timeline-content h4 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.match-date {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.timeline-score {
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1.1rem;
+}
+
+/* PATTERNS WINDOW */
+.pattern-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.pattern-card {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pattern-card h3 {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pattern-visual {
+    background: rgba(0, 0, 0, 0.3);
+    height: 40px;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+}
+
+.bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    opacity: 0.2;
+}
+
+.bar.improvement {
+    background: var(--nuro-green);
+}
+
+.bar.regression {
+    background: var(--nuro-amber);
+}
+
+.pattern-visual span {
+    position: relative;
+    z-index: 2;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.pattern-insight {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.5;
+}
+
+.mistake-list {
+    list-style: none;
+    padding: 0;
+}
+
+.mistake-list li {
+    padding: 0.8rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mistake-list li.fading {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.mistake-list li.alert {
+    color: var(--nuro-amber);
+    font-weight: 500;
+}
+
+/* ------------------------------- */
+/* NURO INTERRUPT SYSTEM */
+/* ------------------------------- */
+.nuro-interrupt-overlay {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10002;
+    /* Above dashboard (10000) */
+    width: 90%;
+    max-width: 500px;
+    pointer-events: auto;
+}
+
+.nuro-interrupt-card {
+    background: #0f172a;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    display: flex;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.interrupt-icon {
+    width: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5rem;
+}
+
+.interrupt-content {
+    padding: 1.2rem;
+    flex: 1;
+}
+
+.interrupt-content h4 {
+    margin: 0;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 1px;
+}
+
+.interrupt-content h3 {
+    margin: 0.3rem 0;
+    color: white;
+}
+
+.interrupt-content p {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.interrupt-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 10px;
+}
+
+.interrupt-actions button {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.interrupt-actions button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.interrupt-actions .dismiss-btn {
+    margin-left: auto;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
 }

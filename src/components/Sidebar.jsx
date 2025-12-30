@@ -23,6 +23,7 @@ export default function Sidebar({ role = "influencer" }) {
       { id: "collab_insights", label: "Collab Insights", icon: "🔥", to: `/${role}/collab-insights` },
       { id: "history", label: "History", icon: "📜", to: `/${role}/history` },
       { id: "safety_trust", label: "Safety & Trust", icon: "🛡️", to: `/${role}/safety` },
+      { id: "nuro_lab", label: "Nuro Lab", icon: "🧪", to: "/nuro-lab" },
     ];
   }
 

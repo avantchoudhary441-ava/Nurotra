@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Login from "./pages/auth/login";
 import Signup from "./pages/auth/signUp";
 import OtpVerify from "./pages/auth/OtpVerify"; // Import OTP Page
@@ -35,11 +35,16 @@ import InfluencerMatchingForm from "./pages/Influencer/InfluencerMatchingForm";
 import BrandMatchingForm from "./pages/brand/BrandMatchingForm";
 
 import NuroOrb from "./components/Nuro/NuroOrb";
+import NuroLab from "./pages/Nuro/NuroLab";
+import NuroInterrupt from "./components/Nuro/NuroInterrupt";
 
 export default function App() {
+  const location = useLocation();
+
   return (
     <>
-      <NuroOrb />
+      {location.pathname !== "/" && <NuroOrb />}
+      <NuroInterrupt />
       <Routes>
 
         {/* MAIN LANDING PAGE */}
@@ -75,6 +80,7 @@ export default function App() {
         <Route path="/influencer/matching-standards" element={<InfluencerMatchingForm />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/profile" element={<UserProfile />} />
+        <Route path="/nuro-lab" element={<NuroLab />} />
 
       </Routes>
     </>

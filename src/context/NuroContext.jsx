@@ -7,6 +7,7 @@ export const useNuro = () => useContext(NuroContext);
 
 export const NuroProvider = ({ children }) => {
     const [mode, setMode] = useState("active"); // active, learning, advising
+    const [interrupt, setInterrupt] = useState(null); // { type, title, message, actions }
     const [orbState, setOrbState] = useState("idle"); // idle, thinking, alert
     const [insightMessage, setInsightMessage] = useState("I'm monitoring your collaboration flow.");
     const [showDashboard, setShowDashboard] = useState(false);
@@ -26,10 +27,15 @@ export const NuroProvider = ({ children }) => {
     const triggerIntervention = (msg, type = "warning") => {
         setInsightMessage(msg);
         setOrbState(type === "warning" ? "alert" : "thinking");
-
-        // Auto-dismiss alert state after 5s
         setTimeout(() => setOrbState("idle"), 5000);
     };
+
+    // SYSTEM 2: INTERRUPT OVERLAY
+    const triggerInterrupt = (type, title, message, actions = null, duration = 5000) => {
+        setInterrupt({ type, title, message, actions, duration });
+    };
+
+    const clearInterrupt = () => setInterrupt(null);
 
     return (
         <NuroContext.Provider value={{
@@ -38,7 +44,9 @@ export const NuroProvider = ({ children }) => {
             insightMessage, setInsightMessage,
             showDashboard, setShowDashboard, toggleDashboard,
             triggerIntervention,
-            memory
+            memory,
+            // Interrupt System
+            interrupt, triggerInterrupt, clearInterrupt
         }}>
             {children}
         </NuroContext.Provider>
