@@ -4,6 +4,7 @@ import BackgroundEffects from "../../components/BackgroundEffects";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { GOOGLE_AUTH_URL } from "../../config";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -131,7 +132,7 @@ export default function Login() {
 
         <button
           onClick={() => {
-            window.location.href = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/auth/google`;
+            window.location.href = GOOGLE_AUTH_URL;
           }}
 
           className="btn-secondary auth-btn btn-google"

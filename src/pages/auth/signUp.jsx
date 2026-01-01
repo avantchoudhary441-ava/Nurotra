@@ -3,6 +3,7 @@ import "../../styles/auth.css";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { GOOGLE_AUTH_URL } from "../../config";
 
 export default function SignUp() {
   const navigate = useNavigate();
@@ -102,7 +103,7 @@ export default function SignUp() {
         <div className="auth-separator">OR</div>
 
         <button
-          onClick={() => window.location.href = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/auth/google`}
+          onClick={() => window.location.href = GOOGLE_AUTH_URL}
           className="btn-secondary auth-btn btn-google"
         >
           <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="google-icon" />
