@@ -1,9 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useNuro } from '../../context/NuroContext';
+import { useNuroCore } from '../../context/NuroCoreContext';
 
 export default function NuroDashboard({ onClose }) {
-    const { mode, setMode, triggerInterrupt } = useNuro();
+    const { mode, switchMode } = useNuroCore();
+    const navigate = useNavigate();
+
+    // Mapping implicit modes to dashboard views
+    const getActiveView = () => {
+        if (mode === 'guiding') return 'active';
+        if (mode === 'advising') return 'advising';
+        return 'learning'; // Default for observing/learning
+    };
+
+    const activeMode = getActiveView();
+
+    const handleModeClick = (view) => {
+        if (view === 'active') switchMode('guiding');
+        else if (view === 'advising') switchMode('advising');
+        else switchMode('learning');
+    };
 
     // Mock Data (In phases, this will come from api/nuro/memory)
     const data = {
@@ -12,12 +29,30 @@ export default function NuroDashboard({ onClose }) {
         positives: ["Fast response time", "Clear expectations"],
         negatives: ["Over-negotiation on pricing", "Late deliverable confirmation"],
         rootCause: "Tone shifted from confident to defensive after budget discussion.",
-        fixes: ["Use suggested pricing script", "Respond within 6 hours"],
+        fixes: [
+            { text: "Use suggested pricing script", actionType: "redirect", target: "/settings" },
+            { text: "Respond within 6 hours", actionType: "guide", target: "/profile" }
+        ],
         prediction: 71,
         comparison: {
             clarity: { past: 50, current: 90 },
             reliability: { past: 30, current: 80 },
             trust: { past: 45, current: 85 }
+        }
+    };
+
+    const handleFixExecution = (fix) => {
+        if (!fix) return;
+
+        if (fix.actionType === 'redirect') {
+            onClose(); // Close the Nuro Dashboard
+            navigate(fix.target);
+        } else if (fix.actionType === 'guide') {
+            onClose();
+            navigate(fix.target); // Navigate to where they need to go
+            // Ideally trigger a toast or highlight: "Fix it here"
+        } else {
+            alert(`Nuro will help you fix: ${fix.text}`);
         }
     };
 
@@ -34,24 +69,24 @@ export default function NuroDashboard({ onClose }) {
                     <div className="nuro-logo">✨ NURO CORE</div>
                     <div className="nuro-mode-indicator">
                         <span
-                            className={`nuro-mode ${mode === 'active' ? 'active' : ''}`}
-                            onClick={() => setMode('active')}
+                            className={`nuro-mode ${activeMode === 'active' ? 'active' : ''}`}
+                            onClick={() => handleModeClick('active')}
                             style={{ cursor: 'pointer' }}
                         >
                             Active
                         </span>
                         <span className="separator">|</span>
                         <span
-                            className={`nuro-mode ${mode === 'learning' ? 'active' : ''}`}
-                            onClick={() => setMode('learning')}
+                            className={`nuro-mode ${activeMode === 'learning' ? 'active' : ''}`}
+                            onClick={() => handleModeClick('learning')}
                             style={{ cursor: 'pointer' }}
                         >
                             Learning
                         </span>
                         <span className="separator">|</span>
                         <span
-                            className={`nuro-mode ${mode === 'advising' ? 'active' : ''}`}
-                            onClick={() => setMode('advising')}
+                            className={`nuro-mode ${activeMode === 'advising' ? 'active' : ''}`}
+                            onClick={() => handleModeClick('advising')}
                             style={{ cursor: 'pointer' }}
                         >
                             Advising
@@ -63,7 +98,7 @@ export default function NuroDashboard({ onClose }) {
                 {/* 2. MAIN CONTENT */}
                 <div className="nuro-content">
                     {/* ACTIVE MODE - LIVE MONITORING */}
-                    {mode === 'active' && (
+                    {activeMode === 'active' && (
                         <div className="active-mode-container" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
                             <div className="live-orb" style={{ fontSize: '4rem', marginBottom: '2rem', animation: 'pulse-think 3s infinite' }}>📡</div>
                             <h2 style={{ color: 'white', marginBottom: '0.5rem' }}>Current Observation</h2>
@@ -86,7 +121,7 @@ export default function NuroDashboard({ onClose }) {
                     )}
 
                     {/* LEARNING MODE - ANALYTICS */}
-                    {mode === 'learning' && (
+                    {activeMode === 'learning' && (
                         <div className="nuro-learning-grid">
                             {/* LEFT: SCORES */}
                             <div className="nuro-left-col">
@@ -134,7 +169,7 @@ export default function NuroDashboard({ onClose }) {
                     )}
 
                     {/* ADVISING MODE - FIXES */}
-                    {mode === 'advising' && (
+                    {activeMode === 'advising' && (
                         <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: '0 2rem' }}>
                             <div className="nuro-header-text" style={{ textAlign: 'center', marginBottom: '2rem' }}>
                                 <h2>Advisory Board</h2>
@@ -170,37 +205,57 @@ export default function NuroDashboard({ onClose }) {
 
                                     <div style={{ display: 'grid', gap: '1rem', flex: 1 }}>
                                         {data.fixes.map((fix, i) => (
-                                            <div key={i} className="action-checkbox" style={{ padding: '1.2rem', background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                                <div style={{ width: '24px', height: '24px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                    <div style={{ width: '12px', height: '12px', background: '#34d399', borderRadius: '50%', opacity: 0 }}></div>
+                                            <div
+                                                key={i}
+                                                className="action-checkbox"
+                                                style={{
+                                                    padding: '1.2rem',
+                                                    background: 'rgba(15, 23, 42, 0.4)',
+                                                    border: '1px solid rgba(255,255,255,0.05)',
+                                                    borderRadius: '12px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between', // Changed to space-between
+                                                    gap: '15px',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'}
+                                                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                    <span style={{ fontSize: '1.05rem', color: 'rgba(255,255,255,0.9)' }}>{fix.text}</span>
                                                 </div>
-                                                <span style={{ fontSize: '1.05rem', color: 'rgba(255,255,255,0.9)' }}>{fix}</span>
+
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleFixExecution(fix);
+                                                    }}
+                                                    style={{
+                                                        padding: '0.5rem 1rem',
+                                                        background: 'rgba(52, 211, 153, 0.1)',
+                                                        border: '1px solid #34d399',
+                                                        borderRadius: '6px',
+                                                        color: '#34d399',
+                                                        fontWeight: '600',
+                                                        fontSize: '0.8rem',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        e.target.style.background = '#34d399';
+                                                        e.target.style.color = '#000';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.target.style.background = 'rgba(52, 211, 153, 0.1)';
+                                                        e.target.style.color = '#34d399';
+                                                    }}
+                                                >
+                                                    Fix
+                                                </button>
                                             </div>
                                         ))}
                                     </div>
-
-                                    <button
-                                        className="nuro-cta-btn"
-                                        style={{
-                                            marginTop: '2rem',
-                                            width: '100%',
-                                            padding: '1.2rem',
-                                            background: 'linear-gradient(135deg, #f472b6 0%, #db2777 100%)',
-                                            border: 'none',
-                                            borderRadius: '12px',
-                                            color: '#fff',
-                                            fontWeight: '800',
-                                            fontSize: '1rem',
-                                            cursor: 'pointer',
-                                            boxShadow: '0 4px 20px rgba(219, 39, 119, 0.4)',
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '1px',
-                                            transition: 'transform 0.2s'
-                                        }}
-                                        onClick={() => alert("Nuro is guiding you to the settings page to update your auto-reply scripts...")}
-                                    >
-                                        🚀 Execute Improvement Plan
-                                    </button>
                                 </div>
                             </div>
                         </div>

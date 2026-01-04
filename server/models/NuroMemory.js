@@ -31,7 +31,11 @@ const nuroMemorySchema = new mongoose.Schema({
         positives: [String], // "What Went Right"
         negatives: [String], // "What Went Wrong"
         rootCause: String, // "Psychological reason"
-        fixes: [String], // "Actionable Fixes"
+        fixes: [{
+            text: String,       // "Update your pricing"
+            actionType: String, // "redirect", "auto_fix", "guide"
+            target: String      // "/settings/pricing" or "pricing_modal"
+        }],
 
         // Outcome Prediction for next time
         predictedSuccessProbability: Number, // %
