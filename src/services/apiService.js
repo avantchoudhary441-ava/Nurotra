@@ -61,7 +61,7 @@ export const authService = {
 
 export const profileService = {
     saveBrand: async (data, token) => {
-        console.log("Saving brand...", data); // Debug
+        // Saving brand...
         const config = {
             headers: { Authorization: `Bearer ${token}` }
         };

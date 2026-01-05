@@ -50,6 +50,16 @@ app.use("/api/message", require("./routes/messageRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/nuro", require("./routes/nuroRoutes"));
 
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({
+        message: process.env.NODE_ENV === "production"
+            ? "An internal server error occurred."
+            : err.message
+    });
+});
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

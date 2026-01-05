@@ -1,4 +1,4 @@
-/* src/styles/dashboard.css
+﻿/* src/styles/dashboard.css
    Premium Influencer Dashboard (CollabAI style)
    - Fixed transparent navbar -> glass on scroll
    - Sidebar (hover gradient)
@@ -44,7 +44,7 @@ body {
   display: flex;
   min-height: 100vh;
 
-  /* 🔥 SAME GRID BACKGROUND AS OTHER PAGES */
+  /* ðŸ”¥ SAME GRID BACKGROUND AS OTHER PAGES */
 
 }
 
@@ -155,7 +155,7 @@ body {
   font-weight: 600;
   display: flex;
   align-items: center;
-  /* ✅ aligns text with icon */
+  /* âœ… aligns text with icon */
   line-height: 1;
 }
 
@@ -171,6 +171,13 @@ body {
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dash-cta:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
 }
 
 /* --- MAIN (navbar + content) --- */
@@ -307,7 +314,7 @@ body {
 
 .rank-bar:hover {
   transform: scaleY(1.12);
-  /* 👈 slight enlarge only */
+  /* ðŸ‘ˆ slight enlarge only */
 }
 
 /* Ensure profile card keeps the same left-right spacing after swap */
@@ -446,7 +453,7 @@ body {
   overflow: hidden;
   background: var(--card-bg);
   border: 1px solid var(--border-subtle);
-  /* ✅ REAL BORDER */
+  /* âœ… REAL BORDER */
 }
 
 :root[data-theme="dark"] .neon-card {
@@ -534,7 +541,7 @@ line chart design */
   height: 180px;
   width: 100%;
   flex: 1;
-  /* 🔥 THIS IS CRITICAL */
+  /* ðŸ”¥ THIS IS CRITICAL */
   min-width: 0;
 }
 
@@ -971,4 +978,26 @@ line chart design */
 .floating-chat-btn:hover {
   transform: translateY(-4px) scale(1.1);
   box-shadow: 0 0 20px rgba(108, 99, 255, 0.6), 0 0 40px rgba(139, 92, 246, 0.4);
+}
+
+/* Added by Nuro AI */
+.btn-primary-gradient {
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2)) !important;
+  color: white !important;
+  border: none !important;
+  padding: 8px 18px !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.btn-primary-gradient:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
+  filter: brightness(1.1) !important;
 }

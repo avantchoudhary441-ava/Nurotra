@@ -23,7 +23,6 @@ export default function ChatPage() {
     const [selectedChat, setSelectedChat] = useState(null);
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
-    const [loadingChats, setLoadingChats] = useState(false);
 
     // UI State
     const [isDarkMode, setIsDarkMode] = useState(true);
@@ -38,14 +37,12 @@ export default function ChatPage() {
 
     // Fetch My Chats
     const fetchChats = async () => {
-        setLoadingChats(true);
         try {
             const data = await chatService.fetchChats();
             setChats(data);
         } catch (error) {
             console.error("Failed to load chats", error);
         }
-        setLoadingChats(false);
     };
 
 
@@ -163,7 +160,6 @@ export default function ChatPage() {
             scrollToBottom();
         } catch (error) {
             console.error("File Upload Error:", error);
-            alert("Failed to upload file");
         }
     };
 
@@ -186,11 +182,17 @@ export default function ChatPage() {
     };
 
     useEffect(() => {
-        fetchChats();
+        const init = async () => {
+            await fetchChats();
+        };
+        init();
     }, [user]);
 
     useEffect(() => {
-        fetchMessages();
+        const initMessages = async () => {
+            await fetchMessages();
+        };
+        initMessages();
         // Polling for simple real-time effect (every 3s)
         const interval = setInterval(fetchMessages, 3000);
         return () => clearInterval(interval);

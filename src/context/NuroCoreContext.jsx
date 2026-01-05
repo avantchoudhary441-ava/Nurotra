@@ -14,6 +14,20 @@ export const NuroCoreProvider = ({ children }) => {
     // 1) NURO’S CORE AGENTIC BEHAVIOR (Always-On)
     // Mode Switching Logic based on Context (Location/Actions)
     // 🧠 GUIDANCE KNOWLEDGE BASE (Contextual Mentorship)
+    const KNOWLEDGE_BASE = {
+        '/match-results': {
+            id: 'match_guide',
+            content: "Nuro matches are sorted by behavioral compatibility, not just skills. Look for high 'Clarity' scores to ensure smooth collaboration."
+        },
+        '/profile': {
+            id: 'profile_guide',
+            content: "This is your professional identity. Nuro tracks 'Reliability' and 'Clarity' here to help you improve your reputation over time."
+        },
+        '/collab': {
+            id: 'collab_guide',
+            content: "I am now monitoring your negotiation. Keep your tone direct and your asks specific to maintain a high 'active' score."
+        }
+    };
     const KNOWLEDGE_BASE = [
         {
             path: '/dashboard',
@@ -82,6 +96,7 @@ export const NuroCoreProvider = ({ children }) => {
             switchMode('learning');
         } else if (path.includes('/collab') || path.includes('/match')) {
             switchMode('guiding');
+        } else if (path === '/profile') {
         } else if (path.includes('/profile')) {
             switchMode('advising');
         } else {
@@ -93,6 +108,20 @@ export const NuroCoreProvider = ({ children }) => {
 
     }, [location]);
 
+    const checkGuidance = (path) => {
+        const guide = KNOWLEDGE_BASE[path];
+        // In a real app, we'd check if `hasSeenGuide(guide.id)` is false
+        // For demo, we'll trigger it occasionally or if explicitly entering major features
+        if (guide) {
+            // 50% chance to show guide to avoid spamming during dev, or use session storage
+            const sessionKey = `seen_${guide.id}`;
+            if (!sessionStorage.getItem(sessionKey)) {
+                setActiveInterrupt({
+                    type: 'fact', // Uses 'fact' style for mentorship
+                    title: 'Contextual Guide 🧭',
+                    content: guide.content,
+                });
+                sessionStorage.setItem(sessionKey, 'true');
     const checkGuidance = (currentPath) => {
         // Find a guide that matches the current path (checking for partial matches for role-based routes)
         const guide = KNOWLEDGE_BASE.find(g => currentPath.includes(g.path));
@@ -164,6 +193,7 @@ export const NuroCoreProvider = ({ children }) => {
     };
 
     const handleFeedback = (response) => {
+        // Feedback collected: response
         console.log(`[NURO MEMORY] Feedback collected: ${response}`);
         // TODO: Send to backend
         dismissInterrupt();
