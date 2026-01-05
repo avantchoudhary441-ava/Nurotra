@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import "../../styles/matchResult.css";
 import logo from "../../assets/NurotraLogo.png";
 import BackgroundEffects from "../../components/BackgroundEffects";
