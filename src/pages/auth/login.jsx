@@ -26,10 +26,8 @@ export default function Login() {
       processingRef.current = true;
       setIsGoogleAuth(true);
 
-      console.log("Token found, attempting login...");
       loginWithToken(token)
         .then((userData) => {
-          console.log("Login successful:", userData);
           // Only clear URL on success to avoid aggressive cleanup
           window.history.replaceState({}, document.title, "/login");
           navigate("/");

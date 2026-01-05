@@ -115,8 +115,7 @@ export default function InfluencerDashboard() {
   };
 
   const onThreeDots = () => {
-    const choice = prompt("Options: View analytics / Export profile / Share link\nType one:");
-    if (choice) alert(`You chose: ${choice}`);
+    // Placeholder for profile options: View analytics / Export profile / Share link
   };
 
   return (
@@ -220,7 +219,7 @@ export default function InfluencerDashboard() {
               <button
                 className="btn-primary-gradient"
                 onClick={() => setShowEnhancer(true)}
-                style={{ marginRight: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                style={{ marginRight: '10px' }}
               >
                 <span>✨</span> Enhance Profile
               </button>

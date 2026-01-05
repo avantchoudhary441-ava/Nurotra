@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import "../../styles/matchResult.css";
 import logo from "../../assets/NurotraLogo.png";
 import BackgroundEffects from "../../components/BackgroundEffects";
@@ -188,10 +187,10 @@ export default function MatchResultPage() {
                                         {/* Inspact Button (Glassy, Shows on Hover) */}
                                         {/* Inspact Button (Glassy, Shows on Hover) */}
                                         <a
-                                            href={(match.platformUrl || match.user?.platformUrl) ?
-                                                (match.platformUrl || match.user?.platformUrl).startsWith('http') ?
-                                                    (match.platformUrl || match.user?.platformUrl) :
-                                                    `https://${match.platformUrl || match.user?.platformUrl}`
+                                            href={(match.platformUrl || (match.user && match.user.platformUrl)) ?
+                                                ((match.platformUrl || match.user.platformUrl).startsWith('http') ?
+                                                    (match.platformUrl || match.user.platformUrl) :
+                                                    `https://${match.platformUrl || match.user.platformUrl}`)
                                                 : "#"}
                                             target="_blank"
                                             rel="noopener noreferrer"
@@ -201,7 +200,6 @@ export default function MatchResultPage() {
                                                 const url = match.platformUrl || match.user?.platformUrl;
                                                 if (!url) {
                                                     e.preventDefault();
-                                                    alert("No platform profile URL found for this user.");
                                                     console.warn("Inspact: Missing URL", match);
                                                 }
                                             }}

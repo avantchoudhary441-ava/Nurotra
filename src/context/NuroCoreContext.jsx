@@ -116,8 +116,7 @@ export const NuroCoreProvider = ({ children }) => {
     };
 
     const handleFeedback = (response) => {
-        console.log(`[NURO MEMORY] Feedback collected: ${response}`);
-        // TODO: Send to backend
+        // Feedback collected: response
         dismissInterrupt();
     };
 
