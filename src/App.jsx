@@ -38,11 +38,13 @@ import NuroOrb from "./components/Nuro/NuroOrb";
 import NuroLab from "./pages/Nuro/NuroLab";
 import NuroInterrupt from "./components/Nuro/NuroInterrupt";
 
+import { NuroCoreProvider } from "./context/NuroCoreContext";
+
 export default function App() {
   const location = useLocation();
 
   return (
-    <>
+    <NuroCoreProvider>
       {location.pathname !== "/" && <NuroOrb />}
       <NuroInterrupt />
       <Routes>
@@ -83,6 +85,6 @@ export default function App() {
         <Route path="/nuro-lab" element={<NuroLab />} />
 
       </Routes>
-    </>
+    </NuroCoreProvider>
   );
 }

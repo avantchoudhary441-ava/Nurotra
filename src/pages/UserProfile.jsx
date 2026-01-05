@@ -1,12 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import "../styles/userProfile.css";
 import BackgroundEffects from "../components/BackgroundEffects";
+import NuroLab from "../components/Nuro/NuroLab";
 
 export default function UserProfile() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const [isLabOpen, setLabOpen] = useState(false);
 
     // Theme Toggle Logic
     const [theme, setTheme] = React.useState(localStorage.getItem("theme") || "light");
@@ -74,11 +76,22 @@ export default function UserProfile() {
                     </div>
                 </div>
 
+                {/* 3. PROFILE ACTIONS (Footer) */}
                 <div className="profile-actions-footer">
                     <button className="btn-secondary" onClick={() => navigate(-1)}>Back</button>
                     <button className="btn-danger" onClick={handleLogout}>Logout</button>
                 </div>
             </div>
+
+            {/* NURO LAB INTEGRATION */}
+            <button
+                className="lab-toggle-btn"
+                onClick={() => setLabOpen(true)}
+                title="Open Nuro Lab"
+            >
+                🧪
+            </button>
+            <NuroLab isOpen={isLabOpen} toggleLab={() => setLabOpen(false)} />
         </div>
     );
 }

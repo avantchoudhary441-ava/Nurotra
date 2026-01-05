@@ -22,16 +22,6 @@ export default function NuroLab() {
                     <h1>Nuro Lab 🧪</h1>
                     <p>Your Behavioral Memory & Growth Center</p>
                 </div>
-                <div className="lab-stats">
-                    <div className="stat-card">
-                        <span>Trust Index</span>
-                        <strong>72%</strong>
-                    </div>
-                    <div className="stat-card">
-                        <span>Reliability</span>
-                        <strong>High</strong>
-                    </div>
-                </div>
             </header>
 
             <div className="nuro-lab-grid">
