@@ -19,7 +19,10 @@ const nuroMemorySchema = new mongoose.Schema({
         communicationClarity: { type: Number, default: 50 }, // 0-100
         reliabilityScore: { type: Number, default: 50 },
         trustIndex: { type: Number, default: 50 },
-        expectationAlignment: { type: Number, default: 50 }
+        expectationAlignment: { type: Number, default: 50 },
+        compatibilityScore: { type: Number, default: 50 },
+        experienceIndex: { type: Number, default: 50 },
+        safetyComplianceScore: { type: Number, default: 50 }
     },
     // Deep history of every collaboration analyzed
     collabHistory: [{
