@@ -150,4 +150,11 @@ export const aiService = {
     }
 };
 
+export const nuroService = {
+    getMemory: async () => {
+        const response = await api.get("/nuro/memory");
+        return response.data;
+    }
+};
+
 export default api;
