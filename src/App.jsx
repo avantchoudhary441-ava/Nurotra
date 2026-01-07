@@ -1,5 +1,4 @@
 import { useState } from "react";
-
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Login from "./pages/auth/login";
 import Signup from "./pages/auth/signUp";
@@ -16,9 +15,6 @@ import BrandForm from "./pages/brand/brandForm";
 
 import BrandDashboard from "./pages/brand/brandDashboard";
 import UserProfile from "./pages/UserProfile";
-
-
-
 
 import "./styles/global.css";
 import "./styles/header.css";
@@ -38,6 +34,8 @@ import NuroOrb from "./components/Nuro/NuroOrb";
 import NuroLab from "./pages/Nuro/NuroLab";
 import NuroInterrupt from "./components/Nuro/NuroInterrupt";
 import DeliverablesDashboard from "./pages/DeliverablesDashboard";
+import Overview from "./pages/dashboard/Overview";
+import CollabInsights from "./pages/CollabInsights";
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
 
@@ -51,6 +49,9 @@ export default function App() {
       <Routes>
 
         {/* MAIN LANDING PAGE */}
+        <Route path="/influencer/overview" element={<Overview />} />
+        <Route path="/brand/overview" element={<Overview />} />
+
         <Route
           path="/"
           element={
@@ -83,9 +84,22 @@ export default function App() {
         <Route path="/influencer/matching-standards" element={<InfluencerMatchingForm />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/profile" element={<UserProfile />} />
+
         <Route path="/influencer/deliverables" element={<DeliverablesDashboard role="influencer" />} />
         <Route path="/brand/deliverables" element={<DeliverablesDashboard role="brand" />} />
+
+        <Route path="/influencer/collab-insights" element={<CollabInsights role="influencer" />} />
+        <Route path="/brand/collab-insights" element={<CollabInsights role="brand" />} />
+
         <Route path="/nuro-lab" element={<NuroLab />} />
+
+        {/* 404 Debug Catch-all */}
+        <Route path="*" element={
+          <div style={{ color: 'white', padding: '50px', marginLeft: '250px' }}>
+            <h1>404 - Page Not Found</h1>
+            <p>Current Location: {location.pathname}</p>
+          </div>
+        } />
 
       </Routes>
     </NuroCoreProvider>

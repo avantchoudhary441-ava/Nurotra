@@ -1,0 +1,83 @@
+/* src/styles/overview.css */
+
+.overview-container {
+    padding: 2rem;
+    color: white;
+    min-height: 100vh;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.overview-header {
+    margin-bottom: 2rem;
+}
+
+.overview-header h1 {
+    font-size: 2rem;
+    margin: 0;
+    font-weight: 700;
+    background: linear-gradient(90deg, #fff, #a78bfa);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.overview-subtitle {
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0.5rem 0 0 0;
+    font-size: 1rem;
+}
+
+.overview-main-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 2rem;
+}
+
+@media (max-width: 1024px) {
+    .overview-main-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.overview-graph-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.graph-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+.overview-scores-section h3 {
+    margin-top: 0;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 1rem;
+}
+
+.scores-list {
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
