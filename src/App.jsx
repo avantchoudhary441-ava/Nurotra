@@ -37,7 +37,11 @@ import BrandMatchingForm from "./pages/brand/BrandMatchingForm";
 import NuroOrb from "./components/Nuro/NuroOrb";
 import NuroLab from "./pages/Nuro/NuroLab";
 import NuroInterrupt from "./components/Nuro/NuroInterrupt";
+<<<<<<< HEAD
 import Overview from "./pages/dashboard/Overview";
+=======
+import DeliverablesDashboard from "./pages/DeliverablesDashboard";
+>>>>>>> 1a926e0ae22d66b6bd1d2a85eb13997ff15d5fad
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
 
@@ -86,7 +90,12 @@ export default function App() {
         <Route path="/influencer/matching-standards" element={<InfluencerMatchingForm />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/profile" element={<UserProfile />} />
+<<<<<<< HEAD
         <Route path="/profile" element={<UserProfile />} />
+=======
+        <Route path="/influencer/deliverables" element={<DeliverablesDashboard role="influencer" />} />
+        <Route path="/brand/deliverables" element={<DeliverablesDashboard role="brand" />} />
+>>>>>>> 1a926e0ae22d66b6bd1d2a85eb13997ff15d5fad
         <Route path="/nuro-lab" element={<NuroLab />} />
 
         {/* 404 Debug Catch-all */}

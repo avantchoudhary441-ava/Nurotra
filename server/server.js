@@ -49,6 +49,7 @@ app.use("/api/chat", require("./routes/chatRoutes"));
 app.use("/api/message", require("./routes/messageRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/nuro", require("./routes/nuroRoutes"));
+app.use("/api/deliverables", require("./routes/deliverableRoutes"));
 
 // Global Error Handler
 app.use((err, req, res, next) => {

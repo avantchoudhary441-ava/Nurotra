@@ -4,14 +4,31 @@ import { useNavigate } from "react-router-dom";
 import "../styles/userProfile.css";
 import BackgroundEffects from "../components/BackgroundEffects";
 import NuroLab from "../components/Nuro/NuroLab";
+import api from "../services/apiService";
 
 export default function UserProfile() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const [isLabOpen, setLabOpen] = useState(false);
+    const [deliverablesCount, setDeliverablesCount] = useState(0);
 
     // Theme Toggle Logic
     const [theme, setTheme] = React.useState(localStorage.getItem("theme") || "light");
+
+    React.useEffect(() => {
+        if (user) {
+            fetchDeliverablesCount();
+        }
+    }, [user]);
+
+    const fetchDeliverablesCount = async () => {
+        try {
+            const res = await api.get("/deliverables");
+            setDeliverablesCount(Array.isArray(res.data) ? res.data.length : 0);
+        } catch (err) {
+            console.error("Error fetching deliverables count", err);
+        }
+    };
 
     const toggleTheme = () => {
         const next = theme === "light" ? "dark" : "light";
@@ -55,7 +72,14 @@ export default function UserProfile() {
                         {user.profileImg ? <img src={user.profileImg} alt="Profile" /> : "👤"}
                     </div>
                     <h1>{user.name}</h1>
-                    <span className="profile-role-badge">{user.role?.toUpperCase()}</span>
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '0.5rem' }}>
+                        <span className="profile-role-badge">{user.role?.toUpperCase()}</span>
+                        {deliverablesCount > 0 && (
+                            <span className="profile-role-badge" style={{ background: 'rgba(74, 144, 226, 0.2)', border: '1px solid #4A90E2', color: '#4A90E2' }}>
+                                ✅ {deliverablesCount} PROVEN
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 <div className="profile-details">
