@@ -7,13 +7,54 @@ exports.getNuroMemory = async (req, res) => {
         let memory = await NuroMemory.findOne({ userId: req.user.id });
 
         if (!memory) {
-            // Initialize new memory for new user
+            // Initialize new memory for new user with some realistic baseline data for the intelligence layer
             memory = await NuroMemory.create({
                 userId: req.user.id,
                 behavioralPatterns: [],
-                metrics: { communicationClarity: 50, reliabilityScore: 50, trustIndex: 50 }
+                metrics: {
+                    communicationClarity: 50,
+                    reliabilityScore: 50,
+                    trustIndex: 50,
+                    expectationAlignment: 50,
+                    compatibilityScore: 50,
+                    experienceIndex: 50,
+                    safetyComplianceScore: 50
+                },
+                behavioralMetrics: {
+                    avgReplyTimeTrend: [],
+                    negotiationTime: 0,
+                    executionDelay: 0,
+                    aiInsightNote: "Awaiting more collaboration data to form behavioral insights."
+                },
+                audienceAlignment: {
+                    primaryFit: "None detected",
+                    secondaryFit: "None detected",
+                    avoidZone: [],
+                    nicheStats: []
+                },
+                historicalPatterns: [
+                    "Perform initial collaborations to detect your unique performance patterns."
+                ],
+                aiLearnings: [
+                    "Nurotra is currently calibrating to your professional tone and response style."
+                ],
+                milestones: [
+                    { label: "Onboarded to Nurotra", date: new Date(), type: 'fact' }
+                ]
             });
         }
+
+        // If memory exists but new fields are missing (migration), update it
+        let modified = false;
+        if (!memory.behavioralMetrics) {
+            memory.behavioralMetrics = { avgReplyTimeTrend: [], negotiationTime: 0, executionDelay: 0, aiInsightNote: "" };
+            modified = true;
+        }
+        if (!memory.audienceAlignment) {
+            memory.audienceAlignment = { primaryFit: "None detected", secondaryFit: "None detected", avoidZone: [], nicheStats: [] };
+            modified = true;
+        }
+        if (modified) await memory.save();
 
         res.status(200).json(memory);
     } catch (error) {

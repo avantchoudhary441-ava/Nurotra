@@ -36,6 +36,8 @@ import NuroInterrupt from "./components/Nuro/NuroInterrupt";
 import DeliverablesDashboard from "./pages/DeliverablesDashboard";
 import Overview from "./pages/dashboard/Overview";
 import CollabInsights from "./pages/CollabInsights";
+import History from "./pages/History";
+
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
 
@@ -90,6 +92,9 @@ export default function App() {
 
         <Route path="/influencer/collab-insights" element={<CollabInsights role="influencer" />} />
         <Route path="/brand/collab-insights" element={<CollabInsights role="brand" />} />
+        <Route path="/influencer/history" element={<History role="influencer" />} />
+        <Route path="/brand/history" element={<History role="brand" />} />
+
 
         <Route path="/nuro-lab" element={<NuroLab />} />
 
