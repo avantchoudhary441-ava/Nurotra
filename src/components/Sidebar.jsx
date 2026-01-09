@@ -1,12 +1,21 @@
-// src/components/Sidebar.jsx
 import React from "react";
 import "../styles/dashboard.css";
 import NurotraLogo from "../assets/NurotraLogo.png";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation, useParams } from "react-router-dom";
 
 export default function Sidebar({ role = "influencer" }) {
   const navigate = useNavigate();
-  // icon set (Icon B style: simple round glyphs)
+  const location = useLocation();
+
+  // Detect userId from various possible route patterns
+  // Pattern: /influencer/profile/USERID or /influencer/safety/USERID
+  const pathParts = location.pathname.split('/');
+  const isInfluencerPath = pathParts[1] === 'influencer';
+  const isBrandPath = pathParts[1] === 'brand';
+
+  // The userId is usually the 4th part if it exists: /role/section/userId
+  const inspectingUserId = pathParts[3];
+
   let items = [];
 
   if (role === "admin") {
@@ -16,7 +25,8 @@ export default function Sidebar({ role = "influencer" }) {
       { id: "settings", label: "Settings", icon: "⚙️", to: "/admin/settings" },
     ];
   } else {
-    items = [
+    // Base items
+    const allItems = [
       { id: "profile", label: "Profile", icon: "👤", to: `/${role}/profile` },
       { id: "matching_standards", label: "Matching Standards", icon: "📋", to: `/${role}/matching-standards` },
       { id: "overview", label: "Overview", icon: "📁", to: `/${role}/overview` },
@@ -26,6 +36,19 @@ export default function Sidebar({ role = "influencer" }) {
       { id: "deliverables", label: "Deliverables", icon: "📁", to: `/${role}/deliverables` },
       { id: "nuro_lab", label: "Nuro Lab", icon: "🧪", to: "/nuro-lab" },
     ];
+
+    if (inspectingUserId) {
+      // Filter for permitted sections only
+      const permittedIds = ["profile", "matching_standards", "safety_trust", "deliverables"];
+      items = allItems
+        .filter(it => permittedIds.includes(it.id))
+        .map(it => ({
+          ...it,
+          to: `${it.to}/${inspectingUserId}`
+        }));
+    } else {
+      items = allItems;
+    }
   }
 
   return (

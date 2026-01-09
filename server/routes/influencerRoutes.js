@@ -34,6 +34,19 @@ router.get("/", protect, async (req, res) => {
     }
 });
 
+// @route   GET /api/influencer/:userId
+// @desc    Get influencer profile by userId
+router.get("/:userId", protect, async (req, res) => {
+    try {
+        const influencer = await Influencer.findOne({ userId: req.params.userId }).populate("userId", ["name", "email"]);
+        if (!influencer) return res.status(404).json({ msg: "Influencer profile not found" });
+        res.json(influencer);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server Error");
+    }
+});
+
 // @route   POST /api/influencer
 // @desc    Create/Update Influencer Profile & Upgrade User Role
 router.post("/", protect, async (req, res) => {

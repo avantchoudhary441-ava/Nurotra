@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { profileService, matchService } from "../../services/apiService";
 import BrandMatchResults from "./BrandMatchResults";
 import BackgroundEffects from "../../components/BackgroundEffects";
+import { localizeText } from "../../utils/textUtils";
 
 export default function BrandMatchingForm() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { userId } = useParams(); // Get target userId for inspection
     const { user } = useAuth();
 
     // Determine mode based on URL
     const isStandardsMode = location.pathname.includes("matching-standards");
 
-    // If in standards mode, default to View Only (unless no data, handled later).
-    // If in matching mode (setup), default to Edit.
-    const [isEditing, setIsEditing] = useState(!isStandardsMode);
+    // Default explicit logic for view vs edit
+    // FORCE FALSE if inspecting
+    const [isEditing, setIsEditing] = useState(userId ? false : !isStandardsMode);
 
     const [matches, setMatches] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -54,38 +56,42 @@ export default function BrandMatchingForm() {
 
     useEffect(() => {
         const fetchProfile = async () => {
-            if (user?.token) {
-                try {
-                    const data = await profileService.getBrand(user.token);
-                    if (data) {
-                        setFormData(prev => ({
-                            ...prev,
-                            brandName: data.brandName || user.name || "",
-                            website: data.website || "",
-                            industry: data.industry || "",
-                            contentTypes: data.contentTypes || [],
-                            budget: data.budget || "₹500–₹5,000",
-                            campaignGoal: data.campaignGoal || "Brand Awareness",
-                            influencerCategory: data.influencerCategory || "Nano (1k–10k)",
-                            minEngagement: data.minEngagement || "1–3%",
-                            platform: data.platform || "Instagram",
-                            collabDuration: data.collabDuration || "Immediate (24 hours)",
-                            noteToInfluencer: data.noteToInfluencer || ""
-                        }));
-                        // If data exists and we are in standards mode, keep isEditing=false
-                        // If data exists and we are in matching mode, we might want to auto-fill (user checks and clicks find)
-                    } else {
-                        // No data? Always edit mode
-                        setIsEditing(true);
-                    }
-                } catch (err) {
-                    console.log("No existing profile");
+            try {
+                let data = null;
+                if (userId) {
+                    // INSPECTION MODE
+                    data = await profileService.getBrandById(userId);
+                } else if (user?.token) {
+                    // OWNER MODE
+                    data = await profileService.getBrand(user.token);
+                }
+
+                if (data) {
+                    setFormData(prev => ({
+                        ...prev,
+                        brandName: data.brandName || (userId ? data.userId?.name : user.name) || "",
+                        website: data.website || "",
+                        industry: data.industry || "",
+                        contentTypes: data.contentTypes || [],
+                        budget: data.budget || "₹500–₹5,000",
+                        campaignGoal: data.campaignGoal || "Brand Awareness",
+                        influencerCategory: data.influencerCategory || "Nano (1k–10k)",
+                        minEngagement: data.minEngagement || "1–3%",
+                        platform: data.platform || "Instagram",
+                        collabDuration: data.collabDuration || "Immediate (24 hours)",
+                        noteToInfluencer: data.noteToInfluencer || ""
+                    }));
+                } else if (!userId) {
+                    // No data? Always edit mode
                     setIsEditing(true);
                 }
+            } catch (err) {
+                console.log("No existing profile");
+                if (!userId) setIsEditing(true);
             }
         };
         fetchProfile();
-    }, [user]);
+    }, [user, userId]);
 
     const updateField = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -175,13 +181,13 @@ export default function BrandMatchingForm() {
                 <button onClick={() => navigate(-1)} className="inf-back-btn">← Back</button>
                 <div style={{ display: "flex", gap: "10px" }}>
                     {/* Render Edit Button in Standards Mode */}
-                    {isStandardsMode && !isEditing && (
+                    {isStandardsMode && !isEditing && !userId && (
                         <button onClick={() => setIsEditing(true)} className="inf-theme-toggle" title="Edit Standards">
                             ✏️
                         </button>
                     )}
                     {/* Render Cancel Edit Button */}
-                    {isStandardsMode && isEditing && (
+                    {isStandardsMode && isEditing && !userId && (
                         <button onClick={() => setIsEditing(false)} className="inf-theme-toggle" title="Cancel Edit">
                             ❌
                         </button>
@@ -193,11 +199,15 @@ export default function BrandMatchingForm() {
             </div>
 
             <div className="inf-header">
-                <h2 className="inf-header-title">{isStandardsMode ? "Matching Standards" : "Brand Matching Details"}</h2>
+                <h2 className="inf-header-title">
+                    {localizeText(isStandardsMode ? "Matching Standards" : "Brand Matching Details", formData.brandName, userId)}
+                </h2>
                 <p className="inf-header-subtitle">
-                    {isStandardsMode
-                        ? "Configure your default preferences for automated matching."
-                        : "Find the perfect influencers for your campaign."}
+                    {userId
+                        ? localizeText("Viewing your default preferences for automated matching.", formData.brandName, true)
+                        : (isStandardsMode
+                            ? "Configure your default preferences for automated matching."
+                            : "Find the perfect influencers for your campaign.")}
                 </p>
             </div>
 

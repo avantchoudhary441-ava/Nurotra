@@ -1,25 +1,28 @@
 import React, { useEffect, useState, Suspense } from "react";
 import { MessageCircle } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Sidebar from "../../components/Sidebar";
 import "../../styles/dashboard.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import LineStatsChart from "../../components/charts/LineStatsChart";
 import BarRankChart from "../../components/charts/BarRankChart";
-import { profileService, matchService } from "../../services/apiService";
+import { profileService, matchService, nuroService } from "../../services/apiService";
 import InfluencerMatchResults from "./InfluencerMatchResults";
 import LeafTransition from "../../components/LeafTransition";
 import ErrorBoundary from "../../components/ErrorBoundary";
+import { localizeText } from "../../utils/textUtils";
 
 // Lazy Load the AI Studio to save initial bandwidth
 const ProfileEnhancer = React.lazy(() => import("../../components/ProfileEnhancer"));
 
 export default function InfluencerDashboard() {
   const navigate = useNavigate();
+  const { userId } = useParams(); // Get target userId for inspection
   const { user, logout } = useAuth();
 
   const [profile, setProfile] = useState(null);
+  const [publicMemory, setPublicMemory] = useState(null); // Added for public data
   const [showModal, setShowModal] = useState(false);
   const [showEnhancer, setShowEnhancer] = useState(false); // Enhancer State
 
@@ -31,17 +34,24 @@ export default function InfluencerDashboard() {
   // Fetch Real Profile Data
   useEffect(() => {
     const fetchProfile = async () => {
-      if (user?.token) {
-        try {
+      try {
+        if (userId) {
+          // INSPECTION MODE: Fetch public profile and public memory
+          const profileData = await profileService.getInfluencerById(userId);
+          const memoryData = await nuroService.getPublicMemory(userId);
+          setProfile(profileData);
+          setPublicMemory(memoryData);
+        } else if (user?.token) {
+          // OWNER MODE: Fetch own profile
           const data = await profileService.getInfluencer(user.token);
           setProfile(data);
-        } catch (err) {
-          console.error("Failed to fetch influencer profile", err);
         }
+      } catch (err) {
+        console.error("Failed to fetch influencer profile", err);
       }
     };
     fetchProfile();
-  }, [user]);
+  }, [user, userId]);
 
   // Use user context data, fallback to defaults if needed
   const data = profile || user || {};
@@ -151,19 +161,23 @@ export default function InfluencerDashboard() {
         {/* (Navbar code remains same) ... */}
         <nav className={`influencer-navbar ${scrolled ? "scrolled" : ""}`}>
           <div className="nav-left">
-            <div className="nav-brand">Collaborator</div>
+            <div className="nav-brand">
+              {localizeText("Collaborator", profile?.userId?.name || user?.name, userId)}
+            </div>
           </div>
 
           <div className="nav-right">
-            <div className="dash-sidebar-bottom">
-              <div
-                className="dash-cta dash-cursor-pointer"
-                onClick={handleFindMatches}
-                style={{ opacity: findingMatches ? 0.7 : 1, cursor: findingMatches ? 'wait' : 'pointer' }}
-              >
-                {findingMatches ? "Finding..." : "Find Matches"}
+            {!userId && (
+              <div className="dash-sidebar-bottom">
+                <div
+                  className="dash-cta dash-cursor-pointer"
+                  onClick={handleFindMatches}
+                  style={{ opacity: findingMatches ? 0.7 : 1, cursor: findingMatches ? 'wait' : 'pointer' }}
+                >
+                  {findingMatches ? "Finding..." : "Find Matches"}
+                </div>
               </div>
-            </div>
+            )}
             <button
               id="theme-toggle"
               className="theme-toggle"
@@ -206,7 +220,9 @@ export default function InfluencerDashboard() {
               </div>
 
               <div className="profile-meta">
-                <div className="profile-name">{data?.userId?.name || "Anonymous"}</div>
+                <div className="profile-name">
+                  {profile?.userId?.name || (userId ? "Loading..." : (user?.name || "Anonymous"))}
+                </div>
                 <div className="profile-sub">{followerCategory()}</div>
               </div>
             </div>
@@ -215,18 +231,22 @@ export default function InfluencerDashboard() {
           {/* LEFT SIDE (now right) - action buttons */}
           <div className="profile-left">
             <div className="profile-actions">
-              {/* ✨ AI ENHANCE BUTTON */}
-              <button
-                className="btn-primary-gradient"
-                onClick={() => setShowEnhancer(true)}
-                style={{ marginRight: '10px' }}
-              >
-                <span>✨</span> Enhance Profile
-              </button>
+              {!userId && (
+                <>
+                  {/* ✨ AI ENHANCE BUTTON */}
+                  <button
+                    className="btn-primary-gradient"
+                    onClick={() => setShowEnhancer(true)}
+                    style={{ marginRight: '10px' }}
+                  >
+                    <span>✨</span> Enhance Profile
+                  </button>
 
-              <button className="btn-outline" onClick={() => navigate("/influencer/profile")}>Edit Profile</button>
-              <button className="btn-outline" onClick={() => navigate("/influencer/settings")}>Settings</button>
-              <button className="btn-dots" onClick={onThreeDots}>⋯</button>
+                  <button className="btn-outline" onClick={() => navigate("/influencer/profile")}>Edit Profile</button>
+                  <button className="btn-outline" onClick={() => navigate("/influencer/settings")}>Settings</button>
+                  <button className="btn-dots" onClick={onThreeDots}>⋯</button>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -244,7 +264,9 @@ export default function InfluencerDashboard() {
               {/* TEXT */}
               <div className="rating-header">
                 <div className="rating-main">
-                  <div className="rating-label">Total Collaborations</div>
+                  <div className="rating-label">
+                    {localizeText("Total Collaborations", profile?.userId?.name, userId)}
+                  </div>
                   <div className="rating-value">
                     {data?.totalCollabs ?? 0}
                   </div>
@@ -268,8 +290,8 @@ export default function InfluencerDashboard() {
             {/* Card 2: Top X% circular progress */}
             <div className="card neon-card">
               <div className="card-head">
-                <h4>Top</h4>
-                <div className="card-sub">Audience exposure</div>
+                <h4>{localizeText("Your influence", profile?.userId?.name, userId)}</h4>
+                <div className="card-sub">{localizeText("Your audience exposure", profile?.userId?.name, userId)}</div>
               </div>
 
               <div className="line-chart-wrap">
@@ -317,13 +339,15 @@ export default function InfluencerDashboard() {
       </div>
 
       {/* FLOATING CHAT BUTTON */}
-      <button
-        onClick={() => navigate('/chat')}
-        className="floating-chat-btn"
-        title="Open Chat Inbox"
-      >
-        <MessageCircle size={28} />
-      </button>
+      {!userId && (
+        <button
+          onClick={() => navigate('/chat')}
+          className="floating-chat-btn"
+          title="Open Chat Inbox"
+        >
+          <MessageCircle size={28} />
+        </button>
+      )}
 
     </div>
   );

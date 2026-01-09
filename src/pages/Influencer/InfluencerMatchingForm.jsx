@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { profileService, matchService } from "../../services/apiService";
 import "../../styles/matchingForms.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import InfluencerMatchResults from "./InfluencerMatchResults";
+import { localizeText } from "../../utils/textUtils";
 
 export default function InfluencerMatchingForm() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { userId } = useParams(); // Get target userId for inspection
     const { user } = useAuth();
 
     // Determine mode based on URL
     const isStandardsMode = location.pathname.includes("matching-standards");
 
     // Default explicit logic for view vs edit
-    const [isEditing, setIsEditing] = useState(!isStandardsMode);
+    // FORCE FALSE if inspecting
+    const [isEditing, setIsEditing] = useState(userId ? false : !isStandardsMode);
 
     const [matches, setMatches] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -50,40 +53,46 @@ export default function InfluencerMatchingForm() {
     // Pre-fill from existing profile if available
     useEffect(() => {
         const fetchProfile = async () => {
-            if (user?.token) {
-                try {
-                    const data = await profileService.getInfluencer(user.token);
-                    if (data) {
-                        setFormData(prev => ({
-                            ...prev,
-                            fullName: data.fullName || user.name || "",
-                            email: data.email || user.email || "",
-                            contactNumber: data.contactNumber || "",
-                            profileUrl: data.platformUrl || "",
-                            primaryPlatform: data.primaryPlatform || "Instagram",
-                            socialHandle: data.socialHandle || "",
-                            followers: data.followers || "Nano (1k–10k)",
-                            engagementRate: data.engagementRate || 2.5,
-                            audienceAge: data.audienceAge || [],
-                            targetingLocation: data.targetingLocation || [],
-                            niche: data.niche || "",
-                            contentTypes: data.contentTypes || [],
-                            budget: data.budget || "₹500–₹5,000",
-                            collabExperience: data.collabExperience || "New to collaborations",
-                            noteToBrand: data.noteToBrand || ""
-                        }));
-                    } else {
-                        // No data? Force edit mode
-                        setIsEditing(true);
-                    }
-                } catch (err) {
-                    console.log("No existing profile or error fetching");
+            try {
+                let data = null;
+                if (userId) {
+                    // INSPECTION MODE
+                    data = await profileService.getInfluencerById(userId);
+                } else if (user?.token) {
+                    // OWNER MODE
+                    data = await profileService.getInfluencer(user.token);
+                }
+
+                if (data) {
+                    setFormData(prev => ({
+                        ...prev,
+                        fullName: data.fullName || (userId ? data.userId?.name : user.name) || "",
+                        email: data.email || (userId ? data.userId?.email : user.email) || "",
+                        contactNumber: data.contactNumber || "",
+                        profileUrl: data.platformUrl || "",
+                        primaryPlatform: data.primaryPlatform || "Instagram",
+                        socialHandle: data.socialHandle || "",
+                        followers: data.followers || "Nano (1k–10k)",
+                        engagementRate: data.engagementRate || 2.5,
+                        audienceAge: data.audienceAge || [],
+                        targetingLocation: data.targetingLocation || [],
+                        niche: data.niche || "",
+                        contentTypes: data.contentTypes || [],
+                        budget: data.budget || "₹500–₹5,000",
+                        collabExperience: data.collabExperience || "New to collaborations",
+                        noteToBrand: data.noteToBrand || ""
+                    }));
+                } else if (!userId) {
+                    // No data and not inspecting? Force edit mode
                     setIsEditing(true);
                 }
+            } catch (err) {
+                console.log("No existing profile or error fetching");
+                if (!userId) setIsEditing(true);
             }
         };
         fetchProfile();
-    }, [user]);
+    }, [user, userId]);
 
     const updateField = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -197,13 +206,13 @@ export default function InfluencerMatchingForm() {
                 <button onClick={() => navigate(-1)} className="inf-back-btn">← Back to Dashboard</button>
                 <div style={{ display: "flex", gap: "10px" }}>
                     {/* Render Edit Button in Standards Mode */}
-                    {isStandardsMode && !isEditing && (
+                    {isStandardsMode && !isEditing && !userId && (
                         <button onClick={() => setIsEditing(true)} className="inf-theme-toggle" title="Edit Standards">
                             ✏️
                         </button>
                     )}
                     {/* Render Cancel Edit Button */}
-                    {isStandardsMode && isEditing && (
+                    {isStandardsMode && isEditing && !userId && (
                         <button onClick={() => setIsEditing(false)} className="inf-theme-toggle" title="Cancel Edit">
                             ❌
                         </button>
@@ -215,11 +224,15 @@ export default function InfluencerMatchingForm() {
             </div>
 
             <div className="inf-header">
-                <h2 className="inf-header-title">{isStandardsMode ? "Matching Standards" : "Matching Details"}</h2>
+                <h2 className="inf-header-title">
+                    {localizeText(isStandardsMode ? "Matching Standards" : "Matching Details", formData.fullName, userId)}
+                </h2>
                 <p className="inf-header-subtitle">
-                    {isStandardsMode
-                        ? "Configure your default profile for automated matching."
-                        : "Complete your profile to get the best brand matches."}
+                    {userId
+                        ? localizeText("Viewing your default profile for automated matching.", formData.fullName, true)
+                        : (isStandardsMode
+                            ? "Configure your default profile for automated matching."
+                            : "Complete your profile to get the best brand matches.")}
                 </p>
             </div>
 

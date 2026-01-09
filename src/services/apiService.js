@@ -84,6 +84,14 @@ export const profileService = {
         const config = { headers: { Authorization: `Bearer ${token}` } };
         const response = await axios.get(`${API_URL.replace("/auth", "")}/influencer`, config);
         return response.data;
+    },
+    getInfluencerById: async (userId) => {
+        const response = await api.get(`/influencer/${userId}`);
+        return response.data;
+    },
+    getBrandById: async (userId) => {
+        const response = await api.get(`/brand/${userId}`);
+        return response.data;
     }
 };
 
@@ -153,6 +161,10 @@ export const aiService = {
 export const nuroService = {
     getMemory: async () => {
         const response = await api.get("/nuro/memory");
+        return response.data;
+    },
+    getPublicMemory: async (userId) => {
+        const response = await api.get(`/nuro/memory/${userId}`);
         return response.data;
     }
 };

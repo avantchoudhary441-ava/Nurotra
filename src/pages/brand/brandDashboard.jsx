@@ -7,15 +7,18 @@ import "../../styles/dashboard.css";
 import LineStatsChart from "../../components/charts/LineStatsChart";
 import BarRankChart from "../../components/charts/BarRankChart";
 import BackgroundEffects from "../../components/BackgroundEffects";
-import { useNavigate } from "react-router-dom";
-import { profileService, matchService } from "../../services/apiService"; // Import matchService
+import { useNavigate, useParams } from "react-router-dom";
+import { profileService, matchService, nuroService } from "../../services/apiService"; // Import matchService
 import BrandMatchResults from "./BrandMatchResults"; // Import Match Results Overlay
 import LeafTransition from "../../components/LeafTransition"; // Import Animation
+import { localizeText } from "../../utils/textUtils";
 
 export default function BrandDashboard() {
   const navigate = useNavigate();
+  const { userId } = useParams(); // Get target userId for inspection
   const { user, logout } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [publicMemory, setPublicMemory] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
   // Direct matching states
@@ -26,17 +29,24 @@ export default function BrandDashboard() {
   // Fetch Real Profile Data
   useEffect(() => {
     const fetchProfile = async () => {
-      if (user?.token) {
-        try {
+      try {
+        if (userId) {
+          // INSPECTION MODE: Fetch public profile and public memory
+          const profileData = await profileService.getBrandById(userId);
+          const memoryData = await nuroService.getPublicMemory(userId);
+          setProfile(profileData);
+          setPublicMemory(memoryData);
+        } else if (user?.token) {
+          // OWNER MODE: Fetch own profile
           const data = await profileService.getBrand(user.token);
           setProfile(data);
-        } catch (err) {
-          console.error("Failed to fetch brand profile", err);
         }
+      } catch (err) {
+        console.error("Failed to fetch brand profile", err);
       }
     };
     fetchProfile();
-  }, [user]);
+  }, [user, userId]);
 
   // Use Profile Data or Default to User Context
   const data = profile || user || {};
@@ -117,19 +127,23 @@ export default function BrandDashboard() {
         {/* NAVBAR */}
         <nav className={`influencer-navbar ${scrolled ? "scrolled" : ""}`}>
           <div className="nav-left">
-            <div className="nav-brand">Collaborator</div>
+            <div className="nav-brand">
+              {localizeText("Collaborator", profile?.brandName || profile?.userId?.name, userId)}
+            </div>
           </div>
 
           <div className="nav-right">
-            <div className="dash-sidebar-bottom">
-              <div
-                className="dash-cta dash-cursor-pointer"
-                onClick={handleFindMatches}
-                style={{ opacity: findingMatches ? 0.7 : 1, cursor: findingMatches ? 'wait' : 'pointer' }}
-              >
-                {findingMatches ? "Finding..." : "Find Matches"}
+            {!userId && (
+              <div className="dash-sidebar-bottom">
+                <div
+                  className="dash-cta dash-cursor-pointer"
+                  onClick={handleFindMatches}
+                  style={{ opacity: findingMatches ? 0.7 : 1, cursor: findingMatches ? 'wait' : 'pointer' }}
+                >
+                  {findingMatches ? "Finding..." : "Find Matches"}
+                </div>
               </div>
-            </div>
+            )}
             <button className="theme-toggle" onClick={toggleTheme}>
               {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
                 ? "☀️"
@@ -194,21 +208,23 @@ export default function BrandDashboard() {
               </div>
               <div className="profile-meta">
                 <div className="profile-name">
-                  {data?.userId?.name || "Your Brand"}
+                  {profile?.brandName || profile?.userId?.name || (userId ? "Loading..." : "Your Brand")}
                 </div>
                 <div className="profile-sub">
-                  {data?.companyType || "Brand Profile"}
+                  {data?.companyType || (userId ? "Brand profile" : "Brand Profile")}
                 </div>
               </div>
             </div>
           </div>
 
           <div className="profile-left">
-            <div className="profile-actions">
-              <button className="btn-outline">Edit Profile</button>
-              <button className="btn-outline">Settings</button>
-              <button className="btn-dots">⋯</button>
-            </div>
+            {!userId && (
+              <div className="profile-actions">
+                <button className="btn-outline">Edit Profile</button>
+                <button className="btn-outline">Settings</button>
+                <button className="btn-dots">⋯</button>
+              </div>
+            )}
           </div>
         </section>
 
@@ -246,8 +262,8 @@ export default function BrandDashboard() {
             {/* CARD 2 — BAR GRAPH */}
             <div className="card neon-card">
               <div className="card-head">
-                <h4>Brand Reach</h4>
-                <div className="card-sub">Audience exposure</div>
+                <h4>{localizeText("Brand Reach", profile?.brandName || profile?.userId?.name, userId)}</h4>
+                <div className="card-sub">{localizeText("Your audience exposure", profile?.brandName || profile?.userId?.name, userId)}</div>
               </div>
 
               <div className="line-chart-wrap">
@@ -270,7 +286,7 @@ export default function BrandDashboard() {
             {/* CARD 4 — BADGES */}
             <div className="card neon-card">
               <div className="card-head">
-                <h4>Brand Badges</h4>
+                <h4>{localizeText("Brand Badges", profile?.brandName || profile?.userId?.name, userId)}</h4>
                 <div className="card-sub">Achievements</div>
               </div>
               <div className="badges-grid">
@@ -288,13 +304,15 @@ export default function BrandDashboard() {
       </div>
 
       {/* FLOATING CHAT BUTTON */}
-      <button
-        onClick={() => navigate('/chat')}
-        className="floating-chat-btn"
-        title="Open Chat Inbox"
-      >
-        <MessageCircle size={28} />
-      </button>
+      {!userId && (
+        <button
+          onClick={() => navigate('/chat')}
+          className="floating-chat-btn"
+          title="Open Chat Inbox"
+        >
+          <MessageCircle size={28} />
+        </button>
+      )}
 
     </div >
   );

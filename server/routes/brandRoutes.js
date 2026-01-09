@@ -34,6 +34,19 @@ router.get("/", protect, async (req, res) => {
     }
 });
 
+// @route   GET /api/brand/:userId
+// @desc    Get brand profile by userId
+router.get("/:userId", protect, async (req, res) => {
+    try {
+        const brand = await Brand.findOne({ userId: req.params.userId }).populate("userId", ["name", "email"]);
+        if (!brand) return res.status(404).json({ msg: "Brand profile not found" });
+        res.json(brand);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server Error");
+    }
+});
+
 // @route   POST /api/brand
 // @desc    Create/Update Brand Profile & Upgrade User Role
 router.post("/", protect, async (req, res) => {
