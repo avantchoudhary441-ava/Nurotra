@@ -1,23 +1,38 @@
 import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import FileUploadModal from "../components/FileUploadModal";
-import api from "../services/apiService";
+import api, { profileService } from "../services/apiService";
+import { localizeText } from "../utils/textUtils";
 import "../styles/deliverables.css";
 
 export default function DeliverablesDashboard({ role }) {
+    const { userId } = useParams();
     const [deliverables, setDeliverables] = useState([]);
+    const [profile, setProfile] = useState(null);
     const [isModalOpen, setModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [lastImpact, setLastImpact] = useState(null);
 
     useEffect(() => {
         fetchDeliverables();
-    }, []);
+    }, [userId]);
 
     const fetchDeliverables = async () => {
         try {
-            const res = await api.get("/deliverables");
-            setDeliverables(Array.isArray(res.data) ? res.data : []);
+            if (userId) {
+                const [delRes, profRes] = await Promise.all([
+                    api.get(`/deliverables/user/${userId}`),
+                    role === 'influencer'
+                        ? profileService.getInfluencerById(userId)
+                        : profileService.getBrandById(userId)
+                ]);
+                setDeliverables(Array.isArray(delRes.data) ? delRes.data : []);
+                setProfile(profRes);
+            } else {
+                const res = await api.get("/deliverables");
+                setDeliverables(Array.isArray(res.data) ? res.data : []);
+            }
             setLoading(false);
         } catch (err) {
             console.error("Error fetching deliverables", err);
@@ -53,11 +68,17 @@ export default function DeliverablesDashboard({ role }) {
                 <header className="deliverables-header">
                     <div>
                         <h1>Deliverables</h1>
-                        <p style={{ color: '#888' }}>Upload proof-of-work to build your AI reputation.</p>
+                        <p style={{ color: '#888' }}>
+                            {userId
+                                ? localizeText("Viewing your public proof-of-work vault.", profile?.brandName || profile?.userId?.name, true)
+                                : "Upload proof-of-work to build your AI reputation."}
+                        </p>
                     </div>
-                    <button className="btn-upload" onClick={() => setModalOpen(true)}>
-                        <span>+</span> Upload Proof
-                    </button>
+                    {!userId && (
+                        <button className="btn-upload" onClick={() => setModalOpen(true)}>
+                            <span>+</span> Upload Proof
+                        </button>
+                    )}
                 </header>
 
                 {lastImpact && (

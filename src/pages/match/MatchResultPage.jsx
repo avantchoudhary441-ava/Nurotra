@@ -186,27 +186,21 @@ export default function MatchResultPage() {
                                         </button>
 
                                         {/* Inspact Button (Glassy, Shows on Hover) */}
-                                        {/* Inspact Button (Glassy, Shows on Hover) */}
-                                        <a
-                                            href={(match.platformUrl || (match.user && match.user.platformUrl)) ?
-                                                ((match.platformUrl || match.user.platformUrl).startsWith('http') ?
-                                                    (match.platformUrl || match.user.platformUrl) :
-                                                    `https://${match.platformUrl || match.user.platformUrl}`)
-                                                : "#"}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
+                                        <button
                                             className="inspact-btn"
-                                            title="Inspect Platform Profile"
-                                            onClick={(e) => {
-                                                const url = match.platformUrl || match.user?.platformUrl;
-                                                if (!url) {
-                                                    e.preventDefault();
-                                                    console.warn("Inspact: Missing URL", match);
+                                            title="Inspect Nurotra Profile"
+                                            onClick={() => {
+                                                const targetUserId = match.userId || match.user?._id || match._id;
+                                                const targetRole = role === 'brand' ? 'influencer' : 'brand';
+                                                if (targetUserId) {
+                                                    navigate(`/${targetRole}/profile/${targetUserId}`);
+                                                } else {
+                                                    console.warn("Inspact: Missing User ID", match);
                                                 }
                                             }}
                                         >
                                             Inspact 👁️
-                                        </a>
+                                        </button>
                                     </div>
                                 </div>
                             </motion.div>

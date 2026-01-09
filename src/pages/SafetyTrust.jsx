@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ShieldCheck,
@@ -30,18 +31,32 @@ import {
 } from "recharts";
 import Sidebar from "../components/Sidebar";
 import BackgroundEffects from "../components/BackgroundEffects";
-import { nuroService } from "../services/apiService";
+import { nuroService, profileService } from "../services/apiService";
+import { localizeText } from "../utils/textUtils";
 import "../styles/safetyTrust.css";
 
 export default function SafetyTrust({ role = "influencer" }) {
+    const { userId } = useParams();
     const [memory, setMemory] = useState(null);
+    const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const data = await nuroService.getMemory();
-                setMemory(data);
+                if (userId) {
+                    const [memoryData, profileData] = await Promise.all([
+                        nuroService.getPublicMemory(userId),
+                        role === 'influencer'
+                            ? profileService.getInfluencerById(userId)
+                            : profileService.getBrandById(userId)
+                    ]);
+                    setMemory(memoryData);
+                    setProfile(profileData);
+                } else {
+                    const data = await nuroService.getMemory();
+                    setMemory(data);
+                }
             } catch (err) {
                 console.error("Failed to fetch safety data", err);
             } finally {
@@ -49,7 +64,7 @@ export default function SafetyTrust({ role = "influencer" }) {
             }
         };
         fetchData();
-    }, []);
+    }, [userId, role]);
 
     if (loading) {
         return (
@@ -61,10 +76,12 @@ export default function SafetyTrust({ role = "influencer" }) {
     }
 
     // Fallback Mock Data for demo
+    const profileName = profile?.brandName || profile?.userId?.name || (userId ? "The user" : "You");
+
     const snapshot = memory?.trustSnapshot || {
         compositeScore: 84,
         status: 'Stable',
-        statusMessage: "Your trust standing across identity, behaviour, and reliability."
+        statusMessage: localizeText("Your trust standing across identity, behaviour, and reliability.", profileName, !!userId)
     };
 
     const pillars = memory?.trustPillars || {
@@ -181,7 +198,7 @@ export default function SafetyTrust({ role = "influencer" }) {
                                     <div className="stat-bar-bg"><div className="stat-bar-fill" style={{ width: `${pillars.identity.authenticityRate}%` }} /></div>
                                 </div>
                                 <div className="mt-2 text-[10px] text-slate-500 flex items-center gap-1">
-                                    <Lock size={10} /> Data encrypted & anonymized per Nuro standards.
+                                    <Lock size={10} /> {localizeText("Data encrypted & anonymized per Nuro standards.", profileName, !!userId)}
                                 </div>
                             </div>
                         </section>
@@ -208,7 +225,7 @@ export default function SafetyTrust({ role = "influencer" }) {
                                     <div className="stat-bar-bg"><div className="stat-bar-fill" style={{ width: `${pillars.behavioralIntegrity.interactionHealth}%` }} /></div>
                                 </div>
                                 <div className="mt-2 text-[10px] text-slate-500">
-                                    AI is monitoring tone consistency & response patterns.
+                                    {localizeText("AI is monitoring your tone consistency & response patterns.", profileName, !!userId)}
                                 </div>
                             </div>
                         </section>
@@ -268,29 +285,31 @@ export default function SafetyTrust({ role = "influencer" }) {
 
                     </div>
 
-                    {/* Layer 3: Guardian Intelligence */}
-                    <section className="guardian-intel">
-                        <div className="guardian-header">
-                            <Zap className="text-indigo-400" />
-                            <h3>Guardian Intelligence (Nuro)</h3>
-                        </div>
-                        <div className="intel-grid">
-                            <div className="intel-item">
-                                <ShieldCheck className="intel-icon" />
-                                <div className="intel-content">
-                                    <h4>Consistency Stabilized</h4>
-                                    <p>Your interaction health has remained at 100% since last week. This improves brand confidence by 12%.</p>
+                    {/* Layer 3: Guardian Intelligence - Hidden while inspecting */}
+                    {!userId && (
+                        <section className="guardian-intel">
+                            <div className="guardian-header">
+                                <Zap className="text-indigo-400" />
+                                <h3>Guardian Intelligence (Nuro)</h3>
+                            </div>
+                            <div className="intel-grid">
+                                <div className="intel-item">
+                                    <ShieldCheck className="intel-icon" />
+                                    <div className="intel-content">
+                                        <h4>Consistency Stabilized</h4>
+                                        <p>Your interaction health has remained at 100% since last week. This improves brand confidence by 12%.</p>
+                                    </div>
+                                </div>
+                                <div className="intel-item">
+                                    <AlertCircle className="intel-icon text-amber-400" />
+                                    <div className="intel-content">
+                                        <h4>Profile Gap Detected</h4>
+                                        <p>Missing social handle verification is holding your identity score back from reaching 100%.</p>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="intel-item">
-                                <AlertCircle className="intel-icon text-amber-400" />
-                                <div className="intel-content">
-                                    <h4>Profile Gap Detected</h4>
-                                    <p>Missing social handle verification is holding your identity score back from reaching 100%.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+                        </section>
+                    )}
                 </main>
             </div>
         </div>

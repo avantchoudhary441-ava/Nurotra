@@ -122,3 +122,24 @@ exports.runPostMortem = async (req, res) => {
         res.status(500).json({ message: "AI Analysis failed", error: error.message });
     }
 };
+
+// Get Public Nuro Memory for Inspection (Strictly limited fields)
+exports.getPublicNuroMemory = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Find memory for the target user
+        const memory = await NuroMemory.findOne({ userId }).select(
+            'metrics trustSnapshot trustPillars milestones'
+        );
+
+        if (!memory) {
+            return res.status(404).json({ message: "Nuro Memory not found for this user" });
+        }
+
+        // Return only the analytical/public parts
+        res.status(200).json(memory);
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching public Nuro memory", error: error.message });
+    }
+};
