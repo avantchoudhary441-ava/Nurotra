@@ -7,12 +7,11 @@ import GrowthPathModal from "../../components/GrowthPathModal";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Paperclip, Sun, Moon, CheckCircle, XCircle, Wand2, Sparkles, Phone } from "lucide-react";
 import { useSocket } from "../../context/SocketContext";
-import CallInterface from "../../components/chat/CallInterface";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ChatPage() {
     const { user } = useAuth();
-    const { callUser, callAccepted, callEnded } = useSocket();
+    const { callUser } = useSocket();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -225,7 +224,7 @@ export default function ChatPage() {
     return (
         <div className={`chat-page-container ${isDarkMode ? "dark-theme" : "light-theme"}`}>
             <BackgroundEffects />
-            <CallInterface />
+            <BackgroundEffects />
 
             {/* Growth Path Modal */}
             <GrowthPathModal

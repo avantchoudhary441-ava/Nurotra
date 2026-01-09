@@ -42,6 +42,7 @@ import SafetyTrust from "./pages/SafetyTrust";
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
 import { SocketProvider } from "./context/SocketContext";
+import CallInterface from "./components/chat/CallInterface";
 
 export default function App() {
   const location = useLocation();
@@ -49,6 +50,7 @@ export default function App() {
   return (
     <NuroCoreProvider>
       <SocketProvider>
+        <CallInterface />
         {location.pathname !== "/" && <NuroOrb />}
         <NuroInterrupt />
         <Routes>

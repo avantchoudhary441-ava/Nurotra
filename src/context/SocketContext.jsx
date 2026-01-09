@@ -83,20 +83,19 @@ export const SocketProvider = ({ children }) => {
 
         navigator.mediaDevices.getUserMedia({ video: false, audio: true })
             .then((currentStream) => {
-                console.log("Media acquired, initializing Peer...");
                 setStream(currentStream);
                 if (myVideo.current) {
                     myVideo.current.srcObject = currentStream;
                 }
 
                 if (!socket.current) {
-                    throw new Error("Socket connection lost. Please refresh.");
+                    throw new Error("Socket connection lost");
                 }
 
                 const peer = new Peer({ initiator: true, trickle: false, stream: currentStream });
 
                 if (!peer) {
-                    throw new Error("Peer creation failed (Library Error).");
+                    throw new Error("Peer creation failed");
                 }
 
                 peer.on('signal', (data) => {
@@ -117,10 +116,8 @@ export const SocketProvider = ({ children }) => {
                     }
                 });
 
-                // Add error handler for Peer
                 peer.on('error', (err) => {
                     console.error("Peer Error:", err);
-                    alert(`Connection Error: ${err.message}`);
                     leaveCall();
                 });
 
@@ -134,7 +131,6 @@ export const SocketProvider = ({ children }) => {
             .catch(err => {
                 console.error("Call Setup Error:", err);
                 setIsCalling(false);
-                alert(`Setup Error: ${err.message || err}`);
             });
     };
 
