@@ -5,11 +5,14 @@ import "../../styles/chat.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import GrowthPathModal from "../../components/GrowthPathModal";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Paperclip, Sun, Moon, CheckCircle, XCircle, Wand2, Sparkles } from "lucide-react";
+import { Paperclip, Sun, Moon, CheckCircle, XCircle, Wand2, Sparkles, Phone } from "lucide-react";
+import { useSocket } from "../../context/SocketContext";
+import CallInterface from "../../components/chat/CallInterface";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ChatPage() {
     const { user } = useAuth();
+    const { callUser, callAccepted, callEnded } = useSocket();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -209,6 +212,11 @@ export default function ChatPage() {
         return users[0]._id === loggedUser._id ? users[1].name : users[0].name;
     };
 
+    const getSenderId = (loggedUser, users) => {
+        if (!users || users.length < 2) return null;
+        return users[0]._id === loggedUser._id ? users[1]._id : users[0]._id;
+    };
+
     const getSenderImg = (loggedUser, users) => {
         if (!users || users.length < 2) return "https://via.placeholder.com/150";
         return users[0]._id === loggedUser._id ? users[1].profileImg : users[0].profileImg;
@@ -217,6 +225,7 @@ export default function ChatPage() {
     return (
         <div className={`chat-page-container ${isDarkMode ? "dark-theme" : "light-theme"}`}>
             <BackgroundEffects />
+            <CallInterface />
 
             {/* Growth Path Modal */}
             <GrowthPathModal
@@ -283,6 +292,21 @@ export default function ChatPage() {
                                         <div className="header-details">
                                             <h3>{getSender(user, selectedChat.users)}</h3>
                                         </div>
+
+                                        {/* Call Button */}
+                                        <button
+                                            className="icon-btn"
+                                            title="Start Voice Call"
+                                            onClick={() => {
+                                                const targetId = getSenderId(user, selectedChat.users);
+                                                const targetName = getSender(user, selectedChat.users);
+                                                const targetPic = getSenderImg(user, selectedChat.users);
+                                                if (targetId) callUser(targetId, targetName, targetPic);
+                                            }}
+                                            style={{ marginLeft: 'auto', marginRight: '10px' }}
+                                        >
+                                            <Phone size={20} />
+                                        </button>
                                     </div>
 
                                     {/* Toggle Check */}

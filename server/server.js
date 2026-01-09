@@ -61,6 +61,20 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Socket.io Setup
+const server = require('http').createServer(app);
+const io = require('socket.io')(server, {
+    cors: {
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true
+    }
+});
+
+// Attach Socket Handler
+require("./socket/socketHandler")(io);
+
+
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
