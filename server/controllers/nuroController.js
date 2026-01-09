@@ -40,7 +40,18 @@ exports.getNuroMemory = async (req, res) => {
                 ],
                 milestones: [
                     { label: "Onboarded to Nurotra", date: new Date(), type: 'fact' }
-                ]
+                ],
+                trustSnapshot: {
+                    compositeScore: 70,
+                    status: 'Stable',
+                    statusMessage: "Your trust standing across identity, behaviour, and reliability."
+                },
+                trustPillars: {
+                    identity: { emailVerified: false, socialVerified: false, authenticityRate: 50, identityScore: 50 },
+                    behavioralIntegrity: { spamSignal: 'Low', fakeFollowerEstimate: 0, interactionHealth: 100, integrityScore: 100 },
+                    transactionalTrust: { paymentSafetyScore: 100, agreementTransparency: 100, disputeRate: 0, transactionalScore: 100 },
+                    communitySignal: { reputationHeatmap: [], socialProofScore: 50 }
+                }
             });
         }
 
@@ -52,6 +63,19 @@ exports.getNuroMemory = async (req, res) => {
         }
         if (!memory.audienceAlignment) {
             memory.audienceAlignment = { primaryFit: "None detected", secondaryFit: "None detected", avoidZone: [], nicheStats: [] };
+            modified = true;
+        }
+        if (!memory.trustSnapshot) {
+            memory.trustSnapshot = { compositeScore: 70, status: 'Stable', statusMessage: "Your trust standing across identity, behaviour, and reliability." };
+            modified = true;
+        }
+        if (!memory.trustPillars) {
+            memory.trustPillars = {
+                identity: { emailVerified: false, socialVerified: false, authenticityRate: 50, identityScore: 50 },
+                behavioralIntegrity: { spamSignal: 'Low', fakeFollowerEstimate: 0, interactionHealth: 100, integrityScore: 100 },
+                transactionalTrust: { paymentSafetyScore: 100, agreementTransparency: 100, disputeRate: 0, transactionalScore: 100 },
+                communitySignal: { reputationHeatmap: [], socialProofScore: 50 }
+            };
             modified = true;
         }
         if (modified) await memory.save();

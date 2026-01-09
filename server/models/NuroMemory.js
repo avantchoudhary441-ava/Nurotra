@@ -80,6 +80,38 @@ const nuroMemorySchema = new mongoose.Schema({
     historicalPatterns: [String],
     // Read-only AI Memory reflections
     aiLearnings: [String],
+
+    // --- SAFETY & TRUST PILLARS ---
+    trustSnapshot: {
+        compositeScore: { type: Number, default: 70 },
+        status: { type: String, enum: ['Stable', 'Attention', 'Caution'], default: 'Stable' },
+        statusMessage: { type: String, default: "Your trust standing across identity, behaviour, and reliability." }
+    },
+    trustPillars: {
+        identity: {
+            emailVerified: { type: Boolean, default: false },
+            socialVerified: { type: Boolean, default: false },
+            authenticityRate: { type: Number, default: 50 }, // 0-100
+            identityScore: { type: Number, default: 50 }
+        },
+        behavioralIntegrity: {
+            spamSignal: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Low' },
+            fakeFollowerEstimate: { type: Number, default: 0 }, // %
+            interactionHealth: { type: Number, default: 100 },
+            integrityScore: { type: Number, default: 100 }
+        },
+        transactionalTrust: {
+            paymentSafetyScore: { type: Number, default: 100 },
+            agreementTransparency: { type: Number, default: 100 },
+            disputeRate: { type: Number, default: 0 },
+            transactionalScore: { type: Number, default: 100 }
+        },
+        communitySignal: {
+            reputationHeatmap: [{ day: String, value: Number }], // for social proof visualization
+            socialProofScore: { type: Number, default: 50 }
+        }
+    },
+
     // Log of when Nuro stepped in
     interventionHistory: [{
         timestamp: { type: Date, default: Date.now },
