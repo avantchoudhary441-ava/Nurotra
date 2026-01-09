@@ -30,22 +30,56 @@ const nuroMemorySchema = new mongoose.Schema({
         timestamp: { type: Date, default: Date.now },
         overallScore: Number, // The "Score Ring" value (0-100)
 
+        // New History Fields
+        collabType: { type: String, enum: ['Paid', 'Unpaid', 'Long-term', 'Short-term'], default: 'Short-term' },
+        outcome: { type: String, enum: ['Success', 'Partial', 'Failed'], default: 'Success' },
+        duration: String, // e.g., "2 weeks"
+        satisfactionScore: {
+            brand: { type: Number, default: 80 },
+            influencer: { type: Number, default: 80 }
+        },
+        aiTag: { type: String, enum: ['Smooth', 'Delayed', 'Mismatch'], default: 'Smooth' },
+
         // Analysis Data
-        positives: [String], // "What Went Right"
-        negatives: [String], // "What Went Wrong"
-        rootCause: String, // "Psychological reason"
+        positives: [String],
+        negatives: [String],
+        rootCause: String,
         fixes: [{
-            text: String,       // "Update your pricing"
-            actionType: String, // "redirect", "auto_fix", "guide"
-            target: String      // "/settings/pricing" or "pricing_modal"
+            text: String,
+            actionType: String,
+            target: String
         }],
-
-        // Outcome Prediction for next time
-        predictedSuccessProbability: Number, // %
-
-        // Raw diff for comparison (e.g., +14%)
+        predictedSuccessProbability: Number,
         scoreDelta: Number
     }],
+    // Behavioral Intelligence
+    behavioralMetrics: {
+        avgReplyTimeTrend: [{ date: Date, minutes: Number }], // Trend line data
+        negotiationTime: { type: Number, default: 0 }, // minutes
+        executionDelay: { type: Number, default: 0 }, // minutes from brief to delivery
+        aiInsightNote: String
+    },
+    // Audience & Niche Intelligence
+    audienceAlignment: {
+        primaryFit: String,
+        secondaryFit: String,
+        avoidZone: [String],
+        nicheStats: [{
+            niche: String,
+            successCount: { type: Number, default: 0 },
+            failureCount: { type: Number, default: 0 }
+        }]
+    },
+    // Milestones & Flags
+    milestones: [{
+        label: String,
+        date: { type: Date, default: Date.now },
+        type: { type: String, enum: ['achievement', 'fact', 'alert'], default: 'fact' }
+    }],
+    // Top-level patterns (Auto-generated)
+    historicalPatterns: [String],
+    // Read-only AI Memory reflections
+    aiLearnings: [String],
     // Log of when Nuro stepped in
     interventionHistory: [{
         timestamp: { type: Date, default: Date.now },
