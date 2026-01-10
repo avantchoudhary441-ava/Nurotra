@@ -21,18 +21,14 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                         return done(null, user);
                     }
 
-                    // 2. Check if user exists with email (merge accounts)
+                    // 2. Check if user exists with email (PREVENT MERGE)
                     const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
                     if (email) {
                         user = await User.findOne({ email });
                         if (user) {
-                            // Update user with googleId for future logins
-                            user.googleId = profile.id;
-                            if (!user.profileImg && profile.photos && profile.photos[0]) {
-                                user.profileImg = profile.photos[0].value;
-                            }
-                            await user.save();
-                            return done(null, user);
+                            // User exists but didn't log in via Google (Step 1 would have caught that)
+                            // Reject the login attempt
+                            return done(null, false, { message: 'EmailExists' });
                         }
                     }
 

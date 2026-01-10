@@ -21,6 +21,19 @@ export default function Login() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
+    const errorParam = params.get("error");
+
+    if (errorParam) {
+      if (errorParam === 'EmailExists') {
+        setError("Account already exists with this email. Please log in with your password.");
+      } else if (errorParam === 'AuthFailed') {
+        setError("Google Authentication failed. Please try again.");
+      } else {
+        setError("Authentication Error. Please try again.");
+      }
+      // Clean URL
+      window.history.replaceState({}, document.title, "/login");
+    }
 
     if (token && !processingRef.current) {
       processingRef.current = true;
