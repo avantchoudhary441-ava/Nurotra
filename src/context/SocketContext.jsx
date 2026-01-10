@@ -26,10 +26,18 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         // Initialize socket once
         if (!socket.current) {
-            socket.current = io(SOCKET_URL);
+            socket.current = io(SOCKET_URL, {
+                transports: ['websocket'], // Force websocket to avoid polling issues
+                reconnection: true,
+            });
 
             socket.current.on('connect', () => {
+                console.log("Socket Connected:", socket.current.id);
                 setMe(socket.current.id);
+            });
+
+            socket.current.on('connect_error', (err) => {
+                console.error("Socket Connection Failed:", err);
             });
 
             socket.current.on('call-user', ({ from, name: callerName, signal, picture }) => {
