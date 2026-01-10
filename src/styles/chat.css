@@ -531,4 +531,295 @@
     background: rgba(255, 255, 255, 0.1);
     color: var(--chat-text);
     border-color: var(--chat-text);
+}/* -------------------------------------- */
+/* Hybrid Call UI - Draggable Overlay       */
+/* -------------------------------------- */
+
+.call-overlay-hybrid {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 320px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    overflow: hidden;
+    color: white;
+    touch-action: none;
+    /* For drag */
+    cursor: grab;
+}
+
+.call-overlay-hybrid:active {
+    cursor: grabbing;
+    transform: scale(0.98);
+}
+
+/* Incoming View */
+.incoming-view {
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.1), transparent);
+}
+
+.pulsating-ring {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.caller-img-lg {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+}
+
+.context-layer h2 {
+    font-size: 1.5rem;
+    margin: 0 0 5px 0;
+    font-weight: 700;
+}
+
+.role-badge {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    display: inline-block;
+    color: #cbd5e1;
+    margin-bottom: 5px;
+}
+
+.call-status-text {
+    color: #94a3b8;
+    margin-bottom: 25px;
+    font-size: 0.9rem;
+}
+
+.action-row {
+    display: flex;
+    gap: 20px;
+}
+
+.btn-answer {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #22c55e;
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+
+.btn-decline {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #ef4444;
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+
+.btn-answer:hover,
+.btn-decline:hover {
+    transform: scale(1.1);
+}
+
+/* Active View */
+.active-view {
+    display: flex;
+    flex-direction: column;
+    height: 450px;
+}
+
+.call-header {
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.user-info-mini {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.verified-icon {
+    color: #3b82f6;
+}
+
+.call-timer {
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #94a3b8;
+}
+
+.visualizer-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: radial-gradient(circle at center, rgba(99, 102, 241, 0.1), transparent 70%);
+}
+
+.active-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+}
+
+.role-pill {
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.status-indicator {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.controls-footer {
+    padding: 20px;
+    display: flex;
+    justify-content: space-evenly;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ctrl-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.ctrl-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.ctrl-btn.active-red {
+    background: #ef4444;
+    color: white;
+}
+
+.ctrl-btn.end-btn {
+    background: #ef4444;
+    width: 60px;
+    /* Slightly larger */
+}
+
+.ctrl-btn.end-btn:hover {
+    background: #dc2626;
+}
+
+.ctrl-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.hidden-video {
+    width: 0;
+    height: 0;
+    opacity: 0;
+}
+
+/* Feedback Overlay */
+.call-overlay-feedback {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border-radius: 20px;
+    padding: 30px;
+    text-align: center;
+    z-index: 10000;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    color: white;
+}
+
+.feedback-card h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.feedback-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.fb-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+
+.fb-btn:hover {
+    transform: scale(1.1);
+}
+
+.fb-btn.helpful {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+}
+
+.fb-btn.not-helpful {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
 }

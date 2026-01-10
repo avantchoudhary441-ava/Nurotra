@@ -40,8 +40,8 @@ export const SocketProvider = ({ children }) => {
                 console.error("Socket Connection Failed:", err);
             });
 
-            socket.current.on('call-user', ({ from, name: callerName, signal, picture }) => {
-                setCall({ isReceivingCall: true, from, name: callerName, signal, picture });
+            socket.current.on('call-user', ({ from, name: callerName, signal, picture, context }) => {
+                setCall({ isReceivingCall: true, from, name: callerName, signal, picture, context });
                 setCurrentCaller(from);
             });
 
@@ -85,9 +85,11 @@ export const SocketProvider = ({ children }) => {
             .catch(err => console.error("Error accessing media devices:", err));
     };
 
-    const callUser = (id, partnerName, partnerPic) => {
+    const callUser = (id, partnerName, partnerPic, partnerContext = {}) => {
         setIsCalling(true);
         setCallEnded(false);
+        // Set local call state immediately so UI shows who we are calling
+        setCall({ isReceivingCall: false, name: partnerName, picture: partnerPic, context: partnerContext });
 
         navigator.mediaDevices.getUserMedia({ video: false, audio: true })
             .then((currentStream) => {
@@ -108,12 +110,23 @@ export const SocketProvider = ({ children }) => {
 
                 peer.on('signal', (data) => {
                     if (socket.current) {
+                        // Context about ME to send to THEM
+                        const myContext = {
+                            role: user.role,
+                            isVerified: user.isVerified,
+                            uniqueId: user.uniqueId
+                            // matchScore: calculated on their end or passed here if we knew it? 
+                            // Usually receiver calculates match score based on caller ID. 
+                            // But for simplicity let's rely on what we have.
+                        };
+
                         socket.current.emit('call-user', {
                             userToCall: id,
                             signalData: data,
                             from: user._id,
                             name: user.name,
-                            picture: user.profileImg
+                            picture: user.profileImg,
+                            context: myContext
                         });
                     }
                 });

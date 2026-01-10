@@ -300,7 +300,17 @@ export default function ChatPage() {
                                                 const targetId = getSenderId(user, selectedChat.users);
                                                 const targetName = getSender(user, selectedChat.users);
                                                 const targetPic = getSenderImg(user, selectedChat.users);
-                                                if (targetId) callUser(targetId, targetName, targetPic);
+
+                                                // Find the actual user object to get details
+                                                const targetUser = selectedChat.users.find(u => u._id !== user._id);
+                                                const targetContext = {
+                                                    role: targetUser?.role || "User",
+                                                    isVerified: targetUser?.isVerified || false,
+                                                    // Add match score if available in chat object, otherwise default
+                                                    matchScore: selectedChat.matchScore || null
+                                                };
+
+                                                if (targetId) callUser(targetId, targetName, targetPic, targetContext);
                                             }}
                                             style={{ marginLeft: 'auto', marginRight: '10px' }}
                                         >
