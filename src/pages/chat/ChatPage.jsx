@@ -237,8 +237,8 @@ export default function ChatPage() {
             <div className="chat-overlay">
                 <div className={`chat-window ${selectedChat ? 'mobile-chat-active' : ''}`}>
 
-                    {/* SIDEBAR */}
-                    <div className="chat-sidebar">
+                    {/* SIDEBAR (LIST View) */}
+                    <div className={`chat-sidebar ${selectedChat ? 'mobile-hidden' : ''}`}>
                         <div className="sidebar-header">
                             <h2>Chats</h2>
                             <button className="back-btn" onClick={() => navigate(-1)}>⬅ Back</button>
@@ -271,8 +271,8 @@ export default function ChatPage() {
                         </div>
                     </div>
 
-                    {/* MAIN CHAT AREA */}
-                    <div className="chat-main">
+                    {/* MAIN CHAT AREA (Window View) */}
+                    <div className={`chat-main ${!selectedChat ? 'mobile-hidden' : ''}`}>
                         {!selectedChat ? (
                             <div className="welcome-screen">
                                 <h1 className="welcome-title">Welcome, {user?.name}</h1>

@@ -531,7 +531,9 @@
     background: rgba(255, 255, 255, 0.1);
     color: var(--chat-text);
     border-color: var(--chat-text);
-}/* -------------------------------------- */
+}
+
+/* -------------------------------------- */
 /* Hybrid Call UI - Draggable Overlay       */
 /* -------------------------------------- */
 
@@ -819,110 +821,333 @@
     color: #4ade80;
 }
 
+.btn-answer,
+.btn-decline {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #ef4444;
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+
+.btn-answer:hover,
+.btn-decline:hover {
+    transform: scale(1.1);
+}
+
+/* Active View */
+.active-view {
+    display: flex;
+    flex-direction: column;
+    height: 450px;
+}
+
+.call-header {
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.user-info-mini {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.verified-icon {
+    color: #3b82f6;
+}
+
+.call-timer {
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #94a3b8;
+}
+
+.visualizer-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: radial-gradient(circle at center, rgba(99, 102, 241, 0.1), transparent 70%);
+}
+
+.active-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+}
+
+.role-pill {
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.status-indicator {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.controls-footer {
+    padding: 20px;
+    display: flex;
+    justify-content: space-evenly;
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ctrl-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.ctrl-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.ctrl-btn.active-red {
+    background: #ef4444;
+    color: white;
+}
+
+.ctrl-btn.end-btn {
+    background: #ef4444;
+    width: 60px;
+    /* Slightly larger */
+}
+
+.ctrl-btn.end-btn:hover {
+    background: #dc2626;
+}
+
+.ctrl-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.hidden-video {
+    width: 0;
+    height: 0;
+    opacity: 0;
+}
+
+/* Feedback Overlay */
+.call-overlay-feedback {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border-radius: 20px;
+    padding: 30px;
+    text-align: center;
+    z-index: 10000;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    color: white;
+}
+
+.feedback-card h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.feedback-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.fb-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+
+.fb-btn:hover {
+    transform: scale(1.1);
+}
+
+.fb-btn.helpful {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+}
+
 .fb-btn.not-helpful {
     background: rgba(239, 68, 68, 0.2);
     color: #f87171;
 }
 
-/* Mobile Responsive Chat Styles */
+/* Mobile Responsive Chat Styles (Thumb-First Polish) */
 @media (max-width: 768px) {
-  .chat-page-container {
-    height: 100vh; /* Fixed height for mobile browser chrome */
-  }
-
-  /* Split View Logic */
-  .hidden-mobile {
-    display: none !important;
-  }
-
-  .chat-sidebar {
-    width: 100%;
-    height: 100%;
-    border-right: none;
-  }
-
-  .chat-main {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .chat-window {
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    border-radius: 0; /* Remove rounded corners on mobile full screen */
-    border: none;
-  }
-
-  /* Call UI Mobile Optimization */
-  .call-overlay-hybrid {
-    width: 95% !important;
-    left: 2.5% !important;
-    right: auto !important;
-    bottom: 80px !important; /* Higher to avoid touch bar */
-    border-radius: 20px;
-  }
-
-  .active-view {
-    height: auto;
-    min-height: 400px;
-  }
-  
-  .controls-footer {
-    padding: 15px;
-  }
-}
-
-/* Mobile Optimization for Chat */
-@media (max-width: 768px) {
-    .chat-window {
-        width: 100%;
+    .chat-page-container {
+        flex-direction: column;
         height: 100vh;
-        border-radius: 0;
-        border: none;
+        overflow: hidden;
     }
 
+    /* Screen Switching Logic */
+    .mobile-hidden {
+        display: none !important;
+    }
+
+    /* List View Polish */
     .chat-sidebar {
-        /* On mobile, hidden if we rely on mobile nav to switch contexts, 
-           or we need a toggle. For now, hiding sidebar to focus on main chat 
-           if user is in /chat route is the simplest approach until a toggle is added. */
-        display: none;
+        width: 100% !important;
+        height: 100%;
+        border-right: none;
+        display: flex;
+        flex-direction: column;
+        padding-bottom: 80px;
+        /* Space for bottom nav/safe area */
     }
 
+    .chat-item {
+        padding: 15px;
+        /* Larger tap area */
+        min-height: 72px;
+        /* Minimum 44px+ rule */
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .chat-avatar {
+        width: 50px;
+        height: 50px;
+    }
+
+    /* Chat Window Polish */
     .chat-main {
-        width: 100%;
-        height: 100vh;
-        /* Full height */
+        width: 100% !important;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        position: fixed;
+        top: 0;
+        left: 0;
+        background: var(--bg-main);
+        z-index: 50;
     }
 
-    .chat-header {
-        padding: 0.8rem;
+    .chat-window-header {
+        padding: 15px;
+        height: 70px;
+        /* Taller header */
+        display: flex;
+        align-items: center;
+    }
+
+    /* Thumb-Friendly Back Button */
+    .back-btn-mobile {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        /* Golden Rule */
+        background: rgba(255, 255, 255, 0.05);
+        /* Slight BG for visibility */
+        border-radius: 50%;
+        border: none;
+        font-size: 1.2rem;
+        color: var(--text-main);
+        margin-right: 12px;
+        cursor: pointer;
+    }
+
+    .messages-box {
+        flex: 1;
+        padding: 15px;
+        padding-bottom: 20px;
+    }
+
+    /* Thumb-Friendly Input Area */
+    .input-area-container {
+        padding: 12px 15px;
+        padding-bottom: 25px;
+        /* Lift up for iOS home bar */
+        background: var(--card-bg);
+        min-height: 80px;
+        /* Taller area */
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .chat-textarea {
+        min-height: 44px;
+        /* Taller input */
+        padding: 12px;
+    }
+
+    .send-btn,
+    .attach-btn,
+    .magic-btn {
+        width: 44px;
+        height: 44px;
+        /* Taller buttons */
     }
 
     .message-bubble {
         max-width: 85%;
-        font-size: 0.95rem;
+        font-size: 1rem;
+        padding: 12px 16px;
     }
 
-    .input-area-container {
-        padding: 1rem;
-        padding-bottom: 80px;
-        /* Space for Mobile Nav */
-    }
-
-    /* Call Overlay Mobile */
+    /* Call Overlay Mobile Sizing - Bottom Sheet Style */
     .call-overlay-hybrid {
         width: 95% !important;
-        bottom: 80px !important;
-        right: 2.5% !important;
         left: 2.5% !important;
+        bottom: 20px !important;
         border-radius: 20px;
+        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
     }
 
-    .active-view {
-        height: auto;
-        min-height: 400px;
+    .controls-footer {
+        padding: 15px;
     }
 }
