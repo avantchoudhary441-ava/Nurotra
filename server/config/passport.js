@@ -28,8 +28,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                         if (user) {
                             // Update user with googleId for future logins
                             user.googleId = profile.id;
-                            if (!user.avatar && profile.photos && profile.photos[0]) {
-                                user.avatar = profile.photos[0].value;
+                            if (!user.profileImg && profile.photos && profile.photos[0]) {
+                                user.profileImg = profile.photos[0].value;
                             }
                             await user.save();
                             return done(null, user);
@@ -40,9 +40,10 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                     user = await User.create({
                         googleId: profile.id,
                         name: profile.displayName || "Google User",
-                        email: email, // If null, this might fail schema validation, but better than crashing here
-                        avatar: profile.photos && profile.photos[0] ? profile.photos[0].value : "",
-                        isVerified: true // Google accounts are implicitly verified
+                        email: email,
+                        profileImg: profile.photos && profile.photos[0] ? profile.photos[0].value : "",
+                        uniqueId: Date.now().toString(), // Generate simplified ID
+                        isVerified: true
                     });
 
                     return done(null, user);
