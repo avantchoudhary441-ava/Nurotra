@@ -235,7 +235,7 @@ export default function ChatPage() {
 
             {/* Overlay Gradient */}
             <div className="chat-overlay">
-                <div className="chat-window">
+                <div className={`chat-window ${selectedChat ? 'mobile-chat-active' : ''}`}>
 
                     {/* SIDEBAR */}
                     <div className="chat-sidebar">
@@ -283,6 +283,15 @@ export default function ChatPage() {
                             <>
                                 <div className="chat-header">
                                     <div className="header-left">
+                                        {/* Mobile Back Button */}
+                                        <button
+                                            className="back-btn-mobile"
+                                            onClick={() => setSelectedChat(null)}
+                                            style={{ marginRight: '10px', background: 'none', border: 'none', color: 'var(--chat-text)', cursor: 'pointer', display: 'none' }}
+                                        >
+                                            ⬅
+                                        </button>
+
                                         <img
                                             src={getSenderImg(user, selectedChat.users) || "https://via.placeholder.com/150"}
                                             alt="Current"

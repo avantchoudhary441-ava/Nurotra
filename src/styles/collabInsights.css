@@ -199,3 +199,37 @@
         grid-template-columns: 1fr;
     }
 }
+/* Enhanced Mobile Optimization */
+@media (max-width: 768px) {
+    .collab-insights-container {
+        padding: 1rem;
+        padding-top: 40px;
+    }
+
+    .insights-header {
+        padding: 1rem;
+        border-radius: 16px;
+    }
+
+    .score-main {
+        font-size: 2.5rem;
+    }
+    
+    .insight-card {
+        padding: 1.2rem;
+    }
+    
+    .pattern-item {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
+
+
+/* Fix Overlap - Increase Top Padding */
+@media (max-width: 768px) {
+    .collab-insights-container {
+        padding-top: 90px !important;
+    }
+}
+

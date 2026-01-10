@@ -3,7 +3,7 @@ import "../styles/dashboard.css";
 import NurotraLogo from "../assets/NurotraLogo.png";
 import { NavLink, useNavigate, useLocation, useParams } from "react-router-dom";
 
-export default function Sidebar({ role = "influencer" }) {
+export default function Sidebar({ role = "influencer", isOpen, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -52,32 +52,44 @@ export default function Sidebar({ role = "influencer" }) {
   }
 
   return (
-    <aside className="dash-sidebar">
+    <>
+      {/* Mobile Overlay */}
       <div
-        className="dash-sidebar-top dash-cursor-pointer"
-        onClick={() => navigate("/")}
-        title="Go to Home"
-      >
-        <div className="dash-logo-compact"><img src={NurotraLogo} alt="Nurotra Logo" /></div>
-        <div className="dash-brand">Nurotra</div>
-      </div>
+        className={`sidebar-overlay ${isOpen ? 'active' : ''}`}
+        onClick={onClose}
+      />
 
-      <nav className="dash-nav">
-        {items.map((it) => (
-          <NavLink
-            key={it.id}
-            to={it.to}
-            className={({ isActive }) =>
-              "dash-nav-item" + (isActive ? " active" : "")
-            }
-          >
-            <span className="dash-icon">{it.icon}</span>
-            <span className="dash-label">{it.label}</span>
-          </NavLink>
-        ))}
-      </nav>
+      <aside className={`dash-sidebar ${isOpen ? 'active' : ''}`}>
+        <div className="dash-sidebar-header-mobile">
+          <div className="dash-brand">Menu</div>
+          <button className="close-sidebar-btn" onClick={onClose}>✕</button>
+        </div>
 
+        <div
+          className="dash-sidebar-top dash-cursor-pointer"
+          onClick={() => navigate("/")}
+          title="Go to Home"
+        >
+          <div className="dash-logo-compact"><img src={NurotraLogo} alt="Nurotra Logo" /></div>
+          <div className="dash-brand">Nurotra</div>
+        </div>
 
-    </aside>
+        <nav className="dash-nav">
+          {items.map((it) => (
+            <NavLink
+              key={it.id}
+              to={it.to}
+              onClick={onClose} // Auto close on mobile nav
+              className={({ isActive }) =>
+                "dash-nav-item" + (isActive ? " active" : "")
+              }
+            >
+              <span className="dash-icon">{it.icon}</span>
+              <span className="dash-label">{it.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+      </aside>
+    </>
   );
 }

@@ -7,6 +7,8 @@ import '../../styles/dashboard.css';
 import '../../styles/overview.css';
 
 export default function Overview() {
+    const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+
     // Mock Data for "Not Created Yet" state
     const userData = {
         profile: 75,
@@ -83,12 +85,26 @@ export default function Overview() {
 
     return (
         <div className="influencer-dashboard">
-            <Sidebar role="influencer" />
+            <Sidebar
+                role="influencer"
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+            />
 
-            <div className="overview-container" style={{ marginLeft: '250px', width: 'calc(100% - 250px)' }}>
+            <div className="overview-container">
                 <header className="overview-header">
-                    <h1>Professional DNA</h1>
-                    <p className="overview-subtitle">Your analytical diagnostic scan</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <button
+                            className="mobile-menu-btn"
+                            onClick={() => setIsSidebarOpen(true)}
+                        >
+                            ☰
+                        </button>
+                        <div>
+                            <h1>Professional DNA</h1>
+                            <p className="overview-subtitle">Your analytical diagnostic scan</p>
+                        </div>
+                    </div>
                 </header>
 
                 <div className="overview-main-grid">

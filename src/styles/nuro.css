@@ -24,6 +24,13 @@
     font-family: 'Inter', sans-serif;
 }
 
+@media (max-width: 768px) {
+    .nuro-orb-container {
+        bottom: 90px;
+        right: 15px;
+    }
+}
+
 .nuro-orb {
     width: 60px;
     height: 60px;

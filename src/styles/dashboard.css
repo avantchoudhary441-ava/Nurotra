@@ -796,11 +796,59 @@ line chart design */
 
 
 /* Chart Tooltip Overrides */
+/* Chart Tooltip Overrides */
 .chart-tooltip-wrapper .recharts-default-tooltip {
   background-color: var(--card-bg) !important;
   border-radius: 10px !important;
   border: 1px solid var(--border-subtle) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ------------------------------------------------ */
+/* MOBILE RESPONSIVE DASHBOARD                     */
+/* ------------------------------------------------ */
+
+/* Desktop Default (Restoring what was inline in JS) */
+.overview-container {
+  margin-left: 240px;
+  /* Sidebar width + padding */
+  width: calc(100% - 240px);
+  padding: 2rem;
+  transition: all 0.3s ease;
+}
+
+@media (max-width: 980px) {
+  /* Sidebar is hidden by default rule on line 673, 
+     so we reset main content to full width */
+
+  .overview-container {
+    margin-left: 0;
+    width: 100%;
+    padding: 16px;
+  }
+
+  .dashboard-row {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stack profile card vertically */
+  .profile-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .profile-right {
+    width: 100%;
+    margin-top: 10px;
+  }
 }
 
 .chart-tooltip-wrapper .recharts-tooltip-item {
@@ -1000,4 +1048,112 @@ line chart design */
   transform: translateY(-2px) !important;
   box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
   filter: brightness(1.1) !important;
+}/* ------------------------------------------------ */
+/* MOBILE SIDEBAR DRAWER STYLES                    */
+/* ------------------------------------------------ */
+
+/* Mobile Menu Button - Default Hidden */
+.mobile-menu-btn {
+    display: none;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-main);
+    font-size: 1.2rem;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-right: 15px;
+}
+
+/* Sidebar Overlay Backdrop */
+.sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 998;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Mobile Header inside Sidebar */
+.dash-sidebar-header-mobile {
+    display: none;
+    /* Hidden on desktop */
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.close-sidebar-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+@media (max-width: 980px) {
+
+    /* Show Menu Button */
+    .mobile-menu-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Transform Sidebar into Drawer */
+    .dash-sidebar {
+        display: flex;
+        /* Override display:none from previous rule if any */
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 280px;
+        background: var(--card-bg);
+        /* Opaque background */
+        z-index: 999;
+        transform: translateX(-100%);
+        /* Hidden by default */
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.2);
+        border-right: 1px solid var(--border-subtle);
+        padding: 20px;
+    }
+
+    .dash-sidebar.active {
+        transform: translateX(0);
+        /* Slide in */
+    }
+
+    .dash-sidebar-header-mobile {
+        display: flex;
+    }
+}/* ------------------------------------------------ */
+/* MOBILE FLOATING ELEMENTS OVERRIDES              */
+/* ------------------------------------------------ */
+
+@media (max-width: 768px) {
+
+    /* Lift floating Chat button above bottom bar/safe area */
+    .floating-chat-btn {
+        bottom: 90px !important;
+        left: 15px !important;
+        width: 50px !important;
+        height: 50px !important;
+    }
+
+    /* Ensure body has enough padding so content isn't covered */
+    body {
+        padding-bottom: 100px;
+    }
 }

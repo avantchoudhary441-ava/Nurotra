@@ -180,10 +180,24 @@ nav a:hover {
 @media (max-width: 768px) {
   header {
     padding: 0 16px;
+    height: 60px;
+    /* Smaller header on mobile */
   }
 
-  nav a {
+  nav {
     display: none;
-    /* Hide links on mobile */
+    /* Hide standard nav links */
+  }
+
+  /* We might want to show a hamburger menu here later, 
+     but for now ensure logo and user profile are visible */
+
+  .header-user-section {
+    gap: 0.5rem;
+  }
+
+  .header-welcome-text {
+    display: none;
+    /* Hide welcome text on mobile to save space */
   }
 }

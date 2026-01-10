@@ -351,3 +351,46 @@
         grid-template-columns: 1fr;
     }
 }
+/* Mobile Optimization */
+@media (max-width: 768px) {
+    .history-container {
+        padding: 1rem;
+    }
+
+    .history-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .history-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .behaviour-grid {
+        grid-template-columns: 1fr; /* Stack metrics */
+    }
+    
+    .collab-details-expanded {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* Fix Overlap - Increase Top Padding */
+@media (max-width: 768px) {
+    .history-container {
+        padding-top: 90px !important;
+    }
+    
+    /* Fix Chart Label Overlap */
+    .recharts-cartesian-axis-tick-value {
+        font-size: 10px;
+    }
+    
+    .evolution-timeline {
+        margin-bottom: 2rem;
+    }
+}
+

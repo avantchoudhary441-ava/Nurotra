@@ -309,3 +309,47 @@
         margin: 0 auto;
     }
 }
+/* Enhanced Mobile Optimization */
+@media (max-width: 768px) {
+    .safety-container {
+        padding: 1rem;
+        padding-top: 40px;
+    }
+
+    .trust-snapshot {
+        padding: 1.5rem;
+        gap: 1.5rem;
+        border-radius: 1rem;
+    }
+    
+    .snapshot-score-wrap {
+        width: 140px;
+        height: 140px;
+    }
+
+    .pillar-card {
+        padding: 1rem;
+    }
+
+    .pillar-header {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .pillar-score {
+        align-self: flex-start;
+    }
+    
+    .intel-grid, .pillars-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* Fix Overlap - Increase Top Padding */
+@media (max-width: 768px) {
+    .safety-container {
+        padding-top: 90px !important;
+    }
+}
+
