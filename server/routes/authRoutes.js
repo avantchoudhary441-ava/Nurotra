@@ -19,7 +19,8 @@ router.get(
 );
 
 // 2. Callback from Google
-"/google/callback",
+router.get(
+    "/google/callback",
     (req, res, next) => {
         passport.authenticate("google", { session: false }, (err, user, info) => {
             const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
