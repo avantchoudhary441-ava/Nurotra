@@ -185,8 +185,9 @@ nav a:hover {
   }
 
   nav {
-    display: none;
-    /* Hide standard nav links */
+    display: flex;
+    /* Restore visibility */
+    gap: 10px;
   }
 
   /* We might want to show a hamburger menu here later, 

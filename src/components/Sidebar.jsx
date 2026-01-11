@@ -3,9 +3,10 @@ import "../styles/dashboard.css";
 import NurotraLogo from "../assets/NurotraLogo.png";
 import { NavLink, useNavigate, useLocation, useParams } from "react-router-dom";
 
-export default function Sidebar({ role = "influencer", isOpen, onClose }) {
+export default function Sidebar({ role = "influencer" }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isMobileOpen, setIsMobileOpen] = React.useState(false);
 
   // Detect userId from various possible route patterns
   // Pattern: /influencer/profile/USERID or /influencer/safety/USERID
@@ -53,25 +54,45 @@ export default function Sidebar({ role = "influencer", isOpen, onClose }) {
 
   return (
     <>
+      {/* Mobile Menu Trigger (Hamburger) - Visible only on Mobile */}
+      <button
+        className="mobile-menu-trigger-btn"
+        onClick={() => setIsMobileOpen(true)}
+        aria-label="Open Menu"
+      >
+        ☰
+      </button>
+
       {/* Mobile Overlay */}
       <div
-        className={`sidebar-overlay ${isOpen ? 'active' : ''}`}
-        onClick={onClose}
+        className={`sidebar-overlay ${isMobileOpen ? 'active' : ''}`}
+        onClick={() => setIsMobileOpen(false)}
       />
 
-      <aside className={`dash-sidebar ${isOpen ? 'active' : ''}`}>
+      {/* Sidebar Drawer */}
+      {/* Sidebar Drawer */}
+      <aside className={`dash-sidebar ${isMobileOpen ? 'active' : ''}`}>
+        {/* Mobile Header */}
         <div className="dash-sidebar-header-mobile">
-          <div className="dash-brand">Menu</div>
-          <button className="close-sidebar-btn" onClick={onClose}>✕</button>
+          <div
+            className="mobile-header-brand dash-cursor-pointer"
+            onClick={() => {
+              navigate("/");
+              setIsMobileOpen(false);
+            }}
+          >
+            <div className="dash-logo-compact"><img src={NurotraLogo} alt="Nurotra Logo" /></div>
+            <div className="dash-brand">Nurotra</div>
+          </div>
+          <button className="close-sidebar-btn" onClick={() => setIsMobileOpen(false)}>✕</button>
         </div>
 
-        <div
-          className="dash-sidebar-top dash-cursor-pointer"
-          onClick={() => navigate("/")}
-          title="Go to Home"
-        >
-          <div className="dash-logo-compact"><img src={NurotraLogo} alt="Nurotra Logo" /></div>
-          <div className="dash-brand">Nurotra</div>
+        {/* Desktop Header (Restored) */}
+        <div className="dash-sidebar-top mobile-hidden">
+          <div className="dash-logo-compact cursor-pointer" onClick={() => navigate("/")}>
+            <img src={NurotraLogo} alt="Nurotra Logo" />
+          </div>
+          <div className="dash-brand cursor-pointer" onClick={() => navigate("/")}>Nurotra</div>
         </div>
 
         <nav className="dash-nav">
@@ -79,7 +100,7 @@ export default function Sidebar({ role = "influencer", isOpen, onClose }) {
             <NavLink
               key={it.id}
               to={it.to}
-              onClick={onClose} // Auto close on mobile nav
+              onClick={() => setIsMobileOpen(false)} // Auto close on mobile nav
               className={({ isActive }) =>
                 "dash-nav-item" + (isActive ? " active" : "")
               }

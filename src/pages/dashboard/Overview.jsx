@@ -104,72 +104,67 @@ export default function Overview() {
                     </div>
                 </header>
 
-                {/* Mobile Navigation Slider (Horizontal) */}
+                {/* Responsive Layout Strategy: 
+                    1. Mobile Nav (Horizontal)
+                    2. Hero Insight (Always visible or adaptive)
+                    3. Graph Section (Stacked on mobile)
+                    4. Score List (Adaptive)
+                */}
+
                 <MobileNav role="influencer" />
 
-                {/* --- MOBILE VIEW: Hero + Compact Rows --- */}
-                <div className="mobile-only-section">
-                    <MobileInsightCard overallScore={overallScore} topInsight={topInsight} />
+                <div className="dashboard-content-wrapper">
+                    {/* Mobile Hero - Excellent summary, keep it but let it flow */}
+                    <div className="mobile-hero-wrapper">
+                        <MobileInsightCard overallScore={overallScore} topInsight={topInsight} />
+                    </div>
 
-                    <div className="mobile-score-list">
-                        <h3 className="section-label">Metrics at a Glance</h3>
-                        {scores.map((s) => {
-                            const val = userData[s.key];
-                            // Status Color Logic
-                            let statusColor = 'red';
-                            if (val >= 80) statusColor = '#4ade80'; // Green
-                            else if (val >= 60) statusColor = '#facc15'; // Yellow
-                            else statusColor = '#f87171'; // Red
+                    <div className="overview-main-grid">
+                        {/* Left: Graph & DNA Visualization */}
+                        <div className="overview-graph-section">
+                            <div className="graph-card">
+                                <PentagonGraph userData={userData} averageData={averageData} />
+                            </div>
+                            <div className="insight-section">
+                                <InsightPanel insights={insights} />
+                            </div>
+                        </div>
 
-                            return (
-                                <div key={s.key} className="mobile-score-row">
-                                    <div className="ms-icon" style={{ backgroundColor: `${statusColor}20`, color: statusColor }}>
-                                        {/* Simple dot or icon based on key? For now a dot */}
-                                        ●
-                                    </div>
-                                    <div className="ms-content">
-                                        <div className="ms-title">{s.title.replace(' Score', '')}</div>
-                                        <div className="ms-sub">
-                                            {s.history.label}
+                        {/* Right: Detailed Score Cards */}
+                        <div className="overview-scores-section">
+                            <h3>Dimensions</h3>
+                            {/* Detailed Cards for larger screens */}
+                            <div className="scores-list desktop-scores">
+                                {scores.map((s, i) => (
+                                    <ScoreCard
+                                        key={s.key}
+                                        title={s.title}
+                                        subtitle={s.subtitle}
+                                        info={s.info}
+                                        score={userData[s.key]}
+                                        history={s.history}
+                                        delay={i * 0.1}
+                                    />
+                                ))}
+                            </div>
+
+                            {/* Compact List for smaller screens (Better UX but same data) */}
+                            <div className="mobile-score-list mobile-scores">
+                                {scores.map((s) => {
+                                    const val = userData[s.key];
+                                    let statusColor = val >= 80 ? '#4ade80' : val >= 60 ? '#facc15' : '#f87171';
+                                    return (
+                                        <div key={s.key} className="mobile-score-row">
+                                            <div className="ms-icon" style={{ backgroundColor: `${statusColor}20`, color: statusColor }}>●</div>
+                                            <div className="ms-content">
+                                                <div className="ms-title">{s.title.replace(' Score', '')}</div>
+                                                <div className="ms-sub">{s.history.label}</div>
+                                            </div>
+                                            <div className="ms-val">{val}</div>
                                         </div>
-                                    </div>
-                                    <div className="ms-val">
-                                        {val}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* --- DESKTOP VIEW: Graph + Cards --- */}
-                <div className="overview-main-grid desktop-only-section">
-                    {/* Left: Graph & DNA Visualization */}
-                    <div className="overview-graph-section">
-                        <div className="graph-card">
-                            <PentagonGraph userData={userData} averageData={averageData} />
-                        </div>
-                        {/* Insight Panel under the graph */}
-                        <div className="insight-section">
-                            <InsightPanel insights={insights} />
-                        </div>
-                    </div>
-
-                    {/* Right: Detailed Score Cards */}
-                    <div className="overview-scores-section">
-                        <h3>Dimensions</h3>
-                        <div className="scores-list">
-                            {scores.map((s, i) => (
-                                <ScoreCard
-                                    key={s.key}
-                                    title={s.title}
-                                    subtitle={s.subtitle}
-                                    info={s.info}
-                                    score={userData[s.key]}
-                                    history={s.history}
-                                    delay={i * 0.1}
-                                />
-                            ))}
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
                 </div>

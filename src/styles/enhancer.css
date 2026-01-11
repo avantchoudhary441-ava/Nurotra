@@ -1,3 +1,7 @@
+/* ---------------------------------------------------------
+   Profile Enhancer (AI Studio 2.0) — Glassmorphism UI
+--------------------------------------------------------- */
+
 /* Glassmorphism Overlay */
 .enhancer-overlay {
     position: fixed;
@@ -15,8 +19,10 @@
 
 /* Main Window */
 .enhancer-window {
-    width: 900px;
-    height: 600px;
+    width: 95%;
+    max-width: 900px;
+    height: 85vh;
+    max-height: 600px;
     background: rgba(15, 23, 42, 0.9);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
@@ -43,6 +49,7 @@
     background: linear-gradient(to right, #a78bfa, #f472b6);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .eh-title span {
@@ -213,7 +220,6 @@
 
 .eh-alert-card {
     background: rgba(245, 158, 11, 0.1);
-    /* Amber Tint */
     border-left: 4px solid #f59e0b;
     padding: 1.2rem;
     border-radius: 8px;
@@ -584,4 +590,195 @@
 .comp-insight {
     font-size: 0.8rem;
     color: rgba(255, 255, 255, 0.5);
+}
+
+/* -------------------------------------
+   MOBILE OPTIMIZATIONS (Max-Width 1024px)
+   ------------------------------------- */
+@media (max-width: 1024px) {
+
+    /* Full Screen Window - Strict Fix */
+    div.enhancer-window {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        /* Dynamic Viewport Height */
+        max-width: none !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+        /* MAX INTEGER Z-INDEX to beat sticky footers */
+        z-index: 2147483647 !important;
+        display: flex;
+        flex-direction: column;
+        background: #0f172a !important;
+        overflow: hidden !important;
+        /* Prevent double scrollbars */
+    }
+
+    div.enhancer-overlay {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        z-index: 2147483647 !important;
+        display: block !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        /* Dynamic Viewport Height for Mobile */
+        max-width: none !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+        z-index: 2000 !important;
+        display: flex;
+        flex-direction: column;
+        background: #0f172a !important;
+        /* Solid background to prevent transparency issues */
+    }
+
+    div.enhancer-overlay {
+        display: block !important;
+        /* Remove flex interference */
+        padding: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        background: black !important;
+        /* Fallback opaque background */
+    }
+
+    /* Column Layout - Ensure header takes fixed space and body takes rest */
+    .enhancer-body {
+        flex-direction: column;
+        flex: 1;
+        /* Take remaining height */
+        height: auto !important;
+        /* Let flex handle it */
+        overflow: hidden;
+        /* Prevent body scroll, handle internally */
+    }
+
+    /* Horizontal Scrollable Nav */
+    .enhancer-sidebar {
+        width: 100% !important;
+        height: auto !important;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 10px;
+        gap: 10px;
+        /* Hide scrollbar */
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        flex-shrink: 0;
+        background: rgba(15, 23, 42, 0.95);
+        /* ensure nav is visible */
+    }
+
+    .enhancer-sidebar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .eh-nav-item {
+        flex-shrink: 0;
+        white-space: nowrap;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        font-size: 0.85rem;
+    }
+
+    .eh-dot {
+        display: none;
+    }
+
+    /* Adjust Content Padding - Scrollable Area */
+    .enhancer-content {
+        padding: 1rem;
+        width: 100% !important;
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        /* Smooth scrolling */
+        padding-bottom: 80px;
+        /* Space for bottom elements if any */
+    }
+
+    /* Single Column Grids */
+    .eh-dashboard-grid,
+    .compatibility-grid,
+    .eh-split-cols {
+        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .eh-section-full {
+        grid-column: span 1;
+    }
+
+    /* Adjust Charts & Metrics */
+    .eh-impact-row {
+        flex-direction: row;
+        gap: 10px;
+    }
+
+    .impact-box {
+        padding: 1rem;
+    }
+
+    .impact-box span {
+        font-size: 1.5rem;
+    }
+
+    /* Header Compact */
+    .enhancer-header {
+        padding: 0.8rem 1rem;
+        height: 60px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .eh-title h2 {
+        font-size: 1rem;
+    }
+
+    .eh-title span {
+        font-size: 0.7rem;
+        display: block;
+    }
+
+    .eh-close-btn {
+        font-size: 1.5rem;
+        padding: 5px;
+    }
+
+    /* Bio Cards */
+    .eh-bios-grid {
+        flex-direction: column;
+    }
+
+    .bio-card {
+        min-width: unset;
+        width: 100%;
+    }
 }

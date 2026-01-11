@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import ReactDOM from "react-dom";
 import { motion, AnimatePresence, useSpring, useTransform } from "framer-motion";
 import "../styles/enhancer.css";
 import { aiService } from "../services/apiService";
@@ -55,7 +56,7 @@ export default function ProfileEnhancer({ profileData, onClose, onApplyChanges }
 
     if (!profileData) return null;
 
-    return (
+    return ReactDOM.createPortal(
         <div className="enhancer-overlay">
             <motion.div
                 className="enhancer-window"
@@ -112,7 +113,8 @@ export default function ProfileEnhancer({ profileData, onClose, onApplyChanges }
                     </div>
                 </div>
             </motion.div>
-        </div>
+        </div>,
+        document.body
     );
 }
 

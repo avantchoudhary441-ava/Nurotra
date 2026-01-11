@@ -1023,8 +1023,17 @@
     color: #f87171;
 }
 
-/* Mobile Responsive Chat Styles (Thumb-First Polish) */
-@media (max-width: 768px) {
+/* Mobile Responsive Chat Styles (Thumb-First Polish)/* Mobile Optimization for Chat */
+@media (max-width: 980px) {
+
+    /* Increased Breakpoint */
+    .chat-window {
+        width: 100%;
+        height: 100vh;
+        border-radius: 0;
+        border: none;
+    }
+
     .chat-page-container {
         flex-direction: column;
         height: 100vh;
@@ -1039,6 +1048,7 @@
     /* List View Polish */
     .chat-sidebar {
         width: 100% !important;
+        /* Ensure full width */
         height: 100%;
         border-right: none;
         display: flex;
@@ -1149,5 +1159,140 @@
 
     .controls-footer {
         padding: 15px;
+    }
+}
+
+/* -------------------------------------------
+   MOBILE OPTIMIZATIONS (Max-Width 768px)
+   ------------------------------------------- */
+@media (max-width: 768px) {
+    .chat-page-container {
+        padding: 0;
+        background: black;
+        /* Prevent white flashes */
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh !important;
+        height: 100dvh !important;
+        /* Modern mobile fix */
+        overflow: hidden;
+        z-index: 9999;
+    }
+
+    .chat-overlay {
+        padding: 0;
+        height: 100%;
+    }
+
+    .chat-window {
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        max-height: none;
+        border-radius: 0;
+        border: none;
+        flex-direction: column;
+    }
+
+    /* Navigation Toggling */
+    .mobile-hidden {
+        display: none !important;
+    }
+
+    /* Sidebar Full Screen */
+    .chat-sidebar {
+        width: 100%;
+        height: 100%;
+        border-right: none;
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    /* Main Chat Full Screen */
+    .chat-main {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Header Compact */
+    .chat-header {
+        padding: 0.8rem 1rem;
+    }
+
+    .back-btn-mobile {
+        display: block !important;
+        font-size: 1.2rem;
+    }
+
+    .header-avatar {
+        width: 35px;
+        height: 35px;
+    }
+
+    .header-details h3 {
+        font-size: 1rem;
+    }
+
+    /* Messages Area */
+    .messages-box {
+        padding: 1rem;
+    }
+
+    .message-bubble {
+        max-width: 80%;
+        font-size: 0.95rem;
+        padding: 0.8rem 1rem;
+    }
+
+    /* Input Area - Fix White Background Issues */
+    .input-area-container {
+        padding: 10px;
+        background: rgba(20, 20, 20, 0.95);
+        /* Opaque dark background */
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        position: relative;
+        z-index: 50;
+    }
+
+    .input-area-wrapper {
+        padding: 6px;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        /* Proper input background */
+    }
+
+    .chat-textarea {
+        font-size: 0.95rem;
+        max-height: 100px;
+    }
+
+    /* Smart Chips Horizontal Scroll */
+    .smart-replies-container {
+        overflow-x: auto;
+        white-space: nowrap;
+        padding-bottom: 5px;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 5px;
+    }
+
+    .smart-chips-scroll {
+        display: flex;
+        gap: 8px;
+    }
+
+    .smart-chip {
+        flex-shrink: 0;
+        font-size: 0.8rem;
+        padding: 6px 12px;
+    }
+
+    /* Hide large welcome screen on mobile to save space/confusion */
+    .welcome-screen {
+        padding: 2rem;
+    }
+
+    .welcome-title {
+        font-size: 1.8rem;
     }
 }

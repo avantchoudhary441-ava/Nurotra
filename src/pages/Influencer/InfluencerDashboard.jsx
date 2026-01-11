@@ -168,7 +168,7 @@ export default function InfluencerDashboard() {
 
           <div className="nav-right">
             {!userId && (
-              <div className="dash-sidebar-bottom">
+              <div className="dash-sidebar-bottom mobile-hidden">
                 <div
                   className="dash-cta dash-cursor-pointer"
                   onClick={handleFindMatches}
@@ -347,6 +347,20 @@ export default function InfluencerDashboard() {
         >
           <MessageCircle size={28} />
         </button>
+      )}
+
+      {/* MOBILE STICKY FOOTER FOR FIND MATCHES */}
+      {!userId && (
+        <div className="mobile-find-matches-footer">
+          <button
+            className="btn-primary-gradient mobile-footer-btn"
+            onClick={handleFindMatches}
+            disabled={findingMatches}
+            style={{ width: '50%', padding: '14px', fontSize: '16px', borderRadius: '12px', textAlign: 'center', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto' }}
+          >
+            {findingMatches ? "Finding Matches..." : "Find Matches"}
+          </button>
+        </div>
       )}
 
     </div>
