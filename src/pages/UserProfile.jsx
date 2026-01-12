@@ -55,10 +55,17 @@ export default function UserProfile() {
         <div className="profile-container">
             <BackgroundEffects />
 
-            {/* Theme Toggle Button (Top Right) */}
+            {/* Top Right Controls */}
             <div className="profile-theme-toggle-wrapper">
                 <button
-                    className="theme-toggle profile-theme-toggle-btn"
+                    className="icon-btn-floating"
+                    onClick={() => setLabOpen(true)}
+                    title="Open Nuro Lab"
+                >
+                    🧪
+                </button>
+                <button
+                    className="icon-btn-floating"
                     onClick={toggleTheme}
                     title="Toggle Theme"
                 >
@@ -68,14 +75,23 @@ export default function UserProfile() {
 
             <div className="profile-card-wrapper">
                 <div className="profile-header">
-                    <div className="profile-avatar-large">
-                        {user.profileImg ? <img src={user.profileImg} alt="Profile" /> : "👤"}
+                    <div className={user.profileImg ? "profile-avatar-large" : "profile-avatar-large placeholder"}>
+                        {user.profileImg ? (
+                            <img src={user.profileImg} alt={user.name} />
+                        ) : (
+                            "👤"
+                        )}
                     </div>
+
                     <h1>{user.name}</h1>
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '0.5rem' }}>
-                        <span className="profile-role-badge">{user.role?.toUpperCase()}</span>
+
+                    {/* Role & Status Badges */}
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '10px' }}>
+                        <span className="profile-role-badge">
+                            {user.role || "USER"}
+                        </span>
                         {deliverablesCount > 0 && (
-                            <span className="profile-role-badge" style={{ background: 'rgba(74, 144, 226, 0.2)', border: '1px solid #4A90E2', color: '#4A90E2' }}>
+                            <span className="profile-role-badge" style={{ borderColor: '#4ade80', color: '#4ade80', background: 'rgba(74, 222, 128, 0.1)' }}>
                                 ✅ {deliverablesCount} PROVEN
                             </span>
                         )}
@@ -85,36 +101,35 @@ export default function UserProfile() {
                 <div className="profile-details">
                     <div className="detail-item">
                         <label>Nuro ID</label>
-                        <div className="unique-id-box">{user.uniqueId || user._id}</div>
-                        <small className="id-hint">Share this Nuro ID with brands/influencers to connect.</small>
+                        <span className="unique-id-value">{user.uniqueId || user._id.substring(0, 12)}</span>
                     </div>
 
                     <div className="detail-item">
                         <label>Email</label>
-                        <div className="detail-value">{user.email}</div>
+                        <span className="detail-value">{user.email}</span>
                     </div>
 
                     <div className="detail-item">
-                        <label>Account Status</label>
-                        <div className="detail-value status-active">Active</div>
+                        <label>Status</label>
+                        <span className="detail-value status-active">Active</span>
+                    </div>
+
+                    <div className="detail-item">
+                        <label>Joined</label>
+                        <span className="detail-value">{new Date(user.createdAt || Date.now()).toLocaleDateString()}</span>
                     </div>
                 </div>
 
-                {/* 3. PROFILE ACTIONS (Footer) */}
                 <div className="profile-actions-footer">
-                    <button className="btn-secondary" onClick={() => navigate(-1)}>Back</button>
-                    <button className="btn-danger" onClick={handleLogout}>Logout</button>
+                    <button className="btn-secondary" onClick={() => navigate(-1)}>
+                        Back
+                    </button>
+                    <button className="btn-danger" onClick={handleLogout}>
+                        Sign Out
+                    </button>
                 </div>
             </div>
 
-            {/* NURO LAB INTEGRATION */}
-            <button
-                className="lab-toggle-btn"
-                onClick={() => setLabOpen(true)}
-                title="Open Nuro Lab"
-            >
-                🧪
-            </button>
             <NuroLab isOpen={isLabOpen} toggleLab={() => setLabOpen(false)} />
         </div>
     );
