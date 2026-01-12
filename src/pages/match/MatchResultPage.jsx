@@ -153,6 +153,19 @@ export default function MatchResultPage() {
                                     {/* Match Accuracy (Gradient + Glowing) */}
                                     <div className="card-match-score ">{scoreLabel}</div>
 
+                                    {/* Platform Profile Button */}
+                                    {(match.platformUrl || match.website) && (
+                                        <a
+                                            href={match.platformUrl || match.website}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="platform-profile-btn"
+                                            onClick={(e) => e.stopPropagation()} // Prevent card click if any
+                                        >
+                                            Platform Profile ↗
+                                        </a>
+                                    )}
+
                                     <div className="card-meta">
                                         {/* INFLUENCER DETAILS (If User is Brand looking for Influencers) */}
                                         {role === 'brand' && (

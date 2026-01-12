@@ -233,11 +233,38 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    margin-bottom: 2rem;
+    margin-bottom: 0.5rem;
+    /* Reduced bottom margin to bring button closer */
     /* DOUBLE Drop Shadow for Intense Glow */
     filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.6)) drop-shadow(0 0 20px rgba(168, 85, 247, 0.4));
     text-transform: uppercase;
     letter-spacing: 1px;
+}
+
+/* Platform Profile Button */
+.platform-profile-btn {
+    background: transparent;
+    border: 1px solid var(--accent-1);
+    color: var(--text-main);
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 1.5rem;
+    /* Add spacing below this button before meta */
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.platform-profile-btn:hover {
+    background: var(--accent-1);
+    color: white;
+    /* Ensure text is readable on hover */
+    box-shadow: 0 0 10px var(--accent-1);
+    transform: translateY(-2px);
 }
 
 /* Details Section */
