@@ -82,12 +82,12 @@ export default function App() {
           <Route path="/influencer-form" element={<InfluencerForm />} />
           <Route path="/influencer/dashboard" element={<InfluencerDashboard />} />
           {/* If userId is present, an Influencer is inspecting a Brand */}
-          <Route path="/influencer/profile/:userId?" element={<InspectionRoute owner={<InfluencerDashboard />} target={<BrandDashboard />} />} />
+          <Route path="/influencer/profile/:userId?" element={<InfluencerDashboard />} />
 
           <Route path="/brand-form" element={<BrandForm />} />
           <Route path="/brand/dashboard" element={<BrandDashboard />} />
           {/* If userId is present, a Brand is inspecting an Influencer */}
-          <Route path="/brand/profile/:userId?" element={<InspectionRoute owner={<BrandDashboard />} target={<InfluencerDashboard />} />} />
+          <Route path="/brand/profile/:userId?" element={<BrandDashboard />} />
           <Route path="/brand/matching" element={<BrandMatchingForm />} />
           <Route path="/brand/matching-standards/:userId?" element={<InspectionRoute owner={<BrandMatchingForm />} target={<InfluencerMatchingForm />} />} />
           <Route path="/match-results" element={<MatchResultPage />} />

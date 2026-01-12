@@ -6,7 +6,7 @@ export default function InsightPanel({ insights }) {
 
     return (
         <div className="insight-panel">
-            <h3 style={{ color: 'rgba(255,255,255,0.9)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3>
                 <span style={{ fontSize: '1.2rem' }}>💡</span>
                 Actionable Insights
             </h3>
@@ -19,15 +19,6 @@ export default function InsightPanel({ insights }) {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
                         className="insight-card"
-                        style={{
-                            background: 'rgba(255, 255, 255, 0.03)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
-                            padding: '1.2rem',
-                            borderRadius: '12px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '0.8rem'
-                        }}
                     >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <span className="insight-category" style={{
@@ -48,31 +39,11 @@ export default function InsightPanel({ insights }) {
                             )}
                         </div>
 
-                        <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontSize: '0.95rem', lineHeight: '1.5' }}>
+                        <p className="insight-text">
                             {insight.text}
                         </p>
 
-                        <button style={{
-                            alignSelf: 'flex-start',
-                            background: 'transparent',
-                            border: '1px solid rgba(255,255,255,0.2)',
-                            color: 'rgba(255,255,255,0.8)',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            fontSize: '0.8rem',
-                            cursor: 'pointer',
-                            marginTop: 'auto',
-                            transition: 'all 0.2s'
-                        }}
-                            onMouseEnter={(e) => {
-                                e.target.style.background = 'rgba(255,255,255,0.1)';
-                                e.target.style.borderColor = 'rgba(255,255,255,0.4)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.background = 'transparent';
-                                e.target.style.borderColor = 'rgba(255,255,255,0.2)';
-                            }}
-                        >
+                        <button className="insight-btn">
                             {insight.actionLabel || "Take Action"} →
                         </button>
                     </motion.div>

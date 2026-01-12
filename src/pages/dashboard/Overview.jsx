@@ -90,6 +90,18 @@ export default function Overview() {
         }
     ];
 
+    // Theme State
+    const [theme, setTheme] = React.useState(localStorage.getItem('theme') || 'dark');
+
+    React.useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+    }, [theme]);
+
+    const toggleTheme = () => {
+        setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    };
+
     return (
         <div className="influencer-dashboard">
             <Sidebar role="influencer" />
@@ -102,16 +114,17 @@ export default function Overview() {
                             <p className="overview-subtitle">Your analytical diagnostic scan</p>
                         </div>
                     </div>
+
+                    <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle Theme">
+                        {theme === 'light' ? '🌙' : '☀️'}
+                    </button>
                 </header>
 
                 {/* Responsive Layout Strategy: 
-                    1. Mobile Nav (Horizontal)
                     2. Hero Insight (Always visible or adaptive)
                     3. Graph Section (Stacked on mobile)
                     4. Score List (Adaptive)
                 */}
-
-                <MobileNav role="influencer" />
 
                 <div className="dashboard-content-wrapper">
                     {/* Mobile Hero - Excellent summary, keep it but let it flow */}

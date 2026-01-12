@@ -11,6 +11,26 @@ const data = [
 ];
 
 export default function PentagonGraph({ userData, averageData }) {
+    // Current theme check (simple way, or use context)
+    const [theme, setTheme] = React.useState(document.documentElement.getAttribute('data-theme') || 'dark');
+
+    React.useEffect(() => {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
+                    setTheme(document.documentElement.getAttribute('data-theme'));
+                }
+            });
+        });
+        observer.observe(document.documentElement, { attributes: true });
+        return () => observer.disconnect();
+    }, []);
+
+    const isLight = theme === 'light';
+    const gridColor = isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)";
+    const textColor = isLight ? "#4b5563" : "rgba(255,255,255,0.7)";
+    const avgStroke = isLight ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)";
+
     // Merge data for the chart
     // Expected structure: { profile: 80, professionalism: 90, ... }
 
@@ -26,10 +46,10 @@ export default function PentagonGraph({ userData, averageData }) {
         <div style={{ width: '100%', height: '400px', position: 'relative' }}>
             <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-                    <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                    <PolarGrid stroke={gridColor} />
                     <PolarAngleAxis
                         dataKey="subject"
-                        tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                        tick={{ fill: textColor, fontSize: 12 }}
                     />
                     <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
 
@@ -37,10 +57,10 @@ export default function PentagonGraph({ userData, averageData }) {
                     <Radar
                         name="Platform Avg"
                         dataKey="avg"
-                        stroke="rgba(255,255,255,0.3)"
+                        stroke={avgStroke}
                         strokeDasharray="4 4"
-                        fill="rgba(255,255,255,0.05)"
-                        fillOpacity={0.3}
+                        fill="rgba(100,100,100,0.1)"
+                        fillOpacity={0.1}
                     />
 
                     {/* User Data (DNA) */}
@@ -52,7 +72,7 @@ export default function PentagonGraph({ userData, averageData }) {
                         fill="#8b5cf6"
                         fillOpacity={0.5}
                     />
-                    <Legend iconType="circle" wrapperStyle={{ color: 'rgba(255,255,255,0.6)' }} />
+                    <Legend iconType="circle" wrapperStyle={{ color: textColor }} />
                 </RadarChart>
             </ResponsiveContainer>
 

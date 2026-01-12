@@ -20,7 +20,7 @@ export default function ScoreCard({ title, score, subtitle, history, info, delay
             transition={{ delay: delay, duration: 0.5 }}
             className="score-card"
             style={{
-                background: 'rgba(255, 255, 255, 0.03)',
+                background: 'var(--card-bg, rgba(255, 255, 255, 0.03))',
                 borderLeft: `4px solid ${scoreColor}`,
                 padding: '1rem',
                 borderRadius: '8px',
@@ -29,11 +29,11 @@ export default function ScoreCard({ title, score, subtitle, history, info, delay
             }}
         >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                <h4 style={{ margin: 0, fontSize: '1rem', color: 'rgba(255,255,255,0.9)' }}>
+                <h4 className="score-card-title">
                     {title}
                 </h4>
                 <div
-                    style={{ cursor: 'pointer', opacity: 0.5, fontSize: '0.9rem' }}
+                    style={{ cursor: 'pointer', opacity: 0.5, fontSize: '0.9rem', color: 'var(--text-primary)' }}
                     onMouseEnter={() => setShowInfo(true)}
                     onMouseLeave={() => setShowInfo(false)}
                 >
@@ -43,15 +43,15 @@ export default function ScoreCard({ title, score, subtitle, history, info, delay
                             position: 'absolute',
                             right: '0',
                             top: '24px',
-                            background: '#1e293b',
-                            border: '1px solid rgba(255,255,255,0.1)',
+                            background: 'var(--bg-primary)',
+                            border: '1px solid var(--card-border)',
                             padding: '10px',
                             borderRadius: '6px',
                             width: '200px',
                             zIndex: 10,
                             boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
                             fontSize: '0.75rem',
-                            color: 'rgba(255,255,255,0.8)',
+                            color: 'var(--text-primary)',
                             lineHeight: '1.4'
                         }}>
                             {info}
@@ -60,14 +60,14 @@ export default function ScoreCard({ title, score, subtitle, history, info, delay
                 </div>
             </div>
 
-            <p style={{ margin: '0 0 10px 0', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+            <p className="score-card-subtitle">
                 {subtitle}
             </p>
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-                <span style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white' }}>{score}</span>
+                <span className="score-value">{score}</span>
                 {history && (
-                    <div style={{ fontSize: '0.8rem', color: history.trend === 'up' ? '#34d399' : history.trend === 'down' ? '#f87171' : 'rgba(255,255,255,0.4)' }}>
+                    <div style={{ fontSize: '0.8rem', color: history.trend === 'up' ? '#34d399' : history.trend === 'down' ? '#f87171' : 'var(--sub-text)' }}>
                         {history.trend === 'up' ? '▲' : history.trend === 'down' ? '▼' : '━'} {history.label}
                     </div>
                 )}

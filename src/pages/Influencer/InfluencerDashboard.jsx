@@ -204,9 +204,52 @@ export default function InfluencerDashboard() {
 
         {/* PROFILE MODAL (Existing) */}
         {showModal && (
-          // ... (Modal code) ...
           <div className="modal-overlay" onClick={() => setShowModal(false)}>
-            {/* ... */}
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setShowModal(false)} className="modal-close-btn">×</button>
+
+              <div className="modal-header-center">
+                <div className="modal-profile-img-container">
+                  {data?.profileImg ? (
+                    <img src={data.profileImg} className="nav-profile-img-inner" alt="Profile" />
+                  ) : (
+                    <div className="modal-profile-placeholder">👤</div>
+                  )}
+                </div>
+                <h2>{data?.userId?.name || user?.name || "Influencer"}</h2>
+                <p className="text-muted-custom">
+                  {data?.niche || "Niche not set"} • {followerCategory()}
+                </p>
+              </div>
+
+              <div className="modal-details-grid">
+                <div className="modal-info-row">
+                  <strong>Followers:</strong> {data?.followers || "N/A"}
+                </div>
+
+                {data?.primaryPlatform && data?.platformUrl && (
+                  <div className="modal-info-row">
+                    <strong>{data.primaryPlatform}:</strong>
+                    <a href={data.platformUrl} target="_blank" rel="noreferrer" className="text-accent-1"> View Profile</a>
+                  </div>
+                )}
+
+                {/* Fallback for legacy data structure if exists */}
+                {(!data?.primaryPlatform && data?.instagram) && (
+                  <div className="modal-info-row">
+                    <strong>Instagram:</strong> <a href={data.instagram} target="_blank" rel="noreferrer" className="text-accent-1">Link</a>
+                  </div>
+                )}
+
+                <div className="modal-info-row">
+                  <strong>Engagement:</strong> {data?.engagementRate ? `${data.engagementRate}%` : "N/A"}
+                </div>
+              </div>
+
+              <button onClick={logout} className="modal-logout-btn">
+                Log Out
+              </button>
+            </div>
           </div>
         )}
 

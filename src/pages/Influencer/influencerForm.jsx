@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import logo from "../../assets/NurotraLogo.png";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { profileService } from "../../services/apiService";
+import { profileService, chatService } from "../../services/apiService";
 
 export default function InfluencerForm() {
   const navigate = useNavigate();
@@ -35,6 +35,9 @@ export default function InfluencerForm() {
     noteToBrand: "",
   });
 
+  // State for upload loading
+  const [uploading, setUploading] = useState(false);
+
   // Auto-fill effect (Enforces User Data)
   useEffect(() => {
     if (user) {
@@ -43,7 +46,8 @@ export default function InfluencerForm() {
         // Prioritize User Identity Data
         email: (prev.email && prev.email !== user.email) ? prev.email : (user.email || ""),
         nuroId: user.uniqueId || user._id || "",
-        // profileImg: Manually uploaded only (Requested by user)
+        // If user already has a profile image in context, preload it (unless form has one)
+        profileImg: prev.profileImg || user.profileImg || "",
       }));
     }
   }, [user]);
@@ -92,11 +96,28 @@ export default function InfluencerForm() {
     });
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    updateField("profileImg", url);
+
+    try {
+      setUploading(true);
+      // Upload to server
+      const response = await chatService.uploadFile(file);
+      // Assuming response.url or response.fileUrl contains the accessible link
+      if (response && response.url) {
+        updateField("profileImg", response.url);
+      } else {
+        // Fallback if structure differs, though chatService usually returns { url: ... }
+        console.error("Upload response missing URL", response);
+        alert("Image upload failed. Please try again.");
+      }
+    } catch (error) {
+      console.error("Image upload failed", error);
+      alert("Failed to upload image.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const toggleTheme = () => {
@@ -120,8 +141,11 @@ export default function InfluencerForm() {
       // Call API
       await profileService.saveInfluencer(formData, user.token);
 
-      // Update Local User Role
-      updateUser({ role: "influencer" });
+      // Update Local User Role AND Profile Image globally
+      updateUser({
+        role: "influencer",
+        profileImg: formData.profileImg // Force update global context
+      });
 
       // Clear Form Draft
       localStorage.removeItem("influencerForm");
