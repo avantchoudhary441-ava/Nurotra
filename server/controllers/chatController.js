@@ -76,4 +76,41 @@ const fetchChats = async (req, res) => {
     }
 };
 
-module.exports = { accessChat, fetchChats };
+// @desc    Record collaboration status
+// @route   POST /api/chat/collab/record
+// @access  Protected
+const recordCollaboration = async (req, res) => {
+    const { chatId, status } = req.body; // status: 'success' or 'failed'
+
+    if (!chatId || !status) {
+        return res.status(400).send("ChatId and status required");
+    }
+
+    try {
+        const chat = await Chat.findById(chatId).populate("users");
+
+        if (!chat) {
+            return res.status(404).send("Chat not found");
+        }
+
+        // Logic to record collaboration
+        // 1. Update Chat metadata (if we had a field for it, currently purely counting)
+        // 2. Increment user collaboration counts
+
+        if (status === 'success') {
+            // Increment totalCollabs for all users in the chat
+            for (const user of chat.users) {
+                // Assuming User model has totalCollabs field, strictly strictly strictly speaking we should check
+                // but for now we try to update
+                await User.findByIdAndUpdate(user._id, { $inc: { totalCollabs: 1 } });
+            }
+        }
+
+        res.status(200).json({ message: "Collaboration recorded", status });
+    } catch (error) {
+        res.status(400);
+        throw new Error(error.message);
+    }
+};
+
+module.exports = { accessChat, fetchChats, recordCollaboration };

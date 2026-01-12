@@ -1296,3 +1296,24 @@
         font-size: 1.8rem;
     }
 }
+/* The END Button */
+.the-end-btn {
+    margin-top: 10px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9rem;
+    align-self: flex-end; /* Align to right */
+    transition: transform 0.2s;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.the-end-btn:hover {
+    transform: scale(1.05);
+    background: linear-gradient(135deg, #f87171, #dc2626);
+}
+

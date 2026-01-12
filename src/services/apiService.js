@@ -131,6 +131,10 @@ export const chatService = {
             headers: { "Content-Type": "multipart/form-data" },
         });
         return response.data;
+    },
+    recordCollaboration: async (chatId, status) => {
+        const response = await api.post("/chat/collab/record", { chatId, status });
+        return response.data;
     }
 };
 

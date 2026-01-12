@@ -1,5 +1,5 @@
 const express = require("express");
-const { accessChat, fetchChats } = require("../controllers/chatController");
+const { accessChat, fetchChats, recordCollaboration } = require("../controllers/chatController");
 const { protect } = require("../middleware/authMiddleware");
 const {
     suggestReplies,
@@ -13,6 +13,7 @@ const router = express.Router();
 
 router.route("/").post(protect, accessChat);
 router.route("/").get(protect, fetchChats);
+router.route("/collab/record").post(protect, recordCollaboration);
 
 // AI Routes
 router.route("/ai/suggest").post(protect, suggestReplies);

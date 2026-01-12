@@ -487,6 +487,8 @@ export default function ChatPage() {
                                     </div>
 
                                     {/* Collaboration Status Icons - Lower Right */}
+                                    {/* Collaboration Status Icons - Lower Right REPLACED WITH 'THE END' */}
+                                    {/* 
                                     <div className="collab-icons">
                                         <div
                                             className="collab-icon-group"
@@ -503,6 +505,13 @@ export default function ChatPage() {
                                             <XCircle size={18} className="collab-failure" />
                                         </div>
                                     </div>
+                                    */}
+                                    <button
+                                        className="the-end-btn"
+                                        onClick={() => navigate('/collab-conclusion', { state: { chatId: selectedChat._id } })}
+                                    >
+                                        The END
+                                    </button>
                                 </div>
                             </>
                         )}
