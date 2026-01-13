@@ -101,7 +101,7 @@ export default function UserProfile() {
                 <div className="profile-details">
                     <div className="detail-item">
                         <label>Nuro ID</label>
-                        <span className="unique-id-value">{user.uniqueId || user._id.substring(0, 12)}</span>
+                        <span className="unique-id-value">{user.uniqueId || user._id?.substring(0, 12) || "N/A"}</span>
                     </div>
 
                     <div className="detail-item">
