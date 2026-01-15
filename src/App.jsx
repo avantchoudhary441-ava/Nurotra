@@ -16,6 +16,7 @@ import BrandForm from "./pages/brand/brandForm";
 import BrandDashboard from "./pages/brand/brandDashboard";
 import UserProfile from "./pages/UserProfile";
 
+
 import "./styles/global.css";
 import "./styles/header.css";
 import "./styles/hero.css";
@@ -26,7 +27,6 @@ import "./styles/background.css";
 import InfluencerDashboard from "./pages/Influencer/InfluencerDashboard.jsx";
 import MatchResultPage from "./pages/match/MatchResultPage";
 import ChatPage from "./pages/chat/ChatPage";
-import CollabConclusionPage from "./pages/chat/CollabConclusionPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import InfluencerMatchingForm from "./pages/Influencer/InfluencerMatchingForm";
 import BrandMatchingForm from "./pages/brand/BrandMatchingForm";
@@ -42,94 +42,89 @@ import SafetyTrust from "./pages/SafetyTrust";
 
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
-import { SocketProvider } from "./context/SocketContext";
-import CallInterface from "./components/chat/CallInterface";
+
+
 
 export default function App() {
   const location = useLocation();
 
   return (
     <NuroCoreProvider>
-      <SocketProvider>
-        <CallInterface />
-        {location.pathname !== "/" && <NuroOrb />}
-        <NuroInterrupt />
-        <Routes>
+      {location.pathname !== "/" && <NuroOrb />}
+      <NuroInterrupt />
+      <Routes>
 
-          {/* MAIN LANDING PAGE */}
-          <Route path="/influencer/overview" element={<Overview />} />
-          <Route path="/brand/overview" element={<Overview />} />
-
-          <Route
-            path="/"
-            element={
-              <>
-                <BackgroundEffects />
-                <Header />
-                <Hero />
-                <Categories />
-                <AgentsGrid />
-                <Footer />
-
-              </>
-            }
-          />
-
-          {/* COLLBAI AGENT PAGE */}
-          <Route path="/collab" element={<CollabLanding />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/verify-otp" element={<OtpVerify />} />
-          <Route path="/influencer-form" element={<InfluencerForm />} />
-          <Route path="/influencer/dashboard" element={<InfluencerDashboard />} />
-          {/* If userId is present, an Influencer is inspecting a Brand */}
-          <Route path="/influencer/profile/:userId?" element={<InfluencerDashboard />} />
-
-          <Route path="/brand-form" element={<BrandForm />} />
-          <Route path="/brand/dashboard" element={<BrandDashboard />} />
-          {/* If userId is present, a Brand is inspecting an Influencer */}
-          <Route path="/brand/profile/:userId?" element={<BrandDashboard />} />
-          <Route path="/brand/matching" element={<BrandMatchingForm />} />
-          <Route path="/brand/matching-standards/:userId?" element={<InspectionRoute owner={<BrandMatchingForm />} target={<InfluencerMatchingForm />} />} />
-          <Route path="/match-results" element={<MatchResultPage />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/collab-conclusion" element={<CollabConclusionPage />} />
-          <Route path="/influencer/matching" element={<InfluencerMatchingForm />} />
-          <Route path="/influencer/matching-standards/:userId?" element={<InspectionRoute owner={<InfluencerMatchingForm />} target={<BrandMatchingForm />} />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/profile" element={<UserProfile />} />
-
-          <Route path="/influencer/deliverables/:userId?" element={<InspectionRoute owner={<DeliverablesDashboard role="influencer" />} target={<DeliverablesDashboard role="brand" />} />} />
-          <Route path="/brand/deliverables/:userId?" element={<InspectionRoute owner={<DeliverablesDashboard role="brand" />} target={<DeliverablesDashboard role="influencer" />} />} />
-
-          <Route path="/influencer/collab-insights" element={<CollabInsights role="influencer" />} />
-          <Route path="/brand/collab-insights" element={<CollabInsights role="brand" />} />
-          <Route path="/influencer/history" element={<History role="influencer" />} />
-          <Route path="/brand/history" element={<History role="brand" />} />
-          <Route path="/influencer/safety/:userId?" element={<InspectionRoute owner={<SafetyTrust role="influencer" />} target={<SafetyTrust role="brand" />} />} />
-          <Route path="/brand/safety/:userId?" element={<InspectionRoute owner={<SafetyTrust role="brand" />} target={<SafetyTrust role="influencer" />} />} />
+        {/* MAIN LANDING PAGE */}
+        <Route path="/influencer/overview" element={<Overview />} />
+        <Route path="/brand/overview" element={<Overview />} />
 
 
-          <Route path="/nuro-lab" element={<NuroLab />} />
 
-          {/* 404 Debug Catch-all */}
-          <Route path="*" element={
-            <div style={{ color: 'white', padding: '50px', marginLeft: '250px' }}>
-              <h1>404 - Page Not Found</h1>
-              <p>Current Location: {location.pathname}</p>
-            </div>
-          } />
+        <Route
+          path="/"
+          element={
+            <>
+              <BackgroundEffects />
+              <Header />
+              <Hero />
+              <Categories />
+              <AgentsGrid />
+              <Footer />
 
-        </Routes>
-      </SocketProvider>
+            </>
+          }
+        />
+
+        {/* COLLBAI AGENT PAGE */}
+        <Route path="/collab" element={<CollabLanding />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/verify-otp" element={<OtpVerify />} />
+        <Route path="/influencer-form" element={<InfluencerForm />} />
+        <Route path="/influencer/dashboard" element={<InfluencerDashboard />} />
+        {/* If userId is present, an Influencer is inspecting a Brand */}
+        <Route path="/influencer/profile/:userId?" element={<InspectionRoute owner={<InfluencerDashboard />} target={<BrandDashboard />} />} />
+
+        <Route path="/brand-form" element={<BrandForm />} />
+        <Route path="/brand/dashboard" element={<BrandDashboard />} />
+        {/* If userId is present, a Brand is inspecting an Influencer */}
+        <Route path="/brand/profile/:userId?" element={<InspectionRoute owner={<BrandDashboard />} target={<InfluencerDashboard />} />} />
+        <Route path="/brand/matching" element={<BrandMatchingForm />} />
+        <Route path="/brand/matching-standards/:userId?" element={<InspectionRoute owner={<BrandMatchingForm />} target={<InfluencerMatchingForm />} />} />
+        <Route path="/match-results" element={<MatchResultPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/influencer/matching" element={<InfluencerMatchingForm />} />
+        <Route path="/influencer/matching-standards/:userId?" element={<InspectionRoute owner={<InfluencerMatchingForm />} target={<BrandMatchingForm />} />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/profile" element={<UserProfile />} />
+
+        <Route path="/influencer/deliverables/:userId?" element={<InspectionRoute owner={<DeliverablesDashboard role="influencer" />} target={<DeliverablesDashboard role="brand" />} />} />
+        <Route path="/brand/deliverables/:userId?" element={<InspectionRoute owner={<DeliverablesDashboard role="brand" />} target={<DeliverablesDashboard role="influencer" />} />} />
+
+        <Route path="/influencer/collab-insights" element={<CollabInsights role="influencer" />} />
+        <Route path="/brand/collab-insights" element={<CollabInsights role="brand" />} />
+        <Route path="/influencer/history" element={<History role="influencer" />} />
+        <Route path="/brand/history" element={<History role="brand" />} />
+        <Route path="/influencer/safety/:userId?" element={<InspectionRoute owner={<SafetyTrust role="influencer" />} target={<SafetyTrust role="brand" />} />} />
+        <Route path="/brand/safety/:userId?" element={<InspectionRoute owner={<SafetyTrust role="brand" />} target={<SafetyTrust role="influencer" />} />} />
+
+
+        <Route path="/nuro-lab" element={<NuroLab />} />
+
+        {/* 404 Debug Catch-all */}
+        <Route path="*" element={
+          <div style={{ color: 'white', padding: '50px', marginLeft: '250px' }}>
+            <h1>404 - Page Not Found</h1>
+            <p>Current Location: {location.pathname}</p>
+          </div>
+        } />
+
+      </Routes>
     </NuroCoreProvider>
   );
 }
 
 // Helper to handle inspection mode swapping
-function InspectionRoute({ owner, target }) {
-  const { userId } = useParams();
-  return userId ? target : owner;
-}
+
 
 
