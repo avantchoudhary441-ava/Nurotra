@@ -4,6 +4,7 @@ import { chatService, aiService } from "../../services/apiService";
 import "../../styles/chat.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import GrowthPathModal from "../../components/GrowthPathModal";
+import PremiumCallModal from "../../components/modals/PremiumCallModal";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Paperclip, Sun, Moon, CheckCircle, XCircle, Wand2, Sparkles, Phone } from "lucide-react";
 import { useSocket } from "../../context/SocketContext";
@@ -31,6 +32,10 @@ export default function ChatPage() {
     const [showGrowthPathCTA, setShowGrowthPathCTA] = useState(false);
     const [growthPathType, setGrowthPathType] = useState(null); // 'success' or 'failure'
     const [isGrowthModalOpen, setIsGrowthModalOpen] = useState(false);
+
+    // Premium Call Modal State
+    const [showCallModal, setShowCallModal] = useState(false);
+    const [callTarget, setCallTarget] = useState(null);
 
     // Refs
     const scrollRef = useRef();
@@ -233,6 +238,29 @@ export default function ChatPage() {
                 initialType={growthPathType}
             />
 
+            {/* Premium Call Modal - Intercepts call button */}
+            <PremiumCallModal
+                isOpen={showCallModal}
+                onClose={() => {
+                    setShowCallModal(false);
+                    setCallTarget(null);
+                }}
+                onProceed={() => {
+                    // After premium flow completes, actually call the user
+                    if (callTarget) {
+                        callUser(
+                            callTarget.targetId,
+                            callTarget.targetName,
+                            callTarget.targetPic,
+                            callTarget.targetContext
+                        );
+                    }
+                    setShowCallModal(false);
+                    setCallTarget(null);
+                }}
+                targetName={callTarget?.targetName}
+            />
+
             {/* Overlay Gradient */}
             <div className="chat-overlay">
                 <div className={`chat-window ${selectedChat ? 'mobile-chat-active' : ''}`}>
@@ -301,7 +329,7 @@ export default function ChatPage() {
                                             <h3>{getSender(user, selectedChat.users)}</h3>
                                         </div>
 
-                                        {/* Call Button */}
+                                        {/* Call Button - Now triggers Premium Modal */}
                                         <button
                                             className="icon-btn"
                                             title="Start Voice Call"
@@ -315,11 +343,14 @@ export default function ChatPage() {
                                                 const targetContext = {
                                                     role: targetUser?.role || "User",
                                                     isVerified: targetUser?.isVerified || false,
-                                                    // Add match score if available in chat object, otherwise default
                                                     matchScore: selectedChat.matchScore || null
                                                 };
 
-                                                if (targetId) callUser(targetId, targetName, targetPic, targetContext);
+                                                // Store call target and show premium modal (unplugged direct call)
+                                                if (targetId) {
+                                                    setCallTarget({ targetId, targetName, targetPic, targetContext });
+                                                    setShowCallModal(true);
+                                                }
                                             }}
                                             style={{ marginLeft: 'auto', marginRight: '10px' }}
                                         >

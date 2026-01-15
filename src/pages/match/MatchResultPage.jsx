@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion"; // Added import
+import { motion } from "framer-motion";
 import "../../styles/matchResult.css";
 import logo from "../../assets/NurotraLogo.png";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import { chatService } from "../../services/apiService";
+import LockedMatchCard from "../../components/match/LockedMatchCard";
+import UnlockMatchModal from "../../components/modals/UnlockMatchModal";
 
 export default function MatchResultPage() {
     const location = useLocation();
@@ -13,6 +15,18 @@ export default function MatchResultPage() {
 
     // Theme State (Sync with localStorage)
     const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
+
+    // Unlock Modal State
+    const [showUnlockModal, setShowUnlockModal] = useState(false);
+    const [pendingUnlockIndex, setPendingUnlockIndex] = useState(null);
+    const [unlockedIndices, setUnlockedIndices] = useState([]);
+
+    // Role-based card limiting:
+    // Influencer: 2 total (1 unlocked, 1 locked)
+    // Brand: 3 total (2 unlocked, 1 locked)
+    const unlockedCount = role === 'brand' ? 2 : 1;
+    const totalVisibleCount = role === 'brand' ? 3 : 2;
+    const visibleMatches = matches.slice(0, totalVisibleCount);
 
     useEffect(() => {
         document.documentElement.setAttribute("data-theme", theme);
@@ -31,8 +45,24 @@ export default function MatchResultPage() {
         return () => window.removeEventListener("scroll", onScroll);
     }, []);
 
-    // Top 3 Matches
-    const topMatches = matches.slice(0, 3);
+    // Handle locked card click
+    const handleLockedCardClick = (index) => {
+        setPendingUnlockIndex(index);
+        setShowUnlockModal(true);
+    };
+
+    // Handle unlock after modal flow
+    const handleUnlock = () => {
+        if (pendingUnlockIndex !== null) {
+            setUnlockedIndices(prev => [...prev, pendingUnlockIndex]);
+        }
+        setPendingUnlockIndex(null);
+    };
+
+    // Check if a card at index is locked
+    const isCardLocked = (index) => {
+        return index >= unlockedCount && !unlockedIndices.includes(index);
+    };
 
     // Animations
     const titleVariants = {
@@ -122,7 +152,18 @@ export default function MatchResultPage() {
                     initial="hidden"
                     animate="visible"
                 >
-                    {topMatches.map((match, i) => {
+                    {visibleMatches.map((match, i) => {
+                        // Check if this card should be locked
+                        if (isCardLocked(i)) {
+                            return (
+                                <LockedMatchCard
+                                    key={i}
+                                    cardVariants={cardVariants}
+                                    onUnlockClick={() => handleLockedCardClick(i)}
+                                />
+                            );
+                        }
+
                         // Calculate percentage label. Backend provides 'matchScore' (0-100 or 0-1)
                         const rawScore = match.matchScore;
                         let displayScore = "N/A";
@@ -221,6 +262,16 @@ export default function MatchResultPage() {
                     })}
                 </motion.div>
             </main>
+
+            {/* Unlock Match Modal */}
+            <UnlockMatchModal
+                isOpen={showUnlockModal}
+                onClose={() => {
+                    setShowUnlockModal(false);
+                    setPendingUnlockIndex(null);
+                }}
+                onUnlock={handleUnlock}
+            />
         </div>
     );
 }
