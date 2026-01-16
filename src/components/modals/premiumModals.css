@@ -124,7 +124,7 @@
     margin-top: 15px;
 }
 
-.btn-primary {
+.premium-modal-card .btn-primary {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -142,12 +142,12 @@
     text-transform: uppercase;
 }
 
-.btn-primary:hover {
+.premium-modal-card .btn-primary:hover {
     background: #e5e5e5;
     transform: none;
 }
 
-.btn-secondary {
+.premium-modal-card .btn-secondary {
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: rgba(255, 255, 255, 0.5);
@@ -161,7 +161,7 @@
     letter-spacing: 1px;
 }
 
-.btn-secondary:hover {
+.premium-modal-card .btn-secondary:hover {
     background: rgba(255, 255, 255, 0.05);
     border-color: rgba(255, 255, 255, 0.5);
     color: white;

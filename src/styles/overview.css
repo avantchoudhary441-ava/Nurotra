@@ -49,7 +49,7 @@
 
 .insight-btn {
     align-self: flex-start;
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     color: white;
     padding: 8px 18px;
     border-radius: 999px;
@@ -347,7 +347,7 @@
 }
 
 .mobile-action-btn {
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     color: white;
     border: none;
     padding: 10px 20px;

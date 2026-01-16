@@ -412,7 +412,7 @@
 }
 
 .send-btn {
-    background: linear-gradient(135deg, #6366f1, #a855f7);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     color: white;
     box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
 }
@@ -516,7 +516,7 @@
 
 /* Apply: Nurotra Gradient */
 .enhanced-actions button:first-child {
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     color: white;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
@@ -1307,7 +1307,7 @@
 .the-end-btn {
     margin-top: 10px;
     padding: 8px 16px;
-    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     color: white;
     border: none;
     border-radius: 8px;

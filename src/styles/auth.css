@@ -139,14 +139,13 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: #fff;
-  color: #333;
-  border: 1px solid var(--border-subtle);
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  border: none;
 }
 
 :root[data-theme="dark"] .btn-google {
   background: white;
-  /* Google btn usually stays white/light */
   color: #333;
 }
 

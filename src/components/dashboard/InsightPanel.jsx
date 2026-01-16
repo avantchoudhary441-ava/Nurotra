@@ -59,6 +59,9 @@ export default function InsightPanel({ insights, onAction }) {
 
 function getCategoryColor(category) {
     switch (category) {
+        case 'Strength': return '#10b981'; // Green
+        case 'Weakness': return '#f87171'; // Red
+        case 'Improvement': return '#fbbf24'; // Yellow
         case 'Profile': return '#a78bfa'; // Purple
         case 'Reliability': return '#f472b6'; // Pink
         case 'Growth': return '#10b981'; // Green
@@ -69,6 +72,9 @@ function getCategoryColor(category) {
 
 function getCategoryBg(category) {
     switch (category) {
+        case 'Strength': return 'rgba(16, 185, 129, 0.15)';
+        case 'Weakness': return 'rgba(248, 113, 113, 0.15)';
+        case 'Improvement': return 'rgba(251, 191, 36, 0.15)';
         case 'Profile': return 'rgba(167, 139, 250, 0.15)';
         case 'Reliability': return 'rgba(244, 114, 182, 0.15)';
         case 'Growth': return 'rgba(16, 185, 129, 0.15)';
