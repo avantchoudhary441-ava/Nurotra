@@ -1,10 +1,16 @@
 import React from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { profileService, nuroService } from '../../services/apiService';
 import PentagonGraph from '../../components/dashboard/PentagonGraph';
 import InsightPanel from '../../components/dashboard/InsightPanel';
 import ScoreCard from '../../components/dashboard/ScoreCard';
 import Sidebar from '../../components/Sidebar';
-import MobileNav from '../../components/MobileNav';
-import MobileInsightCard from '../../components/mobile/MobileInsightCard'; // New Import
+import MobileInsightCard from '../../components/mobile/MobileInsightCard';
+import ProfileEnhancer from '../../components/ProfileEnhancer';
+import MatchFlowModal from '../../components/dashboard/MatchFlowModal';
+import CurrencySelector from '../../components/CurrencySelector';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import '../../styles/dashboard.css';
 import '../../styles/overview.css';
 
@@ -40,7 +46,7 @@ export default function Overview() {
         {
             category: 'Growth',
             text: 'Your high Reliability score makes you attractive to premium brands.',
-            actionLabel: 'View Opportunities'
+            actionLabel: 'Match Flow'
         },
         {
             category: 'Collab',
@@ -102,9 +108,52 @@ export default function Overview() {
         setTheme(prev => prev === 'light' ? 'dark' : 'light');
     };
 
+    // Role Detection based on URL
+    const location = useLocation();
+    const navigate = useNavigate();
+    const role = location.pathname.includes('/influencer') ? 'influencer' : 'brand';
+    const { user } = useAuth();
+    const [profile, setProfile] = React.useState(null);
+    const [showEnhancer, setShowEnhancer] = React.useState(false);
+    const [showMatchFlow, setShowMatchFlow] = React.useState(false);
+
+    // Fetch Profile for Enhancer context
+    React.useEffect(() => {
+        const fetchProfile = async () => {
+            if (user?.token) {
+                try {
+                    const data = role === 'influencer'
+                        ? await profileService.getInfluencer(user.token)
+                        : await profileService.getBrand(user.token);
+                    setProfile(data);
+                } catch (err) {
+                    console.error("Failed to fetch profile for DNA", err);
+                }
+            }
+        };
+        fetchProfile();
+    }, [user, role]);
+
     return (
         <div className="influencer-dashboard">
-            <Sidebar role="influencer" />
+            {/* PROFILE ENHANCER MODAL */}
+            {showEnhancer && (
+                <ErrorBoundary>
+                    <ProfileEnhancer
+                        profileData={profile || user}
+                        onClose={() => setShowEnhancer(false)}
+                    />
+                </ErrorBoundary>
+            )}
+
+            {/* MATCH FLOW MODAL */}
+            <MatchFlowModal
+                isOpen={showMatchFlow}
+                onClose={() => setShowMatchFlow(false)}
+                role={role}
+            />
+
+            <Sidebar role={role} />
 
             <div className="overview-container">
                 <header className="overview-header">
@@ -115,21 +164,23 @@ export default function Overview() {
                         </div>
                     </div>
 
-                    <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle Theme">
-                        {theme === 'light' ? '🌙' : '☀️'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <CurrencySelector />
+                        <button className="theme-toggle-btn" onClick={toggleTheme} aria-label="Toggle Theme">
+                            {theme === 'light' ? '🌙' : '☀️'}
+                        </button>
+                    </div>
                 </header>
-
-                {/* Responsive Layout Strategy: 
-                    2. Hero Insight (Always visible or adaptive)
-                    3. Graph Section (Stacked on mobile)
-                    4. Score List (Adaptive)
-                */}
 
                 <div className="dashboard-content-wrapper">
                     {/* Mobile Hero - Excellent summary, keep it but let it flow */}
                     <div className="mobile-hero-wrapper">
-                        <MobileInsightCard overallScore={overallScore} topInsight={topInsight} />
+                        <MobileInsightCard
+                            overallScore={overallScore}
+                            topInsight={topInsight}
+                            role={role}
+                            onEnhance={() => setShowEnhancer(true)}
+                        />
                     </div>
 
                     <div className="overview-main-grid">
@@ -139,7 +190,14 @@ export default function Overview() {
                                 <PentagonGraph userData={userData} averageData={averageData} />
                             </div>
                             <div className="insight-section">
-                                <InsightPanel insights={insights} />
+                                <InsightPanel
+                                    insights={insights}
+                                    onAction={(label) => {
+                                        if (label.includes("Enhance")) setShowEnhancer(true);
+                                        else if (label.includes("Upload")) navigate(`/${role}/deliverables`);
+                                        else if (label.includes("Match")) setShowMatchFlow(true);
+                                    }}
+                                />
                             </div>
                         </div>
 

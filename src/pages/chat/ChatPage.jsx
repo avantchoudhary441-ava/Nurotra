@@ -210,6 +210,26 @@ export default function ChatPage() {
         setShowGrowthPathCTA(false);
     }, [selectedChat]);
 
+    // Browser Back Interception to Analytical Dashboard
+    useEffect(() => {
+        if (!user) return;
+
+        // Push a state into historical stack to catch the back action
+        window.history.pushState(null, null, window.location.pathname);
+
+        const handlePopState = (event) => {
+            const role = user.role?.toLowerCase();
+            const dashboardPath = role === 'influencer' ? '/influencer/overview' : '/brand/overview';
+
+            // Using window.location.replace for a hard redirect to the correct "Analytical Dashboard"
+            // This ensures we break out of any potential routing loops or conflicting component-level redirects
+            window.location.replace(dashboardPath);
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [user]);
+
     // Helpers to get other user name
     const getSender = (loggedUser, users) => {
         if (!users || users.length < 2) return "Unknown User";
@@ -269,7 +289,6 @@ export default function ChatPage() {
                     <div className={`chat-sidebar ${selectedChat ? 'mobile-hidden' : ''}`}>
                         <div className="sidebar-header">
                             <h2>Chats</h2>
-                            <button className="back-btn" onClick={() => navigate(-1)}>⬅ Back</button>
                         </div>
 
                         <div className="chat-list">
@@ -311,14 +330,7 @@ export default function ChatPage() {
                             <>
                                 <div className="chat-header">
                                     <div className="header-left">
-                                        {/* Mobile Back Button */}
-                                        <button
-                                            className="back-btn-mobile"
-                                            onClick={() => setSelectedChat(null)}
-                                            style={{ marginRight: '10px', background: 'none', border: 'none', color: 'var(--chat-text)', cursor: 'pointer', display: 'none' }}
-                                        >
-                                            ⬅
-                                        </button>
+                                        {/* Mobile Back Button - REMOVED for linear flow */}
 
                                         <img
                                             src={getSenderImg(user, selectedChat.users) || "https://via.placeholder.com/150"}
@@ -331,7 +343,7 @@ export default function ChatPage() {
 
                                         {/* Call Button - Now triggers Premium Modal */}
                                         <button
-                                            className="icon-btn"
+                                            className="icon-btn highlight-call-btn"
                                             title="Start Voice Call"
                                             onClick={() => {
                                                 const targetId = getSenderId(user, selectedChat.users);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import CurrencySelector from "./CurrencySelector";
 import logo from "../assets/NurotraLogo.png";
 import { useNavigate } from "react-router-dom";
 import "../styles/header.css";
@@ -36,6 +37,8 @@ export default function Header() {
     localStorage.setItem("theme", newTheme);
   };
 
+  const isDarkMode = theme === "dark";
+
   return (
     <header>
       {/* LOGO AREA (exact HTML structure restored) */}
@@ -49,14 +52,16 @@ export default function Header() {
 
       {/* NAV LINKS */}
       <nav>
-        <button
-          id="theme-toggle"
-          className="theme-toggle"
-          aria-label="Toggle theme"
-          onClick={toggleTheme}
-        >
-          {theme === "dark" ? "☀️" : "🌙"}
-        </button>
+        <div className="nav-actions">
+          <CurrencySelector />
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label="Toggle Theme"
+          >
+            {isDarkMode ? "☀️" : "🌙"}
+          </button>
+        </div>
 
         {user ? (
           <div className="header-user-section">

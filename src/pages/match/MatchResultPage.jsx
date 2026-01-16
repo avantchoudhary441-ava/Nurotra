@@ -5,6 +5,7 @@ import "../../styles/matchResult.css";
 import logo from "../../assets/NurotraLogo.png";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import { chatService } from "../../services/apiService";
+import CurrencySelector from "../../components/CurrencySelector";
 import LockedMatchCard from "../../components/match/LockedMatchCard";
 import UnlockMatchModal from "../../components/modals/UnlockMatchModal";
 
@@ -157,9 +158,12 @@ export default function MatchResultPage() {
 
                 {/* Right: Toggle */}
                 <div className="header-right">
-                    <button className="theme-btn-minimal" onClick={toggleTheme}>
-                        {theme === "dark" ? "☀️" : "🌙"}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <CurrencySelector />
+                        <button className="theme-btn-minimal" onClick={toggleTheme}>
+                            {theme === 'light' ? '🌙' : '☀️'}
+                        </button>
+                    </div>
                 </div>
             </header>
 

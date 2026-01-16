@@ -9,6 +9,7 @@ import BarRankChart from "../../components/charts/BarRankChart";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import { useNavigate, useParams } from "react-router-dom";
 import { profileService, matchService, nuroService } from "../../services/apiService"; // Import matchService
+import CurrencySelector from "../../components/CurrencySelector";
 import BrandMatchResults from "./BrandMatchResults"; // Import Match Results Overlay
 import LeafTransition from "../../components/LeafTransition"; // Import Animation
 import { localizeText } from "../../utils/textUtils";
@@ -144,11 +145,14 @@ export default function BrandDashboard() {
                 </div>
               </div>
             )}
-            <button className="theme-toggle" onClick={toggleTheme}>
-              {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
-                ? "☀️"
-                : "🌙"}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CurrencySelector />
+              <button className="theme-toggle" onClick={toggleTheme}>
+                {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
+                  ? "☀️"
+                  : "🌙"}
+              </button>
+            </div>
             <div
               className="nav-profile-icon"
               onClick={() => setShowModal(true)}
@@ -220,7 +224,7 @@ export default function BrandDashboard() {
           <div className="profile-left">
             {!userId && (
               <div className="profile-actions">
-                <button className="btn-outline">Edit Profile</button>
+                <button className="btn-outline" onClick={() => navigate("/brand-form")}>Edit Profile</button>
                 <button className="btn-outline">Settings</button>
                 <button className="btn-dots">⋯</button>
               </div>

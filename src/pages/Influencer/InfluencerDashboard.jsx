@@ -11,6 +11,7 @@ import { profileService, matchService, nuroService } from "../../services/apiSer
 import InfluencerMatchResults from "./InfluencerMatchResults";
 import LeafTransition from "../../components/LeafTransition";
 import ErrorBoundary from "../../components/ErrorBoundary";
+import CurrencySelector from "../../components/CurrencySelector";
 import { localizeText } from "../../utils/textUtils";
 
 // Lazy Load the AI Studio to save initial bandwidth
@@ -178,16 +179,19 @@ export default function InfluencerDashboard() {
                 </div>
               </div>
             )}
-            <button
-              id="theme-toggle"
-              className="theme-toggle"
-              aria-label="Toggle theme"
-              onClick={toggleTheme}
-            >
-              {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
-                ? "☀️"
-                : "🌙"}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CurrencySelector />
+              <button
+                id="theme-toggle"
+                className="theme-toggle"
+                aria-label="Toggle theme"
+                onClick={toggleTheme}
+              >
+                {(document.documentElement.getAttribute("data-theme") || "light") === "dark"
+                  ? "☀️"
+                  : "🌙"}
+              </button>
+            </div>
             <div
               className="nav-profile-icon"
               onClick={() => setShowModal(true)}
@@ -285,7 +289,7 @@ export default function InfluencerDashboard() {
                     <span>✨</span> Enhance Profile
                   </button>
 
-                  <button className="btn-outline" onClick={() => navigate("/influencer/profile")}>Edit Profile</button>
+                  <button className="btn-outline" onClick={() => navigate("/influencer-form")}>Edit Profile</button>
                   <button className="btn-outline" onClick={() => navigate("/influencer/settings")}>Settings</button>
                   <button className="btn-dots" onClick={onThreeDots}>⋯</button>
                 </>
