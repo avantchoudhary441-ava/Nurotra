@@ -14,7 +14,8 @@ const Deliverable = require('../models/Deliverable');
 const NuroMemory = require('../models/NuroMemory');
 
 const emailsToDelete = [
-    'nurotra435@gmail.com'
+    'nurotra435@gmail.com',
+    'pulse9822@gmail.com'
 ];
 
 async function deleteUsers() {
