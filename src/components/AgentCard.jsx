@@ -1,9 +1,11 @@
 import { useNavigate } from "react-router-dom";
 
 export default function AgentCard({ agent, onStart }) {
- 
+
+  const isLocked = agent.route === "coming-soon";
+
   return (
-    <div className="agent-card">
+    <div className={`agent-card ${isLocked ? 'locked' : ''}`}>
       <div className="agent-inner">
 
         <div className="icon">{agent.icon}</div>
@@ -24,8 +26,14 @@ export default function AgentCard({ agent, onStart }) {
 
         {/* IMPORTANT FIX */}
         <button className="btn-secondary" onClick={() => onStart(agent)}>
-  Start Task
-</button>
+          Start Task
+        </button>
+
+        {isLocked && (
+          <div className="locked-overlay">
+            <span className="locked-text">Agent will be launched soon</span>
+          </div>
+        )}
 
 
       </div>

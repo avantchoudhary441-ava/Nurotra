@@ -36,6 +36,34 @@
   box-shadow: 0 22px 45px rgba(79, 70, 229, 0.45);
 }
 
+/* Custom Gradient Button for Agent Cards */
+.agent-inner button.btn-secondary {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6) !important;
+  color: #ffffff !important;
+  border: none;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  transition: all 0.3s ease;
+  font-weight: 600;
+  margin-top: auto;
+  opacity: 1 !important;
+}
+
+.agent-inner button.btn-secondary:hover {
+  transform: translateY(-2px) !important;
+  /* Darker indigo for perfect visibility in light mode */
+  background: #4338ca !important;
+  background: linear-gradient(90deg, #4338ca, #6d28d9) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 25px rgba(67, 56, 202, 0.4) !important;
+  opacity: 1 !important;
+}
+
+/* Dark theme specific hover - pink-ish accent */
+:root[data-theme="dark"] .agent-inner button.btn-secondary:hover {
+  background: linear-gradient(90deg, #6366f1, #ec4899) !important;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.5), 0 10px 30px rgba(99, 102, 241, 0.3) !important;
+}
+
 .agent-inner .icon {
   font-size: 40px;
   margin-bottom: 8px;
@@ -114,6 +142,52 @@
 
 .details-link:hover {
   color: #818cf8;
+}
+
+/* LOCKED STATE */
+.agent-card.locked {
+  cursor: not-allowed;
+  position: relative;
+  /* Remove pointer-events: none to allow hover interaction (lift/glow) */
+}
+
+/* Specific Hover for Locked Cards to match active ones */
+.agent-card.locked:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 22px 45px rgba(79, 70, 229, 0.45);
+}
+
+/* We blur everything inside agent-inner EXCEPT the overlay */
+.agent-card.locked .agent-inner>*:not(.locked-overlay) {
+  filter: blur(1px);
+  opacity: 0.5;
+}
+
+.locked-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  z-index: 10;
+}
+
+.locked-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px 20px;
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.5px;
 }
 
 /* RESPONSIVE */
