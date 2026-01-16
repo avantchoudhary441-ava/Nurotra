@@ -135,7 +135,7 @@
 .sgp-cta-btn {
     margin-left: auto;
     /* Push to right if inside flex container */
-    background: linear-gradient(90deg, #ff00cc, #333399);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     /* Nurotra Gradient Placeholder */
     color: white;
     border: none;

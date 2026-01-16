@@ -285,7 +285,7 @@
 }
 
 .you-fill {
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     position: absolute;
     top: 0;
     left: 0;

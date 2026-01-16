@@ -31,7 +31,7 @@
 
 /* Glassmorphism Upload Button */
 .btn-upload {
-    background: rgba(255, 255, 255, 0.05);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: #fff;
     padding: 0.8rem 1.5rem;
@@ -196,16 +196,19 @@
 .impact-pop {
     animation: impactBounce 0.6s ease infinite;
 }
+
 /* Mobile Optimization */
 @media (max-width: 768px) {
     .deliverables-container {
         flex-direction: column;
-        display: block; /* Ensure straightforward stacking */
+        display: block;
+        /* Ensure straightforward stacking */
     }
 
     .deliverables-main {
         padding: 1rem;
-        padding-top: 50px; /* Space for fixed toggle if needed */
+        padding-top: 50px;
+        /* Space for fixed toggle if needed */
         width: 100%;
     }
 
@@ -214,7 +217,7 @@
         align-items: flex-start;
         gap: 1rem;
     }
-    
+
     .deliverables-header h1 {
         font-size: 1.8rem;
     }
@@ -232,4 +235,3 @@
         padding-top: 90px !important;
     }
 }
-

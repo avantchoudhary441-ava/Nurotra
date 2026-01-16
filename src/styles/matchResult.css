@@ -5,7 +5,7 @@
     /* Keep light borders for glass effect even in dark mode usually, or adjust */
 
     /* In Light mode, we might want different glass */
-    --accent-gradient: linear-gradient(135deg, var(--accent-1, #06b6d4), var(--accent-2, #a855f7));
+    --accent-gradient: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     --card-hover-lift: -8px;
 }
 
