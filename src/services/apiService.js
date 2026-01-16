@@ -36,6 +36,14 @@ export const authService = {
         return response.data;
     },
 
+    verifyOtp: async (email, otp) => {
+        const response = await axios.post(`${API_URL}/verify-otp`, { email, otp });
+        if (response.data && response.data.token) {
+            localStorage.setItem("nurotra_user", JSON.stringify(response.data));
+        }
+        return response.data;
+    },
+
     logout: () => {
         localStorage.removeItem("nurotra_user");
     },

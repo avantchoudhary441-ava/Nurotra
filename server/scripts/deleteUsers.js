@@ -10,7 +10,7 @@ const connectDB = require("../config/db");
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
 const emailsToDelete = [
-    "tanuj1284@gmail.com"
+    "pulse9822@gmail.com"
 ];
 
 const deleteUsers = async () => {
