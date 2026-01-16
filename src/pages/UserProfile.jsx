@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import "../styles/userProfile.css";
 import BackgroundEffects from "../components/BackgroundEffects";
 import NuroLab from "../components/Nuro/NuroLab";
+import CurrencySelector from "../components/CurrencySelector";
 import api from "../services/apiService";
 
 export default function UserProfile() {
@@ -64,6 +65,7 @@ export default function UserProfile() {
                 >
                     🧪
                 </button>
+                <CurrencySelector />
                 <button
                     className="icon-btn-floating"
                     onClick={toggleTheme}

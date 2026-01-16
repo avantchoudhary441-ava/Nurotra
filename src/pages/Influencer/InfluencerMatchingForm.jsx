@@ -5,6 +5,7 @@ import { profileService, matchService } from "../../services/apiService";
 import "../../styles/matchingForms.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import InfluencerMatchResults from "./InfluencerMatchResults";
+import CurrencySelector from "../../components/CurrencySelector";
 import { localizeText } from "../../utils/textUtils";
 
 export default function InfluencerMatchingForm() {
@@ -217,6 +218,7 @@ export default function InfluencerMatchingForm() {
                             ❌
                         </button>
                     )}
+                    <CurrencySelector />
                     <button onClick={toggleTheme} className="inf-theme-toggle">
                         {theme === "dark" ? "☀️" : "🌙"}
                     </button>

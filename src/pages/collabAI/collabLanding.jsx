@@ -4,6 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import logo from "../../assets/NurotraLogo.png";
 import "../../styles/collabLanding.css";
 import { useNavigate } from "react-router-dom";
+import CurrencySelector from "../../components/CurrencySelector";
 import BackgroundEffects from "../../components/BackgroundEffects";
 
 export default function CollabLanding() {
@@ -39,7 +40,8 @@ export default function CollabLanding() {
 
 
         {/* RIGHT: THEME + PROFILE */}
-        <div className="collab-top-right">
+        <div className="collab-top-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <CurrencySelector />
           <button className="theme-toggle" onClick={toggleTheme}>
             {theme === "dark" ? "☀️" : "🌙"}
           </button>

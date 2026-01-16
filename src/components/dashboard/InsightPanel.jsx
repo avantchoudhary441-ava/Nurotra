@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-export default function InsightPanel({ insights }) {
+export default function InsightPanel({ insights, onAction }) {
     if (!insights || insights.length === 0) return null;
 
     return (
@@ -27,13 +27,14 @@ export default function InsightPanel({ insights }) {
                                 letterSpacing: '0.05em',
                                 color: getCategoryColor(insight.category),
                                 background: getCategoryBg(insight.category),
-                                padding: '2px 8px',
-                                borderRadius: '4px'
+                                padding: '2px 10px',
+                                borderRadius: '4px',
+                                fontWeight: '700'
                             }}>
                                 {insight.category}
                             </span>
                             {insight.impact && (
-                                <span style={{ fontSize: '0.8rem', color: '#10b981' }}>
+                                <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: '600' }}>
                                     +{insight.impact}% Impact
                                 </span>
                             )}
@@ -43,7 +44,10 @@ export default function InsightPanel({ insights }) {
                             {insight.text}
                         </p>
 
-                        <button className="insight-btn">
+                        <button
+                            className="insight-btn"
+                            onClick={() => onAction && onAction(insight.actionLabel)}
+                        >
                             {insight.actionLabel || "Take Action"} →
                         </button>
                     </motion.div>
@@ -57,16 +61,18 @@ function getCategoryColor(category) {
     switch (category) {
         case 'Profile': return '#a78bfa'; // Purple
         case 'Reliability': return '#f472b6'; // Pink
-        case 'Growth': return '#34d399'; // Green
+        case 'Growth': return '#10b981'; // Green
+        case 'Collab': return '#3b82f6'; // Blue
         default: return '#9ca3af'; // Gray
     }
 }
 
 function getCategoryBg(category) {
     switch (category) {
-        case 'Profile': return 'rgba(167, 139, 250, 0.1)';
-        case 'Reliability': return 'rgba(244, 114, 182, 0.1)';
-        case 'Growth': return 'rgba(52, 211, 153, 0.1)';
-        default: return 'rgba(156, 163, 175, 0.1)';
+        case 'Profile': return 'rgba(167, 139, 250, 0.15)';
+        case 'Reliability': return 'rgba(244, 114, 182, 0.15)';
+        case 'Growth': return 'rgba(16, 185, 129, 0.15)';
+        case 'Collab': return 'rgba(59, 130, 246, 0.15)';
+        default: return 'rgba(156, 163, 175, 0.15)';
     }
 }

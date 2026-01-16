@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { profileService, matchService } from "../../services/apiService";
 import BrandMatchResults from "./BrandMatchResults";
+import CurrencySelector from "../../components/CurrencySelector";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import { localizeText } from "../../utils/textUtils";
 
@@ -192,6 +193,7 @@ export default function BrandMatchingForm() {
                             ❌
                         </button>
                     )}
+                    <CurrencySelector />
                     <button onClick={toggleTheme} className="inf-theme-toggle">
                         {theme === "dark" ? "☀️" : "🌙"}
                     </button>

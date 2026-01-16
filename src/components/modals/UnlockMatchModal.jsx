@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, X, Sparkles, Gift } from 'lucide-react';
+import { useCurrency } from '../../context/CurrencyContext';
 import './premiumModals.css';
 
 /**
@@ -10,6 +11,7 @@ import './premiumModals.css';
  * Step 3: Match Unlocked Thank You
  */
 const UnlockMatchModal = ({ isOpen, onClose, onUnlock }) => {
+    const { formatCurrency } = useCurrency();
     const [step, setStep] = useState(1);
     const [tracking, setTracking] = useState({
         match_unlock_clicked: false,
@@ -83,18 +85,18 @@ const UnlockMatchModal = ({ isOpen, onClose, onUnlock }) => {
                     {step === 1 && (
                         <div className="modal-content step-1">
                             <div className="modal-icon-wrapper">
-                                <Lock size={40} className="lock-icon" />
+                                <Lock size={24} className="lock-icon" />
                             </div>
-                            <h2 className="modal-title">🔒 Unlock Additional Match</h2>
+                            <h2 className="modal-title">Access Match</h2>
                             <p className="modal-body">
-                                Unlock one additional high-quality match curated by Nuro.
+                                Unlock this curated premium alignment for your profile.
                             </p>
                             <div className="modal-actions">
-                                <button className="btn-primary gradient-btn" onClick={handleUnlockClick}>
-                                    <Sparkles size={18} /> Unlock for ₹5
+                                <button className="btn-primary" onClick={handleUnlockClick}>
+                                    Unlock for {formatCurrency(9)}
                                 </button>
                                 <button className="btn-secondary" onClick={handleNotNow}>
-                                    Not now
+                                    Decline
                                 </button>
                             </div>
                         </div>
@@ -104,18 +106,18 @@ const UnlockMatchModal = ({ isOpen, onClose, onUnlock }) => {
                     {step === 2 && (
                         <div className="modal-content step-2">
                             <div className="modal-icon-wrapper pulse">
-                                <Sparkles size={40} className="sparkle-icon" />
+                                <Sparkles size={24} className="sparkle-icon" />
                             </div>
-                            <h2 className="modal-title">Confirm Unlock</h2>
+                            <h2 className="modal-title">Confirm Access</h2>
                             <p className="modal-body">
-                                Proceed to unlock this match?
+                                Submitting request for premium match access.
                             </p>
                             <div className="modal-actions">
-                                <button className="btn-primary gradient-btn" onClick={handleProceed}>
-                                    Proceed (₹5)
+                                <button className="btn-primary" onClick={handleProceed}>
+                                    Proceed ({formatCurrency(9)})
                                 </button>
                                 <button className="btn-secondary" onClick={() => setStep(1)}>
-                                    Cancel
+                                    Back
                                 </button>
                             </div>
                         </div>
@@ -125,20 +127,18 @@ const UnlockMatchModal = ({ isOpen, onClose, onUnlock }) => {
                     {step === 3 && (
                         <div className="modal-content step-3">
                             <div className="modal-icon-wrapper success">
-                                <Gift size={50} className="success-icon" />
+                                <Gift size={30} className="success-icon" />
                             </div>
-                            <h2 className="modal-title success-title">🎉 Match Unlocked</h2>
+                            <h2 className="modal-title success-title">Access Granted</h2>
                             <p className="modal-body thank-you-body">
-                                No money has been charged.
+                                Transaction processed successfully.
                                 <br />
-                                Thanks for supporting Nurotra early.
-                                <br />
-                                <span className="highlight-success">This match has been unlocked for you — free of cost.</span>
+                                <span className="highlight-success">Match reveal authorized.</span>
                             </p>
                             {/* Manual Close Button */}
                             <div className="modal-actions" style={{ marginTop: '20px' }}>
                                 <button className="btn-primary" onClick={resetAndClose}>
-                                    Close & Reveal
+                                    Reveal Match
                                 </button>
                             </div>
                         </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Lock } from 'lucide-react';
+import { useCurrency } from '../../context/CurrencyContext';
 import '../modals/premiumModals.css';
 
 /**
@@ -9,6 +10,8 @@ import '../modals/premiumModals.css';
  * Clicking triggers the unlock modal
  */
 const LockedMatchCard = ({ onUnlockClick, cardVariants }) => {
+    const { formatCurrency } = useCurrency();
+
     return (
         <motion.div
             className="card-wrapper locked-match-card"
@@ -21,8 +24,8 @@ const LockedMatchCard = ({ onUnlockClick, cardVariants }) => {
                     <div className="locked-icon-circle">
                         <Lock size={32} className="lock-icon" />
                     </div>
-                    <span className="unlock-price">₹5 to unlock</span>
-                    <span className="unlock-hint">Tap to reveal match</span>
+                    <span className="unlock-price">Unlock for {formatCurrency(9)}</span>
+                    <span className="unlock-hint">Authorization Required</span>
                 </div>
 
                 {/* Blurred placeholder content */}
