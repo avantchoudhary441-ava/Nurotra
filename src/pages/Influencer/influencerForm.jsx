@@ -51,7 +51,8 @@ export default function InfluencerForm() {
       setFormData(prev => ({
         ...prev,
         // Prioritize User Identity Data
-        email: (prev.email && prev.email !== user.email) ? prev.email : (user.email || ""),
+        // Only auto-fill if currently empty
+        email: prev.email || user.email || "",
         nuroId: user.uniqueId || user._id || "",
         // If user already has a profile image in context, preload it (unless form has one)
         profileImg: prev.profileImg || user.profileImg || "",
@@ -99,7 +100,7 @@ export default function InfluencerForm() {
           const merged = { ...defaultState, ...parsed };
 
           if (user) {
-            merged.email = (parsed.email && parsed.email !== user.email) ? parsed.email : (user.email || "");
+            merged.email = parsed.email || user.email || "";
             merged.nuroId = user.uniqueId || user._id || "";
           }
           setFormData(merged);
@@ -274,14 +275,12 @@ export default function InfluencerForm() {
               </div>
 
               <div className="inf-group">
-                <label>Email (Auto-filled)</label>
+                <label>Contact Email</label>
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => !user && updateField("email", e.target.value)}
+                  onChange={(e) => updateField("email", e.target.value)}
                   placeholder="you@example.com"
-                  readOnly={!!user}
-                  className={user ? "inf-disabled" : ""}
                 />
               </div>
 
