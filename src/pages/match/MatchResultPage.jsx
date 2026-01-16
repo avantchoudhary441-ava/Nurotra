@@ -26,7 +26,35 @@ export default function MatchResultPage() {
     // Brand: 3 total (2 unlocked, 1 locked)
     const unlockedCount = role === 'brand' ? 2 : 1;
     const totalVisibleCount = role === 'brand' ? 3 : 2;
-    const visibleMatches = matches.slice(0, totalVisibleCount);
+
+    // --- PAD MATCHES IF INSUFFICIENT ---
+    const generateDummyMatch = (index) => ({
+        _id: `dummy-${index}`,
+        user: {
+            name: "Exclusive Partner",
+            profileImg: null
+        },
+        companyName: "Premium Brand",
+        niche: "Various",
+        matchScore: 0.98,
+        matchExplanation: "High potential match based on your profile.",
+        budget: "₹10,000 - ₹50,000",
+        industry: "Lifestyle & Tech",
+        minEngagement: "2.5%",
+        contentType: ["Reels", "Stories"]
+    });
+
+    let displayMatches = [...matches];
+
+    if (displayMatches.length < totalVisibleCount) {
+        const needed = totalVisibleCount - displayMatches.length;
+        for (let i = 0; i < needed; i++) {
+            displayMatches.push(generateDummyMatch(i));
+        }
+    }
+
+    const visibleMatches = displayMatches.slice(0, totalVisibleCount);
+    // -----------------------------------
 
     useEffect(() => {
         document.documentElement.setAttribute("data-theme", theme);
@@ -154,7 +182,10 @@ export default function MatchResultPage() {
                 >
                     {visibleMatches.map((match, i) => {
                         // Check if this card should be locked
-                        if (isCardLocked(i)) {
+                        const locked = isCardLocked(i);
+                        console.log(`DEBUG: Render Card ${i}. Locked? ${locked}. In unlockedIndices? ${unlockedIndices.includes(i)}`);
+
+                        if (locked) {
                             return (
                                 <LockedMatchCard
                                     key={i}
@@ -181,7 +212,13 @@ export default function MatchResultPage() {
                         const scoreLabel = `Match Accuracy - ${displayScore}`;
 
                         return (
-                            <motion.div key={i} className="card-wrapper" variants={cardVariants}>
+                            <motion.div
+                                key={i}
+                                className="card-wrapper"
+                                variants={cardVariants}
+                                initial="visible" // FORCE VISIBLE TO DEBUG ANIMATION ISSUE
+                                animate="visible"
+                            >
                                 <div className="premium-card">
                                     <img
                                         src={match.user?.profileImg || logo}

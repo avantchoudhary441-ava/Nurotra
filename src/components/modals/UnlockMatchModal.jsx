@@ -28,30 +28,20 @@ const UnlockMatchModal = ({ isOpen, onClose, onUnlock }) => {
         setStep(3);
     };
 
-    const handleConfirmation = () => {
-        // Brief delay for user to see the thank you, then unlock
-        setTimeout(() => {
-            onUnlock();
-            resetAndClose();
-        }, 1800);
-    };
-
+    // Modified: Logic to unlock ONLY when closing from Step 3
     const resetAndClose = () => {
+        if (step === 3) {
+            onUnlock(); // Trigger the actual unlock in parent
+        }
         setStep(1);
         onClose();
     };
 
     const handleNotNow = () => {
         console.log('[Nurotra Analytics] match_unlock_dismissed');
-        resetAndClose();
+        setStep(1); // Reset step just in case
+        onClose();
     };
-
-    // Trigger handleConfirmation when reaching step 3
-    useEffect(() => {
-        if (step === 3) {
-            handleConfirmation();
-        }
-    }, [step]);
 
     if (!isOpen) return null;
 
@@ -131,7 +121,7 @@ const UnlockMatchModal = ({ isOpen, onClose, onUnlock }) => {
                         </div>
                     )}
 
-                    {/* Step 3: Match Unlocked */}
+                    {/* Step 3: Match Unlocked (Manual Close) */}
                     {step === 3 && (
                         <div className="modal-content step-3">
                             <div className="modal-icon-wrapper success">
@@ -145,6 +135,12 @@ const UnlockMatchModal = ({ isOpen, onClose, onUnlock }) => {
                                 <br />
                                 <span className="highlight-success">This match has been unlocked for you — free of cost.</span>
                             </p>
+                            {/* Manual Close Button */}
+                            <div className="modal-actions" style={{ marginTop: '20px' }}>
+                                <button className="btn-primary" onClick={resetAndClose}>
+                                    Close & Reveal
+                                </button>
+                            </div>
                         </div>
                     )}
                 </motion.div>
