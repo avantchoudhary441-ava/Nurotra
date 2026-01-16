@@ -45,9 +45,9 @@ export default function BrandForm() {
       setFormData(prev => ({
         ...prev,
         // Prioritize User Identity Data
-        contact: (prev.contact && prev.contact !== user.email) ? prev.contact : (user.email || ""),
+        // Only auto-fill if currently empty
+        contact: prev.contact || user.email || "",
         nuroId: user.uniqueId || user._id || "",
-        // profileImg: Manually uploaded only (Requested by user)
       }));
     }
   }, [user]);
@@ -85,7 +85,7 @@ export default function BrandForm() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (user) {
-          parsed.contact = (parsed.contact && parsed.contact !== user.email) ? parsed.contact : (user.email || "");
+          parsed.contact = parsed.contact || user.email || "";
           parsed.nuroId = user.uniqueId || user._id || "";
         }
         setFormData(parsed);
@@ -277,14 +277,12 @@ export default function BrandForm() {
 
             {/* Contact Info */}
             <div className="brand-group">
-              <label>Email (Auto-filled)</label>
+              <label>Contact Email</label>
               <input
                 type="text"
                 value={formData.contact}
-                onChange={(e) => !user && updateField("contact", e.target.value)}
+                onChange={(e) => updateField("contact", e.target.value)}
                 placeholder="yourmail@company.com"
-                readOnly={!!user}
-                className={user ? "brand-disabled" : ""}
               />
             </div>
           </div>
