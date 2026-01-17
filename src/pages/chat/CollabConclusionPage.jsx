@@ -2,11 +2,13 @@ import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { chatService } from "../../services/apiService";
 import BackgroundEffects from "../../components/BackgroundEffects";
+import { useAuth } from "../../context/AuthContext";
 import "../../styles/global.css";
 
 export default function CollabConclusionPage() {
     const location = useLocation();
     const navigate = useNavigate();
+    const { user } = useAuth(); // Get user to check role
     const { chatId } = location.state || {}; // Expecting chatId passed in state
 
     const [loading, setLoading] = useState(false);
@@ -21,7 +23,14 @@ export default function CollabConclusionPage() {
         try {
             await chatService.recordCollaboration(chatId, status);
             alert(status === 'success' ? "Collaboration Marked as Started! 🎉" : "Collaboration Marked as Not Started.");
-            navigate('/influencer/dashboard'); // Or back to chat
+
+            // Redirect based on Role
+            const role = user?.role?.toLowerCase();
+            if (role === 'brand') {
+                navigate('/brand/dashboard');
+            } else {
+                navigate('/influencer/dashboard');
+            }
         } catch (error) {
             console.error("Failed to record collaboration", error);
             alert("Failed to update status. Please try again.");
