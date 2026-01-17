@@ -169,11 +169,11 @@ export default function InfluencerMatchingForm() {
 
     // Options
     const platforms = ["Instagram", "YouTube", "TikTok", "X (Twitter)", "Facebook", "Other"];
-    const followerRanges = ["Nano (1k–10k)", "Micro (10k–100k)", "Macro (100k–1M)", "Celebrity (1M+)"];
+    const followerRanges = ["Nano (1k-10k)", "Micro (10k-100k)", "Macro (100k-1M)", "Celebrity (1M+)"];
     const ageRanges = ["10-18", "18-25", "25-30", "30-65"];
     const niches = ["Fitness", "Fashion", "Tech", "Beauty", "Lifestyle", "Food", "Travel", "Gaming", "Education", "Finance", "Home & Living", "Others"];
     const contentOpts = ["Reel / Short Video", "Post", "Story", "Unboxing", "Review Video", "Carousel", "Live Session", "UGC Content Only"];
-    const budgetRanges = ["₹500–₹5,000", "₹5,000–₹20,000", "₹20,000–₹50,000", "₹50,000+"];
+    const budgetRanges = ["₹500-₹5,000", "₹5,000-₹20,000", "₹20,000-₹50,000", "₹50,000+"];
     const expOpts = ["New to collaborations", "Barter experience", "Paid experience", "Both"];
 
     // Location handling (Select + Add)
