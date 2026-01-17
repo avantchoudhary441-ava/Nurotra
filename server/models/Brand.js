@@ -27,11 +27,11 @@ const BrandSchema = new mongoose.Schema({
     // Influencer Requirements
     influencerCategory: {
         type: String,
-        enum: ["Nano (1k–10k)", "Micro (10k–100k)", "Macro (100k–1M)", "Celebrity (1M+)"]
+        enum: ["Nano (1k-10k)", "Micro (10k-100k)", "Macro (100k-1M)", "Celebrity (1M+)"]
     },
     minEngagement: {
         type: String,
-        enum: ["1–3%", "3–5%", "5–10%", "10%+"]
+        enum: ["1-3%", "3-5%", "5-10%", "10%+"]
     },
     platform: {
         type: String,
@@ -41,7 +41,7 @@ const BrandSchema = new mongoose.Schema({
     // Budget & Timeline
     collabDuration: {
         type: String,
-        enum: ["Immediate (24 hours)", "2–3 days", "1 week", "1–4 weeks"]
+        enum: ["Immediate (24 hours)", "2-3 days", "1 week", "1-4 weeks"]
     },
     noteToInfluencer: { type: String }, // Optional
 
