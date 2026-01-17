@@ -27,10 +27,10 @@ export default function BrandForm() {
     profileImg: "",
     nuroId: "",
     campaignGoal: "Brand Awareness",
-    influencerCategory: "Lifestyle",
-    minEngagement: "1% – 3%",
+    influencerCategory: "Nano (1k–10k)", // Fixed: Matches Brand.js Enum
+    minEngagement: "1–3%", // Fixed: Matches Brand.js Enum
     platform: "Instagram",
-    collabDuration: "Long-term partnership",
+    collabDuration: "1 week", // Fixed: Matches Brand.js Enum
     noteToInfluencer: ""
   });
 
