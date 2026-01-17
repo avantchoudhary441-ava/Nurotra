@@ -27,6 +27,7 @@ import "./styles/background.css";
 import InfluencerDashboard from "./pages/Influencer/InfluencerDashboard.jsx";
 import MatchResultPage from "./pages/match/MatchResultPage";
 import ChatPage from "./pages/chat/ChatPage";
+import CollabConclusionPage from "./pages/chat/CollabConclusionPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import InfluencerMatchingForm from "./pages/Influencer/InfluencerMatchingForm";
 import BrandMatchingForm from "./pages/brand/BrandMatchingForm";
@@ -97,6 +98,7 @@ export default function App() {
             <Route path="/brand/matching-standards/:userId?" element={<InspectionRoute owner={<BrandMatchingForm />} target={<InfluencerMatchingForm />} />} />
             <Route path="/match-results" element={<MatchResultPage />} />
             <Route path="/chat" element={<ChatPage />} />
+            <Route path="/collab-conclusion" element={<CollabConclusionPage />} />
             <Route path="/influencer/matching" element={<InfluencerMatchingForm />} />
             <Route path="/influencer/matching-standards/:userId?" element={<InspectionRoute owner={<InfluencerMatchingForm />} target={<BrandMatchingForm />} />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
