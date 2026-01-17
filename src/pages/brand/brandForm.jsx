@@ -27,8 +27,8 @@ export default function BrandForm() {
     profileImg: "",
     nuroId: "",
     campaignGoal: "Brand Awareness",
-    influencerCategory: "Nano (1k–10k)", // Fixed: Matches Brand.js Enum
-    minEngagement: "1–3%", // Fixed: Matches Brand.js Enum
+    influencerCategory: "Nano (1k-10k)", // Fixed: Matches Brand.js Enum
+    minEngagement: "1-3%", // Fixed: Matches Brand.js Enum
     platform: "Instagram",
     collabDuration: "1 week", // Fixed: Matches Brand.js Enum
     noteToInfluencer: ""
@@ -160,7 +160,9 @@ export default function BrandForm() {
 
     } catch (error) {
       console.error("Brand Creation Error:", error);
-      alert("Failed to create profile. Please try again.");
+      console.log("Error Response:", error.response?.data); // Added detailed logging
+      const msg = error.response?.data?.message || "Failed to create profile. Please try again.";
+      alert(msg);
     }
   };
 

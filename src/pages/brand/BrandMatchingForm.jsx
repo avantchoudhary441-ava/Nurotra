@@ -163,12 +163,12 @@ export default function BrandMatchingForm() {
     // Constants
     const industries = ["Tech", "Fashion", "Fitness", "Beauty", "Food", "Lifestyle", "Education", "Finance", "Home & Living", "Others"];
     const contentOpts = ["Reel / Video", "Post", "Story", "Unboxing", "Review", "Carousel", "Live Interaction", "UGC Content"];
-    const budgetRanges = ["₹500–₹5,000", "₹5,000–₹20,000", "₹20,000–₹50,000", "₹50,000+"];
+    const budgetRanges = ["₹500-₹5,000", "₹5,000-₹20,000", "₹20,000-₹50,000", "₹50,000+"];
     const goals = ["Brand Awareness", "Product Promotion", "Event Promotion", "App Installs", "UGC Content", "Community Building", "Product Launch", "Product Awareness", "Other"];
-    const categories = ["Nano (1k–10k)", "Micro (10k–100k)", "Macro (100k–1M)", "Celebrity (1M+)"];
-    const engagementRates = ["1–3%", "3–5%", "5–10%", "10%+"];
+    const categories = ["Nano (1k-10k)", "Micro (10k-100k)", "Macro (100k-1M)", "Celebrity (1M+)"];
+    const engagementRates = ["1-3%", "3-5%", "5-10%", "10%+"];
     const platforms = ["Instagram", "YouTube", "TikTok", "X (Twitter)", "Facebook", "Other"];
-    const durations = ["Immediate (24 hours)", "2–3 days", "1 week", "1–4 weeks"];
+    const durations = ["Immediate (24 hours)", "2-3 days", "1 week", "1-4 weeks"];
 
     return (
         <div className="inf-page">
