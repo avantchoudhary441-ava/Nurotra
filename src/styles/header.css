@@ -109,6 +109,12 @@ nav a:hover {
   color: var(--text-main);
 }
 
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* THEME TOGGLE */
 .theme-toggle {
   background: transparent;

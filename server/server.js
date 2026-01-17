@@ -5,9 +5,11 @@ const connectDB = require("./config/db");
 
 const helmet = require("helmet");
 const compression = require("compression");
+const rateLimit = require("express-rate-limit");
+const path = require("path");
 
 const app = express();
-app.set("trust proxy", 1); // Trust first key for HTTPS on Render/Vercel
+app.set("trust proxy", 1);
 
 // Middleware
 app.use(helmet());
@@ -23,9 +25,8 @@ const allowedOrigins = [
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.some(o => origin.startsWith(o))) {
+        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.some(o => origin && origin.startsWith(o))) {
             callback(null, true);
         } else {
             console.warn(`Blocked CORS request from: ${origin}`);
@@ -34,6 +35,14 @@ app.use(cors({
     },
     credentials: true
 }));
+
+// Rate Limiting
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: "Too many requests, please try again later."
+});
+app.use("/api/", apiLimiter);
 const passport = require("./config/passport");
 app.use(passport.initialize());
 
@@ -74,6 +83,14 @@ const io = require('socket.io')(server, {
 // Attach Socket Handler
 require("./socket/socketHandler")(io);
 
+
+// Serve static assets in production
+if (process.env.NODE_ENV === "production") {
+    app.use(express.static(path.join(__dirname, "../dist")));
+    app.get("*", (req, res) => {
+        res.sendFile(path.resolve(__dirname, "../", "dist", "index.html"));
+    });
+}
 
 const PORT = process.env.PORT || 5000;
 

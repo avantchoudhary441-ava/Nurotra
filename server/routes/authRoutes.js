@@ -28,14 +28,14 @@ router.get(
             // Handle Errors (including our custom EmailExists)
             if (err) {
                 console.error("Google Auth Error:", err);
-                return res.redirect(`${clientURL}/login?error=ServerErr`);
+                return res.redirect(`${clientURL}/#/login?error=ServerErr`);
             }
 
             // Handle "false" user (rejected login)
             if (!user) {
                 // If we passed a message in passport.js, use it
                 const errorType = info && info.message ? info.message : 'AuthFailed';
-                return res.redirect(`${clientURL}/login?error=${errorType}`);
+                return res.redirect(`${clientURL}/#/login?error=${errorType}`);
             }
 
             // Success
@@ -43,10 +43,10 @@ router.get(
                 const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
                     expiresIn: "30d",
                 });
-                res.redirect(`${clientURL}/login?token=${token}`);
+                res.redirect(`${clientURL}/#/login?token=${token}`);
             } catch (error) {
                 console.error("Token Gen Error:", error);
-                res.redirect(`${clientURL}/login?error=TokenError`);
+                res.redirect(`${clientURL}/#/login?error=TokenError`);
             }
         })(req, res, next);
     }

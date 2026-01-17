@@ -196,7 +196,7 @@ export default function BrandDashboard() {
                 </div>
               </div>
 
-              <button onClick={logout} className="modal-logout-btn">
+              <button onClick={() => { logout(); navigate("/"); }} className="modal-logout-btn">
                 Log Out
               </button>
             </div>
