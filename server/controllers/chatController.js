@@ -1,5 +1,6 @@
 const Chat = require("../models/Chat");
 const User = require("../models/User");
+const NuroMemory = require("../models/NuroMemory");
 
 // @desc    Access a chat (Create if not exists, else fetch)
 // @route   POST /api/chat
@@ -93,21 +94,56 @@ const recordCollaboration = async (req, res) => {
             return res.status(404).send("Chat not found");
         }
 
-        // Logic to record collaboration
-        // 1. Update Chat metadata (if we had a field for it, currently purely counting)
-        // 2. Increment user collaboration counts
-
+        // 1. Update User Statistics
         if (status === 'success') {
-            // Increment totalCollabs for all users in the chat
             for (const user of chat.users) {
-                // Assuming User model has totalCollabs field, strictly strictly strictly speaking we should check
-                // but for now we try to update
                 await User.findByIdAndUpdate(user._id, { $inc: { totalCollabs: 1 } });
             }
         }
 
-        res.status(200).json({ message: "Collaboration recorded", status });
+        // 2. Update Nuro Memory for BOTH users
+        for (const user of chat.users) {
+            let memory = await NuroMemory.findOne({ userId: user._id });
+
+            // If no memory exists, use default initialization similar to nuroController
+            if (!memory) {
+                memory = new NuroMemory({
+                    userId: user._id,
+                    metrics: {
+                        communicationClarity: 70, // Start higher for better first impression
+                        reliabilityScore: 70,
+                        trustIndex: 70,
+                    }
+                });
+            }
+
+            // Find partner info
+            const partner = chat.users.find(u => u._id.toString() !== user._id.toString());
+
+            // Add to collab history
+            memory.collabHistory.push({
+                collabId: chatId,
+                partnerName: partner?.name || "Anonymous Partner",
+                outcome: status === 'success' ? 'Success' : 'Failed',
+                overallScore: status === 'success' ? 85 : 30, // Simulated scores
+                aiTag: status === 'success' ? 'Smooth' : 'Mismatch',
+                timestamp: new Date()
+            });
+
+            // Minor score adjustment based on outcome
+            if (status === 'success') {
+                memory.metrics.reliabilityScore = Math.min(100, memory.metrics.reliabilityScore + 2);
+                memory.metrics.trustIndex = Math.min(100, memory.metrics.trustIndex + 1);
+            } else {
+                memory.metrics.reliabilityScore = Math.max(0, memory.metrics.reliabilityScore - 5);
+            }
+
+            await memory.save();
+        }
+
+        res.status(200).json({ message: "Collaboration recorded and Nuro memory updated", status });
     } catch (error) {
+        console.error("Record Collaboration Error:", error);
         res.status(400);
         throw new Error(error.message);
     }

@@ -3,10 +3,27 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useSpring, useTransform, useMotionValue } from 'framer-motion';
 
 import { useNuroCore } from '../../context/NuroCoreContext';
+import { nuroService } from '../../services/apiService';
 
 export default function NuroDashboard({ onClose }) {
     const { mode, switchMode } = useNuroCore();
     const navigate = useNavigate();
+    const [memory, setMemory] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchMemory = async () => {
+            try {
+                const data = await nuroService.getMemory();
+                setMemory(data);
+            } catch (err) {
+                console.error("Failed to fetch Nuro Memory for Dashboard", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchMemory();
+    }, []);
 
     // Mapping implicit modes to dashboard views
     const getActiveView = () => {
@@ -23,22 +40,21 @@ export default function NuroDashboard({ onClose }) {
         else switchMode('learning');
     };
 
-    // Mock Data (In phases, this will come from api/nuro/memory)
+    // Derive Data from Memory
+    const lastCollab = memory?.collabHistory?.[memory.collabHistory.length - 1] || {};
+    const metrics = memory?.metrics || { communicationClarity: 50, reliabilityScore: 50, trustIndex: 50 };
+
     const data = {
-        score: 82,
-        delta: 14,
-        positives: ["Fast response time", "Clear expectations"],
-        negatives: ["Over-negotiation on pricing", "Late deliverable confirmation"],
-        rootCause: "Tone shifted from confident to defensive after budget discussion.",
-        fixes: [
-            { text: "Use suggested pricing script", actionType: "redirect", target: "/settings" },
-            { text: "Respond within 6 hours", actionType: "guide", target: "/profile" }
+        score: Math.round((metrics.communicationClarity + metrics.reliabilityScore + metrics.trustIndex) / 3),
+        delta: memory?.collabHistory?.length > 1 ? (lastCollab.overallScore - (memory.collabHistory[memory.collabHistory.length - 2]?.overallScore || 0)) : 5,
+        rootCause: lastCollab.rootCause || "Pattern calibration in progress.",
+        fixes: lastCollab.fixes || [
+            { text: "Continue active matching to build data", actionType: "redirect", target: "/match-results" }
         ],
-        prediction: 71,
         comparison: {
-            clarity: { past: 50, current: 90 },
-            reliability: { past: 30, current: 80 },
-            trust: { past: 45, current: 85 }
+            clarity: { past: 50, current: Math.round(metrics.communicationClarity) },
+            reliability: { past: 50, current: Math.round(metrics.reliabilityScore) },
+            trust: { past: 50, current: Math.round(metrics.trustIndex) }
         }
     };
 
@@ -51,9 +67,7 @@ export default function NuroDashboard({ onClose }) {
         } else if (fix.actionType === 'guide') {
             onClose();
             navigate(fix.target); // Navigate to where they need to go
-            // Ideally trigger a toast or highlight: "Fix it here"
         } else {
-            // Placeholder for custom guidance logic
             alert(`Nuro will help you fix: ${fix.text}`);
         }
     };

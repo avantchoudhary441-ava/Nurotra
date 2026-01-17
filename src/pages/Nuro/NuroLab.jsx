@@ -1,19 +1,42 @@
 import React, { useState, useEffect } from "react";
 import "../../styles/nuro.css"; // We'll reuse nuro styles or add new ones
 import { Link } from "react-router-dom";
-
-// Mock Data for "Last 7 Matches"
-const MOCK_HISTORY = [
-    { id: 1, partner: "Brand A", outcome: "Success", score: 85, date: "2 days ago" },
-    { id: 2, partner: "Brand B", outcome: "Failed", score: 42, date: "5 days ago" },
-    { id: 3, partner: "Influencer X", outcome: "Success", score: 91, date: "1 week ago" },
-    { id: 4, partner: "Tech Corp", outcome: "Keep", score: 60, date: "1 week ago" },
-    { id: 5, partner: "Startup Z", outcome: "Success", score: 78, date: "2 weeks ago" },
-    { id: 6, partner: "Agency Y", outcome: "Failed", score: 30, date: "2 weeks ago" },
-    { id: 7, partner: "Brand C", outcome: "Success", score: 88, date: "3 weeks ago" },
-];
+import { nuroService } from "../../services/apiService";
 
 export default function NuroLab() {
+    const [memory, setMemory] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchMemory = async () => {
+            try {
+                const data = await nuroService.getMemory();
+                setMemory(data);
+            } catch (err) {
+                console.error("Failed to fetch Nuro history", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchMemory();
+    }, []);
+
+    const history = memory?.collabHistory?.slice(-7).reverse() || [];
+    const metrics = memory?.metrics || {
+        communicationClarity: 50,
+        reliabilityScore: 50,
+        trustIndex: 50
+    };
+
+    if (loading) {
+        return (
+            <div className="loading-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'white' }}>
+                <div className="spinner"></div>
+                <p style={{ marginTop: '20px' }}>Accessing Nuro Memory...</p>
+            </div>
+        );
+    }
+
     return (
         <div className="nuro-lab-container">
             {/* HEADER */}
@@ -31,18 +54,22 @@ export default function NuroLab() {
                     <p className="subtext">Humans grow when feedback is recent & actionable.</p>
 
                     <div className="timeline-list">
-                        {MOCK_HISTORY.map((match) => (
-                            <div key={match.id} className={`timeline-item ${match.outcome.toLowerCase()}`}>
+                        {history.length > 0 ? history.map((match, index) => (
+                            <div key={index} className={`timeline-item ${match.outcome.toLowerCase()}`}>
                                 <div className="timeline-dot"></div>
                                 <div className="timeline-content">
-                                    <h4>{match.partner}</h4>
-                                    <span className="match-date">{match.date}</span>
+                                    <h4>{match.partnerName || "Anonymous Partner"}</h4>
+                                    <span className="match-date">{new Date(match.timestamp).toLocaleDateString()}</span>
                                 </div>
                                 <div className="timeline-score">
-                                    {match.score}%
+                                    {match.overallScore}%
                                 </div>
                             </div>
-                        ))}
+                        )) : (
+                            <div className="no-data-msg" style={{ padding: '20px', color: '#666', textAlign: 'center' }}>
+                                No recent collaborations found. Start matching to build memory!
+                            </div>
+                        )}
                     </div>
                 </section>
 
@@ -56,33 +83,42 @@ export default function NuroLab() {
                         <div className="pattern-card">
                             <h3>🗣️ Communication Tone</h3>
                             <div className="pattern-visual tone-visual">
-                                <div className="bar improvement" style={{ width: '80%' }}></div>
-                                <span>Improving (More Direct)</span>
+                                <div className="bar improvement" style={{ width: `${metrics.communicationClarity}%` }}></div>
+                                <span>{metrics.communicationClarity > 60 ? "Clear & Strategic" : "Calibrating..."}</span>
                             </div>
-                            <p className="pattern-insight">You are becoming more assertive in negotiations.</p>
+                            <p className="pattern-insight">
+                                {metrics.communicationClarity > 70
+                                    ? "Your communication is highly professional and effective."
+                                    : "Nuro is analyzing your tone for future optimizations."}
+                            </p>
                         </div>
 
                         {/* Pressure Decision */}
                         <div className="pattern-card">
-                            <h3>⚡ Decisions Under Pressure</h3>
+                            <h3>⚡ Reliability & Trust</h3>
                             <div className="pattern-visual pressure-visual">
-                                <div className="bar regression" style={{ width: '40%' }}></div>
-                                <span>Impulsive</span>
+                                <div className="bar success" style={{ width: `${metrics.reliabilityScore}%`, background: 'linear-gradient(90deg, #10b981, #34d399)' }}></div>
+                                <span>{metrics.reliabilityScore}% Reliability</span>
                             </div>
-                            <p className="pattern-insight">Tendency to agree too quickly when rushed.</p>
+                            <p className="pattern-insight">
+                                {metrics.trustIndex > 75
+                                    ? "High trust standing. Brands respond 2x faster to your offers."
+                                    : "Building trust. Success rate improves as memory grows."}
+                            </p>
                         </div>
 
                         {/* Mistakes Evolution */}
                         <div className="pattern-card">
-                            <h3>🔄 Mistake Evolution</h3>
+                            <h3>🔄 Nuro Learnings</h3>
                             <ul className="mistake-list">
-                                <li className="fading">
-                                    <span className="icon">🌫️</span>
-                                    <s>Late Replies</s> (Fading away...)
+                                <li className={metrics.reliabilityScore > 80 ? "fading" : ""}>
+                                    <span className="icon">{metrics.reliabilityScore > 80 ? "🌫️" : "🏗️"}</span>
+                                    {metrics.reliabilityScore > 80 ? <s>Execution Lag</s> : "Analyzing Execution Time"}
+                                    {metrics.reliabilityScore > 80 && " (Optimized)"}
                                 </li>
                                 <li className="alert">
-                                    <span className="icon">⚠️</span>
-                                    Undefined Deliverables (Recurring)
+                                    <span className="icon">🧠</span>
+                                    Pattern Detection Active
                                 </li>
                             </ul>
                         </div>

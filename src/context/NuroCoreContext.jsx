@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { nuroService } from '../services/apiService';
 
 const NuroCoreContext = createContext();
 
@@ -9,7 +10,23 @@ export const NuroCoreProvider = ({ children }) => {
     // 3️⃣ NURO MODES (BEHAVIORAL STATES)
     const [mode, setMode] = useState('observing'); // observing, learning, advising, intervening, guiding, appreciating, warning
     const [activeInterrupt, setActiveInterrupt] = useState(null); // { type: 'question', content: '...' }
+    const [memory, setMemory] = useState(null);
+    const [loading, setLoading] = useState(true);
     const location = useLocation();
+
+    useEffect(() => {
+        const fetchMemory = async () => {
+            try {
+                const data = await nuroService.getMemory();
+                setMemory(data);
+            } catch (err) {
+                console.error("Failed to fetch Nuro Memory in Context", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchMemory();
+    }, []);
 
     // 1) NURO’S CORE AGENTIC BEHAVIOR (Always-On)
     // Mode Switching Logic based on Context (Location/Actions)
@@ -130,6 +147,8 @@ export const NuroCoreProvider = ({ children }) => {
         const types = ['fact', 'question'];
         const selected = types[Math.floor(Math.random() * types.length)];
 
+        const metrics = memory?.metrics || { communicationClarity: 50, reliabilityScore: 50 };
+
         if (selected === 'question') {
             // One-word questions / Quick feedback
             setActiveInterrupt({
@@ -143,7 +162,7 @@ export const NuroCoreProvider = ({ children }) => {
             setActiveInterrupt({
                 type: 'fact',
                 title: 'Did you know? 💡',
-                content: 'Your clarity score has improved by 15% this week. Keep it simple!',
+                content: `Your clarity score is at ${Math.round(metrics.communicationClarity)}%. ${metrics.communicationClarity > 70 ? "Excellent work!" : "Let's focus on staying direct."}`,
                 duration: 5000 // Auto dismiss facts
             });
         }
@@ -177,10 +196,13 @@ export const NuroCoreProvider = ({ children }) => {
         <NuroCoreContext.Provider value={{
             mode,
             activeInterrupt,
+            memory,
+            loading,
             switchMode,
             triggerIntervention,
             dismissInterrupt,
-            handleFeedback
+            handleFeedback,
+            triggerEngagement
         }}>
             {children}
         </NuroCoreContext.Provider>

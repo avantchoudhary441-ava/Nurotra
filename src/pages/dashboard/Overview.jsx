@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useNuroCore } from '../../context/NuroCoreContext';
 import { profileService, nuroService } from '../../services/apiService';
 import PentagonGraph from '../../components/dashboard/PentagonGraph';
 import InsightPanel from '../../components/dashboard/InsightPanel';
@@ -18,16 +19,28 @@ export default function Overview() {
     const location = useLocation();
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { memory, loading: nuroLoading } = useNuroCore();
     const role = location.pathname.includes('/influencer') ? 'influencer' : 'brand';
 
-    // Mock Data for "Not Created Yet" state
-    const userData = {
-        profile: 75,
-        professionalism: 88,
-        collab: 60,
-        reliability: 92,
-        growth: 85
-    };
+    // Map Real Data from Nuro Memory
+    const userData = React.useMemo(() => {
+        if (!memory?.metrics) {
+            return {
+                profile: 50,
+                professionalism: 50,
+                collab: 50,
+                reliability: 50,
+                growth: 50
+            };
+        }
+        return {
+            profile: Math.round(memory.metrics.trustIndex || 50),
+            professionalism: Math.round(memory.metrics.communicationClarity || 50),
+            collab: Math.round(memory.metrics.experienceIndex || 50),
+            reliability: Math.round(memory.metrics.reliabilityScore || 50),
+            growth: Math.round(memory.metrics.compatibilityScore || 50)
+        };
+    }, [memory]);
 
     const averageData = {
         profile: 65,
@@ -169,7 +182,7 @@ export default function Overview() {
     const scores = currentConfig.metrics;
     const insights = currentConfig.insights;
 
-    const overallScore = Math.round(
+    const overallScore = memory?.trustSnapshot?.compositeScore || Math.round(
         (userData.profile + userData.professionalism + userData.collab + userData.reliability + userData.growth) / 5
     );
 
@@ -206,6 +219,14 @@ export default function Overview() {
         };
         fetchProfile();
     }, [user, role]);
+
+    if (nuroLoading) {
+        return (
+            <div className="influencer-dashboard" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'white' }}>
+                <div className="nuro-loader">Scanning Neural Patterns...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="influencer-dashboard">
