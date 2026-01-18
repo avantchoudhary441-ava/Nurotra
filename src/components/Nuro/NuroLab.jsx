@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/nuro.css';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { nuroService } from '../../services/apiService';
 
 export default function NuroLab({ isOpen, toggleLab }) {
     const [memory, setMemory] = useState(null);
@@ -19,15 +17,12 @@ export default function NuroLab({ isOpen, toggleLab }) {
     const fetchNuroMemory = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/api/nuro/memory`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            processInsights(res.data);
+            const data = await nuroService.getMemory();
+            processInsights(data);
         } catch (error) {
-            console.error("Failed to load Nuro Lab:", error);
-            // Fallback mock data for dev/demo if API fails or is empty
-            processInsights(getMockData());
+            console.error("Failed to load Nuro Lab Sidebar:", error);
+            // Optional: fallback to empty structure instead of mock
+            processInsights({ metrics: { communicationClarity: 50 }, collabHistory: [] });
         } finally {
             setLoading(false);
         }
@@ -51,14 +46,6 @@ export default function NuroLab({ isOpen, toggleLab }) {
 
         setMemory({ ...data, history: recent.reverse() }); // Newest first
     };
-
-    const getMockData = () => ({
-        metrics: { communicationClarity: 75 },
-        collabHistory: [
-            { overallScore: 65, positives: ["Good opener"], negatives: ["Slow reply"], rootCause: "Distraction", fixes: [], timestamp: Date.now() - 10000000 },
-            { overallScore: 72, positives: ["Clear terms"], negatives: ["Defensive tone"], rootCause: "Anxiety", fixes: [], timestamp: Date.now() }
-        ]
-    });
 
     const getToneColor = () => {
         switch (tone) {
