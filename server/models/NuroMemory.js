@@ -27,6 +27,7 @@ const nuroMemorySchema = new mongoose.Schema({
     // Deep history of every collaboration analyzed
     collabHistory: [{
         collabId: String, // Reference to a Match/Collab ID
+        partnerName: String, // Real name of the collaborator
         timestamp: { type: Date, default: Date.now },
         overallScore: Number, // The "Score Ring" value (0-100)
 
@@ -119,7 +120,9 @@ const nuroMemorySchema = new mongoose.Schema({
         trigger: String, // "Tone degradation detected"
         adviceGiven: String,
         userAction: String // "Accepted", "Ignored"
-    }]
+    }],
+    // Cloud Persistence for UI Tours/Guidance
+    seenGuides: [String] // Array of guide IDs user has already seen
 }, { timestamps: true });
 
 module.exports = mongoose.model('NuroMemory', nuroMemorySchema);

@@ -14,14 +14,19 @@ import ErrorBoundary from "../../components/ErrorBoundary";
 import CurrencySelector from "../../components/CurrencySelector";
 import { localizeText } from "../../utils/textUtils";
 
+import { useCurrency } from "../../context/CurrencyContext";
+
 // Lazy Load the AI Studio to save initial bandwidth
 const ProfileEnhancer = React.lazy(() => import("../../components/ProfileEnhancer"));
 
 export default function InfluencerDashboard() {
+  const { currency } = useCurrency();
   const navigate = useNavigate();
   const { userId } = useParams(); // Get target userId for inspection
   const { user, logout } = useAuth();
 
+  // ... rest of the component state ...
+  // [Lines 25-56 remain same]
   const [profile, setProfile] = useState(null);
   const [publicMemory, setPublicMemory] = useState(null); // Added for public data
   const [showModal, setShowModal] = useState(false);
@@ -56,6 +61,12 @@ export default function InfluencerDashboard() {
 
   // Use user context data, fallback to defaults if needed
   const data = profile || user || {};
+
+  // Helper to process budget strings (e.g., "₹10,000 - ₹50,000")
+  const processBudget = (budgetStr) => {
+    if (!budgetStr) return "N/A";
+    return budgetStr.replace(/[₹$£€¥د.إR$₽A$C$]/g, currency);
+  };
 
   // UI state
   const [scrolled, setScrolled] = useState(false);
@@ -108,7 +119,9 @@ export default function InfluencerDashboard() {
     return "Beginner";
   };
 
-  const activeCount = data?.activeCount ?? 3;
+  const totalCollabs = profile?.userId?.totalCollabs || user?.totalCollabs || 0;
+  const successfulCollabs = profile?.userId?.successfulCollabs || user?.successfulCollabs || 0;
+  const activeCount = successfulCollabs;
   const badges = [
     { id: 1, name: "Creator Pro", color: "gold" },
     { id: 2, name: "Top 10%", color: "silver" },
@@ -238,15 +251,12 @@ export default function InfluencerDashboard() {
                   </div>
                 )}
 
-                {/* Fallback for legacy data structure if exists */}
-                {(!data?.primaryPlatform && data?.instagram) && (
-                  <div className="modal-info-row">
-                    <strong>Instagram:</strong> <a href={data.instagram} target="_blank" rel="noreferrer" className="text-accent-1">Link</a>
-                  </div>
-                )}
-
                 <div className="modal-info-row">
                   <strong>Engagement:</strong> {data?.engagementRate ? `${data.engagementRate}%` : "N/A"}
+                </div>
+
+                <div className="modal-info-row">
+                  <strong>Expected Budget:</strong> {processBudget(data?.budget)}
                 </div>
               </div>
 
@@ -315,7 +325,7 @@ export default function InfluencerDashboard() {
                     {localizeText("Total Collaborations", profile?.userId?.name, userId)}
                   </div>
                   <div className="rating-value">
-                    {data?.totalCollabs ?? 0}
+                    {totalCollabs}
                   </div>
                 </div>
               </div>
@@ -346,27 +356,30 @@ export default function InfluencerDashboard() {
               </div>
             </div>
 
-            {/* Card 3: Active collaborations */}
+            {/* Card 3: Successful collaborations */}
             <div className="card neon-card">
               <div className="card-head">
-                <h4>Active Collaborations</h4>
-                <div className="card-sub">Currently running</div>
+                <h4>Successful Collaborations</h4>
+                <div className="card-sub">Completed on Nurotra</div>
               </div>
 
               <div className="card-body">
-                <div className="active-large">{activeCount}</div>
+                <div className="active-large">{successfulCollabs}</div>
                 <div className="active-actions">
-                  <button className="btn-primary">View Active</button>
-                  <button className="btn-secondary">Manage</button>
+                  <button className="btn-primary" onClick={() => navigate('/influencer/history')}>View History</button>
+                  <button className="btn-secondary" onClick={() => navigate('/influencer/collab-insights')}>Manage</button>
                 </div>
               </div>
             </div>
 
             {/* Card 4: Badges */}
             <div className="card neon-card">
-              <div className="card-head">
-                <h4>Badges</h4>
-                <div className="card-sub">Achievements</div>
+              <div className="card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h4>Badges</h4>
+                  <div className="card-sub">Achievements</div>
+                </div>
+                <span className="coming-soon-badge" style={{ fontSize: '10px', background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '10px', color: 'rgba(255,255,255,0.6)' }}>COMING SOON</span>
               </div>
 
               <div className="card-body badges-grid">

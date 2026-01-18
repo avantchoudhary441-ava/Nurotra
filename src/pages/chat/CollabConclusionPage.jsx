@@ -22,7 +22,7 @@ export default function CollabConclusionPage() {
         setLoading(true);
         try {
             await chatService.recordCollaboration(chatId, status);
-            alert(status === 'success' ? "Collaboration Marked as Started! 🎉" : "Collaboration Marked as Not Started.");
+            alert(status === 'Collaboration Successful' ? "Collaboration Marked as Successful! 🎉" : "Collaboration Marked as Unsuccessful.");
 
             // Redirect based on Role
             const role = user?.role?.toLowerCase();
@@ -100,7 +100,7 @@ export default function CollabConclusionPage() {
 
                 <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button
-                        onClick={() => handleConclusion('success')}
+                        onClick={() => handleConclusion('Collaboration Successful')}
                         disabled={loading}
                         style={{
                             padding: '15px 30px',
@@ -118,11 +118,11 @@ export default function CollabConclusionPage() {
                         onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                         onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                     >
-                        {loading ? "Processing..." : "Collaboration Started ✅"}
+                        {loading ? "Processing..." : "Collaboration Successful ✅"}
                     </button>
 
                     <button
-                        onClick={() => handleConclusion('failed')}
+                        onClick={() => handleConclusion('Collaboration Unsuccessful')}
                         disabled={loading}
                         style={{
                             padding: '15px 30px',
@@ -145,7 +145,7 @@ export default function CollabConclusionPage() {
                             e.currentTarget.style.transform = 'scale(1)';
                         }}
                     >
-                        Not Started ❌
+                        Collaboration Unsuccessful ❌
                     </button>
                 </div>
             </div>

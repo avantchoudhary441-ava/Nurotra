@@ -25,7 +25,7 @@ const protect = async (req, res, next) => {
 // @desc    Get current user's influencer profile
 router.get("/", protect, async (req, res) => {
     try {
-        const influencer = await Influencer.findOne({ userId: req.user._id }).populate("userId", ["name", "email"]);
+        const influencer = await Influencer.findOne({ userId: req.user._id }).populate("userId", ["name", "email", "totalCollabs", "successfulCollabs"]);
         if (!influencer) return res.status(404).json({ msg: "Influencer profile not found" });
         res.json(influencer);
     } catch (err) {
@@ -38,7 +38,7 @@ router.get("/", protect, async (req, res) => {
 // @desc    Get influencer profile by userId
 router.get("/:userId", protect, async (req, res) => {
     try {
-        const influencer = await Influencer.findOne({ userId: req.params.userId }).populate("userId", ["name", "email"]);
+        const influencer = await Influencer.findOne({ userId: req.params.userId }).populate("userId", ["name", "email", "totalCollabs", "successfulCollabs"]);
         if (!influencer) return res.status(404).json({ msg: "Influencer profile not found" });
         res.json(influencer);
     } catch (err) {

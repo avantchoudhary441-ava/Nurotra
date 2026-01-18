@@ -12,7 +12,10 @@ const UserSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
     isVerified: { type: Boolean, default: false },
     otp: { type: String },
-    otpExpires: { type: Date }
+    otpExpires: { type: Date },
+    totalCollabs: { type: Number, default: 0 },
+    successfulCollabs: { type: Number, default: 0 },
+    seenMatches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 });
 
 // Encrypt password before save

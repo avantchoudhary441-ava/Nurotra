@@ -119,6 +119,8 @@ const verifyOtp = async (req, res) => {
                 role: user.role,
                 uniqueId: user.uniqueId,
                 profileImg: user.profileImg,
+                totalCollabs: user.totalCollabs || 0,
+                successfulCollabs: user.successfulCollabs || 0,
                 token: generateToken(user._id),
             });
         } else {
@@ -189,6 +191,8 @@ const loginUser = async (req, res) => {
                 role: user.role,
                 uniqueId: user.uniqueId,
                 profileImg: user.profileImg,
+                totalCollabs: user.totalCollabs || 0,
+                successfulCollabs: user.successfulCollabs || 0,
                 token: generateToken(user._id),
             });
         } else {
@@ -212,6 +216,8 @@ const getMe = async (req, res) => {
             role: user.role,
             uniqueId: user.uniqueId,
             profileImg: user.profileImg,
+            totalCollabs: user.totalCollabs || 0,
+            successfulCollabs: user.successfulCollabs || 0,
             token: req.headers.authorization.split(" ")[1] // Echo back token or just rely on client having it
         });
     } catch (error) {

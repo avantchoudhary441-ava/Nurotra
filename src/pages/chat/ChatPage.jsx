@@ -9,9 +9,11 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Paperclip, Sun, Moon, CheckCircle, XCircle, Wand2, Sparkles, Phone } from "lucide-react";
 import { useSocket } from "../../context/SocketContext";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNuroCore } from "../../context/NuroCoreContext";
 
 export default function ChatPage() {
     const { user } = useAuth();
+    const { checkSafety } = useNuroCore();
     const { callUser } = useSocket();
     const navigate = useNavigate();
     const location = useLocation();
@@ -139,14 +141,18 @@ export default function ChatPage() {
     };
 
     const handleInput = (e) => {
-        setNewMessage(e.target.value);
+        const value = e.target.value;
+        setNewMessage(value);
         setEnhancedText(null); // Hide enhanced suggestion if user types
+
+        // NURO: Adaptive Intervention Check
+        checkSafety(value, "Chat");
+
         // Auto-expand
         if (textareaRef.current) {
             textareaRef.current.style.height = "auto";
             textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
         }
-        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
     }
 
     const handleFileUpload = async (e) => {

@@ -178,6 +178,14 @@ export const nuroService = {
     getPublicMemory: async (userId) => {
         const response = await api.get(`/nuro/memory/${userId}`);
         return response.data;
+    },
+    saveFeedback: async (response, context) => {
+        const res = await api.post("/nuro/feedback", { response, context });
+        return res.data;
+    },
+    markGuideSeen: async (guideId) => {
+        const res = await api.post("/nuro/guide-seen", { guideId });
+        return res.data;
     }
 };
 

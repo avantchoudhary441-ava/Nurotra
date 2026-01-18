@@ -109,24 +109,18 @@ export default function CollabInsights({ role = "influencer" }) {
                                         exit={{ height: 0, opacity: 0 }}
                                         className="overflow-hidden"
                                     >
-                                        <div className="pattern-item">
-                                            <div className="pattern-icon">✅</div>
-                                            <div className="pattern-text">
-                                                <strong>Brief Alignment:</strong> Your highest success comes from brands with highly technical, 2-page briefs.
-                                            </div>
-                                        </div>
-                                        <div className="pattern-item">
-                                            <div className="pattern-icon">⚡</div>
-                                            <div className="pattern-text">
-                                                <strong>Response Velocity:</strong> 100% success rate when initial response is under 40 minutes.
-                                            </div>
-                                        </div>
-                                        <div className="pattern-item">
-                                            <div className="pattern-icon">🎯</div>
-                                            <div className="pattern-text">
-                                                <strong>Audience Fit:</strong> Tech-lifestyle crossovers show 2x engagement compared to generic lifestyle.
-                                            </div>
-                                        </div>
+                                        {history.filter(c => c.outcome === 'Success').length > 0 ? (
+                                            history.filter(c => c.outcome === 'Success').slice(-3).map((collab, i) => (
+                                                <div key={i} className="pattern-item">
+                                                    <div className="pattern-icon">✅</div>
+                                                    <div className="pattern-text">
+                                                        <strong>Analysis from {collab.partnerName}:</strong> {collab.positives?.[0] || "Maintain professionalism and response speed."}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="pattern-item text-gray-500 text-xs italic">No successful patterns detected yet.</div>
+                                        )}
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -149,18 +143,18 @@ export default function CollabInsights({ role = "influencer" }) {
                                         exit={{ height: 0, opacity: 0 }}
                                         className="overflow-hidden"
                                     >
-                                        <div className="pattern-item border-l-2 border-amber-500/30">
-                                            <div className="pattern-text text-gray-400">
-                                                <span className="text-amber-500 font-semibold text-xs block mb-1">AUDIENCE OVERLAP GAP</span>
-                                                Previous mismatch was due to lower than optimal audience overlap (22%).
-                                            </div>
-                                        </div>
-                                        <div className="pattern-item border-l-2 border-red-500/30">
-                                            <div className="pattern-text text-gray-400">
-                                                <span className="text-red-500 font-semibold text-xs block mb-1">EXPECTATION GAP</span>
-                                                Timeline pressure exceeded capacity during peak periods.
-                                            </div>
-                                        </div>
+                                        {history.filter(c => c.outcome !== 'Success').length > 0 ? (
+                                            history.filter(c => c.outcome !== 'Success').slice(-2).map((collab, i) => (
+                                                <div key={i} className="pattern-item border-l-2 border-amber-500/30">
+                                                    <div className="pattern-text text-gray-400">
+                                                        <span className="text-amber-500 font-semibold text-xs block mb-1">LOG FROM: {collab.partnerName?.toUpperCase()}</span>
+                                                        {collab.rootCause || "General misalignment in expectations."}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="pattern-item text-gray-500 text-xs italic">No mismatch patterns detected yet.</div>
+                                        )}
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -181,30 +175,16 @@ export default function CollabInsights({ role = "influencer" }) {
                                         className="overflow-hidden"
                                     >
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="p-4 bg-white/5 rounded-xl border border-white/5 hover:border-purple-500/30 transition-colors">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <CheckCircle2 size={16} className="text-purple-400" />
-                                                    <span className="text-[10px] font-bold text-purple-400 uppercase">Impact: High</span>
+                                            {(memory?.aiLearnings?.length > 0 ? memory.aiLearnings : ["Maintain consistent response intervals", "Clarify deliverables at the start"]).slice(0, 3).map((learning, i) => (
+                                                <div key={i} className="p-4 bg-white/5 rounded-xl border border-white/5 hover:border-purple-500/30 transition-colors">
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <CheckCircle2 size={16} className="text-purple-400" />
+                                                        <span className="text-[10px] font-bold text-purple-400 uppercase">Impact: High</span>
+                                                    </div>
+                                                    <h4 className="text-sm font-semibold mb-1">Growth Path</h4>
+                                                    <p className="text-xs text-gray-500">{learning}</p>
                                                 </div>
-                                                <h4 className="text-sm font-semibold mb-1">Tone Adjustment</h4>
-                                                <p className="text-xs text-gray-500">More data-driven outreach would increase brand satisfaction by <span className="impact-badge">18%</span>.</p>
-                                            </div>
-                                            <div className="p-4 bg-white/5 rounded-xl border border-white/5 hover:border-purple-500/30 transition-colors">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <CheckCircle2 size={16} className="text-purple-400" />
-                                                    <span className="text-[10px] font-bold text-blue-400 uppercase">Impact: Med</span>
-                                                </div>
-                                                <h4 className="text-sm font-semibold mb-1">Deliverables Link</h4>
-                                                <p className="text-xs text-gray-500">Adding 2 more verification proofs for engagement will boost your Trust Index.</p>
-                                            </div>
-                                            <div className="p-4 bg-white/5 rounded-xl border border-white/5 hover:border-purple-500/30 transition-colors">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <CheckCircle2 size={16} className="text-purple-400" />
-                                                    <span className="text-[10px] font-bold text-emerald-400 uppercase">Impact: Low</span>
-                                                </div>
-                                                <h4 className="text-sm font-semibold mb-1">Budget Alignment</h4>
-                                                <p className="text-xs text-gray-500">Small adjustment in base rate for tech niches improves match probability.</p>
-                                            </div>
+                                            ))}
                                         </div>
                                     </motion.div>
                                 )}
@@ -218,12 +198,12 @@ export default function CollabInsights({ role = "influencer" }) {
                                 <span className="card-tag">Next 30 Days</span>
                             </div>
                             <div className="predictive-wrap">
-                                <div className="score-main">84%</div>
+                                <div className="score-main">{history[history.length - 1]?.predictedSuccessProbability || 70}%</div>
                                 <p className="score-label">AI-estimated probability of successful match</p>
                                 <div className="mt-4 h-2 bg-white/5 rounded-full overflow-hidden">
                                     <motion.div
                                         initial={{ width: 0 }}
-                                        animate={{ width: '84%' }}
+                                        animate={{ width: `${history[history.length - 1]?.predictedSuccessProbability || 70}%` }}
                                         transition={{ duration: 1.5, ease: "easeOut" }}
                                         className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
                                     />
@@ -246,18 +226,12 @@ export default function CollabInsights({ role = "influencer" }) {
                                         exit={{ height: 0, opacity: 0 }}
                                         className="overflow-hidden space-y-3"
                                     >
-                                        <div className="flex items-center gap-3 text-sm">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-yellow-400"></div>
-                                            <span className="text-gray-400">You perform best in short-term campaigns.</span>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-sm">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
-                                            <span className="text-gray-400">High success when brand response is fast.</span>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-sm">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-red-400"></div>
-                                            <span className="text-gray-400">Audience mismatch is your primary friction point.</span>
-                                        </div>
+                                        {(memory?.historicalPatterns?.length > 0 ? memory.historicalPatterns : ["Data is populating..."]).map((pattern, i) => (
+                                            <div key={i} className="flex items-center gap-3 text-sm">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
+                                                <span className="text-gray-400">{pattern}</span>
+                                            </div>
+                                        ))}
                                     </motion.div>
                                 )}
                             </AnimatePresence>

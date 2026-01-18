@@ -33,9 +33,11 @@ import {
 import Sidebar from "../components/Sidebar";
 import BackgroundEffects from "../components/BackgroundEffects";
 import { nuroService } from "../services/apiService";
+import { useCurrency } from "../context/CurrencyContext";
 import "../styles/history.css";
 
 export default function History({ role = "influencer" }) {
+    const { currency, selectedCountry, formatCurrency } = useCurrency();
     const [memory, setMemory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [expandedCollab, setExpandedCollab] = useState(null);
@@ -62,6 +64,15 @@ export default function History({ role = "influencer" }) {
             </div>
         );
     }
+
+    // Dynamic Patterns Helper - Swap "$" for current symbol or format correctly
+    const processPattern = (pattern) => {
+        if (!pattern) return "";
+        // If pattern contains hardcoded "$", swap it with the current currency symbol
+        // and if it's not INR, maybe apply currency conversion logic if we have raw numbers
+        // But for strings, we simply swap the sign to match the toggle
+        return pattern.replace(/\$/g, currency);
+    };
 
     // Fallback Mock Data for empty states (Serious user demo mode)
     const collabHistory = (memory?.collabHistory?.length > 0) ? memory.collabHistory : [
@@ -125,11 +136,11 @@ export default function History({ role = "influencer" }) {
         nicheStats: []
     };
 
-    const patterns = memory?.historicalPatterns?.length > 0 ? memory.historicalPatterns : [
+    const patterns = (memory?.historicalPatterns?.length > 0 ? memory.historicalPatterns : [
         "You perform best in Tech niche with $1k - $3k budget range.",
         "Delays usually occur during negotiation stage; automation recommended.",
         "High alignment when content freedom is given by brand."
-    ];
+    ]).map(p => processPattern(p));
 
     const milestones = memory?.milestones?.length > 0 ? memory.milestones : [
         { label: "First successful collab", date: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000) },
@@ -161,6 +172,63 @@ export default function History({ role = "influencer" }) {
                             Updated: {new Date().toLocaleDateString()}
                         </div>
                     </header>
+
+                    {/* 4. Smart Past Collab Log (Moved to Top) */}
+                    <section className="history-card">
+                        <h3 className="card-title"><MessageSquare size={14} /> Past Collab Log</h3>
+                        <div className="collab-log-list">
+                            {collabHistory.slice().reverse().map((collab, idx) => (
+                                <div key={idx} className="collab-row" onClick={() => setExpandedCollab(expandedCollab === idx ? null : idx)}>
+                                    <div className="collab-row-header">
+                                        <div className="collab-info">
+                                            <span className="collab-type">{collab.collabType}</span>
+                                            <span className={`collab-outcome outcome-${collab.outcome}`}>
+                                                {collab.outcome === 'Success' ? <CheckCircle2 size={12} /> :
+                                                    collab.outcome === 'Partial' ? <AlertTriangle size={12} /> : <AlertTriangle size={12} />}
+                                                {collab.outcome}
+                                            </span>
+                                            <span className="text-sm font-medium text-slate-300">{collab.partnerName || collab.collabId}</span>
+                                        </div>
+                                        <div className="collab-meta">
+                                            <span>{collab.duration}</span>
+                                            <span className="collab-tag">{collab.aiTag}</span>
+                                            <ChevronDown size={14} className={`transition-transform ${expandedCollab === idx ? 'rotate-180' : ''}`} />
+                                        </div>
+                                    </div>
+                                    <AnimatePresence>
+                                        {expandedCollab === idx && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="collab-details-expanded">
+                                                    <div className="detail-block">
+                                                        <h5>Satisfaction</h5>
+                                                        <div className="flex gap-4 mt-2">
+                                                            <div className="text-center">
+                                                                <div className="text-xs text-slate-500 font-bold uppercase">Brand</div>
+                                                                <div className="text-emerald-500 font-bold">{collab.satisfactionScore?.brand}%</div>
+                                                            </div>
+                                                            <div className="text-center">
+                                                                <div className="text-xs text-slate-500 font-bold uppercase">You</div>
+                                                                <div className="text-blue-500 font-bold">{collab.satisfactionScore?.influencer}%</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="detail-block">
+                                                        <h5>Nuro Post-Mortem</h5>
+                                                        <p className="detail-content">{collab.rootCause}</p>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
 
                     <section className="pattern-summary">
                         <h3><Target size={14} /> Your Historical Pattern</h3>
@@ -243,62 +311,6 @@ export default function History({ role = "influencer" }) {
                                 </div>
                             </section>
 
-                            {/* 4. Smart Past Collab Log */}
-                            <section className="history-card">
-                                <h3 className="card-title"><MessageSquare size={14} /> Past Collab Log</h3>
-                                <div className="collab-log-list">
-                                    {collabHistory.map((collab, idx) => (
-                                        <div key={idx} className="collab-row" onClick={() => setExpandedCollab(expandedCollab === idx ? null : idx)}>
-                                            <div className="collab-row-header">
-                                                <div className="collab-info">
-                                                    <span className="collab-type">{collab.collabType}</span>
-                                                    <span className={`collab-outcome outcome-${collab.outcome}`}>
-                                                        {collab.outcome === 'Success' ? <CheckCircle2 size={12} /> :
-                                                            collab.outcome === 'Partial' ? <AlertTriangle size={12} /> : <AlertTriangle size={12} />}
-                                                        {collab.outcome}
-                                                    </span>
-                                                    <span className="text-sm font-medium text-slate-300">{collab.collabId}</span>
-                                                </div>
-                                                <div className="collab-meta">
-                                                    <span>{collab.duration}</span>
-                                                    <span className="collab-tag">{collab.aiTag}</span>
-                                                    <ChevronDown size={14} className={`transition-transform ${expandedCollab === idx ? 'rotate-180' : ''}`} />
-                                                </div>
-                                            </div>
-                                            <AnimatePresence>
-                                                {expandedCollab === idx && (
-                                                    <motion.div
-                                                        initial={{ height: 0, opacity: 0 }}
-                                                        animate={{ height: 'auto', opacity: 1 }}
-                                                        exit={{ height: 0, opacity: 0 }}
-                                                        className="overflow-hidden"
-                                                    >
-                                                        <div className="collab-details-expanded">
-                                                            <div className="detail-block">
-                                                                <h5>Satisfaction</h5>
-                                                                <div className="flex gap-4 mt-2">
-                                                                    <div className="text-center">
-                                                                        <div className="text-xs text-slate-500 font-bold uppercase">Brand</div>
-                                                                        <div className="text-emerald-500 font-bold">{collab.satisfactionScore?.brand}%</div>
-                                                                    </div>
-                                                                    <div className="text-center">
-                                                                        <div className="text-xs text-slate-500 font-bold uppercase">You</div>
-                                                                        <div className="text-blue-500 font-bold">{collab.satisfactionScore?.influencer}%</div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="detail-block">
-                                                                <h5>Nuro Post-Mortem</h5>
-                                                                <p className="detail-content">{collab.rootCause}</p>
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
                         </div>
 
                         <div className="history-side-col">

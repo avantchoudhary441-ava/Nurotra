@@ -1,4 +1,5 @@
 const NuroMemory = require('../models/NuroMemory');
+const mongoose = require('mongoose');
 const { aiService } = require('../services/aiService');
 
 // Get the user's Nuro Memory (Core Stats)
@@ -47,7 +48,7 @@ exports.getNuroMemory = async (req, res) => {
                     statusMessage: "Your trust standing across identity, behaviour, and reliability."
                 },
                 trustPillars: {
-                    identity: { emailVerified: false, socialVerified: false, authenticityRate: 50, identityScore: 50 },
+                    identity: { emailVerified: true, socialVerified: false, authenticityRate: 100, identityScore: 100 },
                     behavioralIntegrity: { spamSignal: 'Low', fakeFollowerEstimate: 0, interactionHealth: 100, integrityScore: 100 },
                     transactionalTrust: { paymentSafetyScore: 100, agreementTransparency: 100, disputeRate: 0, transactionalScore: 100 },
                     communitySignal: { reputationHeatmap: [], socialProofScore: 50 }
@@ -71,14 +72,51 @@ exports.getNuroMemory = async (req, res) => {
         }
         if (!memory.trustPillars) {
             memory.trustPillars = {
-                identity: { emailVerified: false, socialVerified: false, authenticityRate: 50, identityScore: 50 },
+                identity: { emailVerified: true, socialVerified: false, authenticityRate: 100, identityScore: 100 },
                 behavioralIntegrity: { spamSignal: 'Low', fakeFollowerEstimate: 0, interactionHealth: 100, integrityScore: 100 },
                 transactionalTrust: { paymentSafetyScore: 100, agreementTransparency: 100, disputeRate: 0, transactionalScore: 100 },
                 communitySignal: { reputationHeatmap: [], socialProofScore: 50 }
             };
             modified = true;
         }
-        if (modified) await memory.save();
+        // --- DATA INTEGRITY FIX: Resolve raw IDs/Chat IDs to Names in History ---
+        const User = require('../models/User');
+        const Chat = require('../models/Chat'); // Import Chat for fallback resolution
+        let historyModified = false;
+
+        for (let entry of memory.collabHistory) {
+            // Check if partnerName is an ID or missing
+            const isObjectId = /^[0-9a-fA-F]{24}$/.test(entry.partnerName || "");
+            const hasNoName = !entry.partnerName || entry.partnerName === "Anonymous Partner" || entry.partnerName === entry.collabId;
+
+            if (isObjectId || hasNoName) {
+                // Resolution Strategy 1: The ID is a User ID
+                const potentialUserId = isObjectId ? entry.partnerName : entry.collabId;
+
+                if (mongoose.Types.ObjectId.isValid(potentialUserId)) {
+                    // Try User lookup first
+                    let user = await User.findById(potentialUserId).select('name');
+
+                    if (!user) {
+                        // Resolution Strategy 2: The ID is a Chat ID
+                        const chat = await Chat.findById(potentialUserId).populate('users', 'name');
+                        if (chat && chat.users) {
+                            // Find the OTHER user in the chat
+                            const partner = chat.users.find(u => u._id.toString() !== req.user.id);
+                            if (partner) {
+                                entry.partnerName = partner.name;
+                                historyModified = true;
+                            }
+                        }
+                    } else {
+                        entry.partnerName = user.name;
+                        historyModified = true;
+                    }
+                }
+            }
+        }
+
+        if (modified || historyModified) await memory.save();
 
         res.status(200).json(memory);
     } catch (error) {
@@ -89,7 +127,7 @@ exports.getNuroMemory = async (req, res) => {
 // Trigger an analysis (e.g., after a chat closes)
 exports.runPostMortem = async (req, res) => {
     try {
-        const { collabId, chatLogs, outcome } = req.body;
+        const { collabId, chatLogs, outcome, partnerName } = req.body;
 
         // 1. AI Analysis
         const analysis = await aiService.analyzeCollaborationBehavior({ chatLogs, outcome });
@@ -100,6 +138,7 @@ exports.runPostMortem = async (req, res) => {
         // Push to history
         memory.collabHistory.push({
             collabId: collabId || Date.now().toString(),
+            partnerName: partnerName || "Anonymous Partner",
             overallScore: analysis.overallScore,
             scoreDelta: analysis.scoreDelta,
             positives: analysis.positives,
@@ -141,5 +180,52 @@ exports.getPublicNuroMemory = async (req, res) => {
         res.status(200).json(memory);
     } catch (error) {
         res.status(500).json({ message: "Error fetching public Nuro memory", error: error.message });
+    }
+};
+
+// PERSISTENCE: Mark a guide as seen in the cloud
+exports.markGuideSeen = async (req, res) => {
+    try {
+        const { guideId } = req.body;
+        const memory = await NuroMemory.findOne({ userId: req.user.id });
+
+        if (memory && !memory.seenGuides.includes(guideId)) {
+            memory.seenGuides.push(guideId);
+            await memory.save();
+        }
+
+        res.status(200).json({ success: true, seenGuides: memory ? memory.seenGuides : [] });
+    } catch (error) {
+        res.status(500).json({ message: "Error marking guide as seen", error: error.message });
+    }
+};
+
+// FEEDBACK: Save micro-feedback to memory
+exports.saveFeedback = async (req, res) => {
+    try {
+        const { response, context } = req.body;
+        const memory = await NuroMemory.findOne({ userId: req.user.id });
+
+        if (memory) {
+            // Log as an intervention action or specific feedback node
+            memory.interventionHistory.push({
+                timestamp: new Date(),
+                context: context || "Engagement Question",
+                trigger: "User Feedback",
+                adviceGiven: "Micro-question prompt",
+                userAction: response
+            });
+
+            // Update metrics based on feedback (optional - e.g., if response is 'Success')
+            if (response === 'Yes') {
+                memory.metrics.reliabilityScore = Math.min(100, memory.metrics.reliabilityScore + 1);
+            }
+
+            await memory.save();
+        }
+
+        res.status(200).json({ success: true });
+    } catch (error) {
+        res.status(500).json({ message: "Error saving feedback", error: error.message });
     }
 };

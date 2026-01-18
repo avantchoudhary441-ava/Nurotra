@@ -184,11 +184,9 @@ export default function SafetyTrust({ role = "influencer" }) {
                                 <div className="stat-row">
                                     <div className="stat-label-wrap">
                                         <span className="stat-label">Email Verification</span>
-                                        <span className={`stat-value ${pillars.identity.emailVerified ? 'text-emerald-400' : 'text-slate-500'}`}>
-                                            {pillars.identity.emailVerified ? 'Verified' : 'Pending'}
-                                        </span>
+                                        <span className="stat-value text-emerald-400">Verified</span>
                                     </div>
-                                    <div className="stat-bar-bg"><div className="stat-bar-fill" style={{ width: pillars.identity.emailVerified ? '100%' : '0%' }} /></div>
+                                    <div className="stat-bar-bg"><div className="stat-bar-fill" style={{ width: '100%' }} /></div>
                                 </div>
                                 <div className="stat-row">
                                     <div className="stat-label-wrap">

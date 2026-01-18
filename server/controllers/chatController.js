@@ -97,13 +97,64 @@ const recordCollaboration = async (req, res) => {
         // 1. Update Chat metadata (if we had a field for it, currently purely counting)
         // 2. Increment user collaboration counts
 
-        if (status === 'success') {
-            // Increment totalCollabs for all users in the chat
-            for (const user of chat.users) {
-                // Assuming User model has totalCollabs field, strictly strictly strictly speaking we should check
-                // but for now we try to update
-                await User.findByIdAndUpdate(user._id, { $inc: { totalCollabs: 1 } });
+        // Increment totalCollabs for all users in the chat (regardless of outcome)
+        for (const user of chat.users) {
+            const update = { $inc: { totalCollabs: 1 } };
+            // If successful, also increment successfulCollabs
+            if (status === 'Collaboration Successful') {
+                update.$inc.successfulCollabs = 1;
             }
+            await User.findByIdAndUpdate(user._id, update);
+        }
+
+        chat.collabStatus = status;
+        await chat.save();
+
+        // 3. Trigger Nuro Post-Mortem for both users automatically
+        try {
+            const { aiService } = require('../services/aiService');
+            const NuroMemory = require('../models/NuroMemory');
+
+            for (const participant of chat.users) {
+                // Find the partner (the other person in the chat)
+                const partner = chat.users.find(u => u._id.toString() !== participant._id.toString());
+                const partnerName = partner ? partner.name : "Anonymous Partner";
+
+                // Run Analysis
+                const analysis = await aiService.analyzeCollaborationBehavior({
+                    chatLogs: [], // In real prod, fetch messages here
+                    outcome: status
+                });
+
+                // Save to Participant's Nuro Memory
+                let pMemory = await NuroMemory.findOne({ userId: participant._id });
+                if (!pMemory) {
+                    // Fail-safe: if memory doesn't exist, it will be initialized on next fetch
+                    // but for now let's just create a basic one if needed
+                    pMemory = new NuroMemory({ userId: participant._id });
+                }
+
+                pMemory.collabHistory.push({
+                    collabId: chat._id.toString(),
+                    partnerName,
+                    overallScore: analysis.overallScore,
+                    outcome: status.includes('Successful') ? 'Success' : 'Failed',
+                    rootCause: analysis.rootCause,
+                    predictedSuccessProbability: analysis.predictedSuccessProbability,
+                    positives: analysis.positives,
+                    negatives: analysis.negatives
+                });
+
+                // Update metrics
+                pMemory.metrics.communicationClarity = (pMemory.metrics.communicationClarity * 0.7) + (analysis.metrics.communicationClarity * 0.3);
+                pMemory.metrics.reliabilityScore = (pMemory.metrics.reliabilityScore * 0.7) + (analysis.metrics.reliability * 0.3);
+                pMemory.metrics.trustIndex = (pMemory.metrics.trustIndex * 0.7) + (analysis.metrics.trustIndex * 0.3);
+
+                await pMemory.save();
+            }
+        } catch (nuroErr) {
+            console.error("Auto-Nuro Post-Mortem Failed:", nuroErr);
+            // Don't fail the main request if Nuro fails, just log it
         }
 
         res.status(200).json({ message: "Collaboration recorded", status });

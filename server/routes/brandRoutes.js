@@ -25,7 +25,7 @@ const protect = async (req, res, next) => {
 // @desc    Get current user's brand profile
 router.get("/", protect, async (req, res) => {
     try {
-        const brand = await Brand.findOne({ userId: req.user._id }).populate("userId", ["name", "email"]);
+        const brand = await Brand.findOne({ userId: req.user._id }).populate("userId", ["name", "email", "totalCollabs", "successfulCollabs"]);
         if (!brand) return res.status(404).json({ msg: "Brand profile not found" });
         res.json(brand);
     } catch (err) {
@@ -38,7 +38,7 @@ router.get("/", protect, async (req, res) => {
 // @desc    Get brand profile by userId
 router.get("/:userId", protect, async (req, res) => {
     try {
-        const brand = await Brand.findOne({ userId: req.params.userId }).populate("userId", ["name", "email"]);
+        const brand = await Brand.findOne({ userId: req.params.userId }).populate("userId", ["name", "email", "totalCollabs", "successfulCollabs"]);
         if (!brand) return res.status(404).json({ msg: "Brand profile not found" });
         res.json(brand);
     } catch (err) {

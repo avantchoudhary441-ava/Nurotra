@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { nuroService } from '../services/apiService';
 
 const NuroCoreContext = createContext();
 
@@ -9,67 +10,95 @@ export const NuroCoreProvider = ({ children }) => {
     // 3️⃣ NURO MODES (BEHAVIORAL STATES)
     const [mode, setMode] = useState('observing'); // observing, learning, advising, intervening, guiding, appreciating, warning
     const [activeInterrupt, setActiveInterrupt] = useState(null); // { type: 'question', content: '...' }
+    const [memory, setMemory] = useState(null);
+    const [loading, setLoading] = useState(true);
     const location = useLocation();
+
+    // 🧠 INITIAL FETCH: Sync Nuro Memory from Cloud
+    useEffect(() => {
+        const fetchMemory = async () => {
+            try {
+                const data = await nuroService.getMemory();
+                setMemory(data);
+            } catch (err) {
+                console.warn("Nuro Memory sync failed, using offline fallback.", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchMemory();
+    }, []);
 
     // 1) NURO’S CORE AGENTIC BEHAVIOR (Always-On)
     // Mode Switching Logic based on Context (Location/Actions)
     // 🧠 GUIDANCE KNOWLEDGE BASE (Contextual Mentorship)
+    const NURO_QUOTES = [
+        "The best way to predict the future is to create it. 🌟",
+        "Your only limit is your soul. ✨",
+        "Clarity is power. Let's keep it simple. 🧠",
+        "Great things never come from comfort zones. 🚀",
+        "Success is a series of small wins. You're doing great! ✅",
+        "Focus on progress, not perfection. 📈",
+        "Your professional identity is your greatest asset. 💎"
+    ];
+
+    const getRandomQuote = () => NURO_QUOTES[Math.floor(Math.random() * NURO_QUOTES.length)];
 
     const KNOWLEDGE_BASE = [
         {
             path: '/dashboard',
             id: 'dashboard_guide',
-            content: "Welcome to your Command Center. Here you can track your active collaborations, recent matches, and overall performance at a glance."
+            content: "Welcome to your Command Center! I've set this up so you can easily track your collaborations and see how you're performing at a glance. We're in this together."
         },
         {
             path: '/match-results',
             id: 'match_guide',
-            content: "Nuro matches are sorted by behavioral compatibility, not just skills. Look for high 'Clarity' scores to ensure smooth collaboration."
+            content: "I've sorted these matches by how well your behaviors align, not just skills. Look for high 'Clarity' scores—they usually mean a much smoother partnership!"
         },
         {
             path: '/profile',
             id: 'profile_guide',
-            content: "This is your professional identity. Nuro tracks 'Reliability' and 'Clarity' here to help you improve your reputation over time."
+            content: "This is your professional home. I'll be tracking things like 'Reliability' and 'Clarity' here to help you build a reputation that opens doors."
         },
         {
             path: '/matching-standards',
             id: 'standards_guide',
-            content: "Define your non-negotiables here. I use these standards to filter out bad matches before you even see them."
+            content: "Let's define what matters most to you. I'll use these standards to protect your time and filter out any matches that don't fit your vibe."
         },
         {
             path: '/overview',
             id: 'overview_guide',
-            content: "A high-level view of your entire network and activity. Use this to spot trends in your interaction volume and success rates."
+            content: "Think of this as your high-level map. It's a great place to spot trends in how you're growing and where your network is strongest."
         },
         {
             path: '/collab-insights',
             id: 'insights_guide',
-            content: "This is where I analyze your deal-making patterns. I'll highlight what's working and where you might be leaving money on the table."
+            content: "I'm analyzing your deal patterns here. My goal is to show you exactly what's working so you can stop leaving money on the table."
         },
         {
             path: '/history',
             id: 'history_guide',
-            content: "Your digital paper trail. Review past collaborations to understand why some partnerships succeeded while others stalled."
+            content: "Your digital paper trail! We can look back at past wins and learning moments here to figure out why some deals succeeded while others stalled."
         },
         {
             path: '/safety',
             id: 'safety_guide',
-            content: "Your safety is paramount. I monitor every interaction for potential risks, scams, or toxicity. Check your trust score here."
+            content: "Your safety is my top priority. I'm constantly monitoring for risks or toxicity so you can focus on building trust with the right people."
         },
         {
             path: '/collab',
             id: 'collab_guide',
-            content: "I am now monitoring your negotiation. Keep your tone direct and your asks specific to maintain a high 'active' score."
+            content: "I'm right here with you during this negotiation. Keep your tone clear and your asks specific to keep the momentum going!"
         },
         {
             path: '/chat',
             id: 'chat_guide',
-            content: "This is your direct line to your AI Assistant. Ask me anything about your performance, market trends, or specific deal advice."
+            content: "I'm your dedicated AI Assistant. Feel free to ask me anything about your performance, market trends, or for specific advice on a deal."
         },
         {
             path: '/nuro-lab',
             id: 'lab_guide',
-            content: "Welcome to Nuro Lab. This is my experimental core where you can see raw metrics and behavioral analysis I've gathered on you."
+            content: "Welcome to my experimental core! This is where you can see the raw data and behavioral patterns I'm learning from our time together."
         }
     ];
 
@@ -101,19 +130,25 @@ export const NuroCoreProvider = ({ children }) => {
         const guide = KNOWLEDGE_BASE.find(g => currentPath.includes(g.path));
 
         if (guide) {
-            // Check localStorage to ensure this guide is shown ONLY ONCE per user forever
-            const storageKey = `nuro_seen_${guide.id}`;
-            const hasSeen = localStorage.getItem(storageKey);
+            // Check cloud memory instead of localStorage
+            const hasSeen = memory?.seenGuides?.includes(guide.id);
 
-            if (!hasSeen) {
+            if (!hasSeen && !loading) {
                 // Short delay to let the page load visually before interrupting
                 setTimeout(() => {
                     setActiveInterrupt({
                         type: 'fact', // Uses 'fact' style for mentorship
+                        id: guide.id, // Keep track of ID
                         title: 'Nuro Guidance 🧭',
-                        content: guide.content,
+                        content: `${guide.content}\n\n*"${getRandomQuote()}"*`,
                     });
-                    localStorage.setItem(storageKey, 'true');
+
+                    // Optimistic update + Backend sync
+                    nuroService.markGuideSeen(guide.id);
+                    setMemory(prev => ({
+                        ...prev,
+                        seenGuides: [...(prev?.seenGuides || []), guide.id]
+                    }));
                 }, 1000);
             }
         }
@@ -135,28 +170,46 @@ export const NuroCoreProvider = ({ children }) => {
             setActiveInterrupt({
                 type: 'question',
                 title: 'Quick Check 🧠',
-                content: 'Was the last collaboration effective?',
-                options: ['Yes', 'No', 'Meh']
+                content: `Quick thought: Was your last collaboration actually effective?\n\n*"${getRandomQuote()}"*`,
+                options: ['Yes', 'No', 'Neutral']
             });
         } else {
             // Sharing insights / Facts
             setActiveInterrupt({
                 type: 'fact',
-                title: 'Did you know? 💡',
-                content: 'Your clarity score has improved by 15% this week. Keep it simple!',
-                duration: 5000 // Auto dismiss facts
+                title: 'Growth Insight 💡',
+                content: `Great work! Your clarity score improved by 15% this week. Keeping things simple is definitely paying off.\n\n*"${getRandomQuote()}"*`,
+                duration: 6000
             });
         }
     };
 
-    const triggerIntervention = (reason) => {
+    const triggerIntervention = (reason, context = "Manual") => {
         switchMode('intervening'); // ✋
         setActiveInterrupt({
             type: 'warning',
             title: 'Intervention ✋',
-            content: reason || "I detected a potential risk in this action. Are you sure?",
+            content: `${reason || "I detected a potential risk in this action. Are you sure?"}\n\n*"${getRandomQuote()}"*`,
             options: ['Proceed', 'Review']
         });
+
+        // Log intervention to backend
+        nuroService.saveFeedback(`Intervention triggered: ${reason}`, context);
+    };
+
+    // ⚡ REAL-TIME INTERVENTION LOGIC (Calibrator)
+    const checkSafety = (content, context) => {
+        // Calibrate: Check for "Negotiation Anxiety" patterns from memory
+        const weaknesses = memory?.behavioralPatterns?.filter(p => p.confidence > 70) || [];
+
+        if (content.length > 5 && context === 'Chat') {
+            const hasNegotiationWeakness = weaknesses.some(w => w.trait === 'Negotiation Anxiety');
+            const isPricingMentioned = content.toLowerCase().includes('₹') || content.toLowerCase().includes('rs');
+
+            if (hasNegotiationWeakness && isPricingMentioned) {
+                triggerIntervention("I've noticed your tone often shifts during price discussions. Stay confident—you've got this!", "Chat");
+            }
+        }
     };
 
     const dismissInterrupt = () => {
@@ -169,7 +222,10 @@ export const NuroCoreProvider = ({ children }) => {
     const handleFeedback = (response) => {
         // Feedback collected: response
         console.log(`[NURO MEMORY] Feedback collected: ${response}`);
-        // TODO: Send to backend
+
+        // PERSIST TO CLOUD
+        nuroService.saveFeedback(response, activeInterrupt?.title || "Passive Engagement");
+
         dismissInterrupt();
     };
 
@@ -177,10 +233,13 @@ export const NuroCoreProvider = ({ children }) => {
         <NuroCoreContext.Provider value={{
             mode,
             activeInterrupt,
+            memory,
+            loading,
             switchMode,
             triggerIntervention,
             dismissInterrupt,
-            handleFeedback
+            handleFeedback,
+            checkSafety
         }}>
             {children}
         </NuroCoreContext.Provider>

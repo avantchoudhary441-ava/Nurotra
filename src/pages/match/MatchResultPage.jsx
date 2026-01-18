@@ -8,8 +8,10 @@ import { chatService } from "../../services/apiService";
 import CurrencySelector from "../../components/CurrencySelector";
 import LockedMatchCard from "../../components/match/LockedMatchCard";
 import UnlockMatchModal from "../../components/modals/UnlockMatchModal";
+import { useCurrency } from "../../context/CurrencyContext";
 
 export default function MatchResultPage() {
+    const { currency } = useCurrency();
     const location = useLocation();
     const navigate = useNavigate();
     const { matches = [], role } = location.state || { matches: [], role: "influencer" };
@@ -28,6 +30,13 @@ export default function MatchResultPage() {
     const unlockedCount = role === 'brand' ? 2 : 1;
     const totalVisibleCount = role === 'brand' ? 3 : 2;
 
+    // Helper to process budget strings (e.g., "₹10,000 - ₹50,000")
+    const processBudget = (budgetStr) => {
+        if (!budgetStr) return "N/A";
+        // Swap all currency symbols to match current toggle
+        return budgetStr.replace(/[₹$£€¥د.إR$₽A$C$]/g, currency);
+    };
+
     // --- PAD MATCHES IF INSUFFICIENT ---
     const generateDummyMatch = (index) => ({
         _id: `dummy-${index}`,
@@ -39,7 +48,7 @@ export default function MatchResultPage() {
         niche: "Various",
         matchScore: 0.98,
         matchExplanation: "High potential match based on your profile.",
-        budget: "₹10,000 - ₹50,000",
+        budget: `${currency}10,000 - ${currency}50,000`,
         industry: "Lifestyle & Tech",
         minEngagement: "2.5%",
         contentType: ["Reels", "Stories"]
@@ -184,123 +193,144 @@ export default function MatchResultPage() {
                     initial="hidden"
                     animate="visible"
                 >
-                    {visibleMatches.map((match, i) => {
-                        // Check if this card should be locked
-                        const locked = isCardLocked(i);
-                        console.log(`DEBUG: Render Card ${i}. Locked? ${locked}. In unlockedIndices? ${unlockedIndices.includes(i)}`);
-
-                        if (locked) {
-                            return (
-                                <LockedMatchCard
-                                    key={i}
-                                    cardVariants={cardVariants}
-                                    onUnlockClick={() => handleLockedCardClick(i)}
-                                />
-                            );
-                        }
-
-                        // Calculate percentage label. Backend provides 'matchScore' (0-100 or 0-1)
-                        const rawScore = match.matchScore;
-                        let displayScore = "N/A";
-
-                        if (rawScore !== undefined && rawScore !== null) {
-                            const num = parseFloat(rawScore);
-                            if (!isNaN(num)) {
-                                // specific heuristic: if <= 1, treat as ratio (0.95 -> 95%). else as percent (95 -> 95%).
-                                displayScore = num <= 1 ? `${Math.round(num * 100)}%` : `${Math.round(num)}%`;
-                            } else {
-                                displayScore = rawScore;
-                            }
-                        }
-
-                        const scoreLabel = `Match Accuracy - ${displayScore}`;
-
-                        return (
+                    {matches.length === 0 ? (
+                        <div className="exhaustion-container">
                             <motion.div
-                                key={i}
-                                className="card-wrapper"
-                                variants={cardVariants}
-                                initial="visible" // FORCE VISIBLE TO DEBUG ANIMATION ISSUE
-                                animate="visible"
+                                className="exhaustion-card"
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
                             >
-                                <div className="premium-card">
-                                    <img
-                                        src={match.user?.profileImg || logo}
-                                        alt={match.user?.name || "User"}
-                                        className="card-avatar"
-                                    />
-                                    {/* Name of the user - Robust Fallback */}
-                                    <h3 className="card-name">{match.user?.name || match.companyName || "N/A"}</h3>
-
-                                    {/* Match Accuracy (Gradient + Glowing) */}
-                                    <div className="card-match-score ">{scoreLabel}</div>
-
-                                    {/* Platform Profile Button */}
-                                    {(match.platformUrl || match.website) && (
-                                        <a
-                                            href={match.platformUrl || match.website}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="platform-profile-btn"
-                                            onClick={(e) => e.stopPropagation()} // Prevent card click if any
-                                        >
-                                            Platform Profile ↗
-                                        </a>
-                                    )}
-
-                                    <div className="card-meta">
-                                        {/* INFLUENCER DETAILS (If User is Brand looking for Influencers) */}
-                                        {role === 'brand' && (
-                                            <>
-                                                <MetaRow label="Niche" value={match.niche} />
-                                                <MetaRow label="Followers" value={match.followers} />
-                                                <MetaRow label="Engagement Rate" value={match.engagementRate ? `${match.engagementRate}%` : null} />
-                                                <MetaRow label="Budget" value={match.budget} />
-                                            </>
-                                        )}
-
-                                        {/* BRAND DETAILS (If User is Influencer looking for Brands) */}
-                                        {role === 'influencer' && (
-                                            <>
-                                                <MetaRow label="Niche" value={match.industry || match.niche} />
-                                                {/* Handle Array or String for Content */}
-                                                <MetaRow label="Preferred Content" value={match.contentType || (match.contentTypes?.join(", "))} />
-                                                <MetaRow label="Req. Engagement" value={match.minEngagement} />
-                                                <MetaRow label="Budget" value={match.budget} />
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* ACTION BUTTONS ROW */}
-                                    <div className="card-actions-row">
-                                        <button
-                                            className="connect-btn"
-                                            onClick={() => handleConnect(match)}
-                                        >
-                                            Connect 💬
-                                        </button>
-
-                                        {/* Inspact Button (Glassy, Shows on Hover) */}
-                                        <button
-                                            className="inspact-btn"
-                                            title="Inspect Nurotra Profile"
-                                            onClick={() => {
-                                                const targetUserId = match.userId || match.user?._id || match._id;
-                                                const targetRole = role === 'brand' ? 'influencer' : 'brand';
-                                                if (targetUserId) {
-                                                    navigate(`/${targetRole}/profile/${targetUserId}`);
-                                                } else {
-                                                    console.warn("Inspact: Missing User ID", match);
-                                                }
-                                            }}
-                                        >
-                                            Inspact 👁️
-                                        </button>
-                                    </div>
+                                <div className="exhaustion-icon">🌌</div>
+                                <h2>No More Matches Found</h2>
+                                <p>You have reviewed all available profiles for now.</p>
+                                <div className="nuro-note">
+                                    <strong>Guardian Note:</strong> Nuro is scanning for new partners as they join.
+                                    Try refining your search criteria or checking back in a few hours.
                                 </div>
+                                <button className="reset-search-btn" onClick={() => navigate(-1)}>
+                                    Refresh Search 🔄
+                                </button>
                             </motion.div>
-                        );
-                    })}
+                        </div>
+                    ) : (
+                        visibleMatches.map((match, i) => {
+                            // Check if this card should be locked
+                            const locked = isCardLocked(i);
+                            const rawScore = match.matchScore;
+                            let displayScore = "N/A";
+
+                            if (rawScore !== undefined && rawScore !== null) {
+                                const num = parseFloat(rawScore);
+                                if (!isNaN(num)) {
+                                    displayScore = num <= 1 ? `${Math.round(num * 100)}%` : `${Math.round(num)}%`;
+                                } else {
+                                    displayScore = rawScore;
+                                }
+                            }
+
+                            const scoreLabel = `Match Accuracy - ${displayScore}`;
+
+                            // --- NEW: Restore Locked Card Rendering ---
+                            if (locked) {
+                                return (
+                                    <LockedMatchCard
+                                        key={i}
+                                        cardVariants={cardVariants}
+                                        onUnlockClick={() => {
+                                            setPendingUnlockIndex(i);
+                                            setShowUnlockModal(true);
+                                        }}
+                                    />
+                                );
+                            }
+
+                            return (
+                                <motion.div
+                                    key={i}
+                                    className="card-wrapper"
+                                    variants={cardVariants}
+                                    initial="visible" // FORCE VISIBLE TO DEBUG ANIMATION ISSUE
+                                    animate="visible"
+                                >
+                                    <div className="premium-card">
+                                        <img
+                                            src={match.user?.profileImg || logo}
+                                            alt={match.user?.name || "User"}
+                                            className="card-avatar"
+                                        />
+                                        {/* Name of the user - Robust Fallback */}
+                                        <h3 className="card-name">{match.user?.name || match.companyName || "N/A"}</h3>
+
+                                        {/* Match Accuracy (Gradient + Glowing) */}
+                                        <div className="card-match-score ">{scoreLabel}</div>
+
+                                        {/* Platform Profile Button */}
+                                        {(match.platformUrl || match.website) && (
+                                            <a
+                                                href={match.platformUrl || match.website}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="platform-profile-btn"
+                                                onClick={(e) => e.stopPropagation()} // Prevent card click if any
+                                            >
+                                                Platform Profile ↗
+                                            </a>
+                                        )}
+
+                                        <div className="card-meta">
+                                            {/* INFLUENCER DETAILS (If User is Brand looking for Influencers) */}
+                                            {role === 'brand' && (
+                                                <>
+                                                    <MetaRow label="Niche" value={match.niche} />
+                                                    <MetaRow label="Followers" value={match.followers} />
+                                                    <MetaRow label="Engagement Rate" value={match.engagementRate ? `${match.engagementRate}%` : null} />
+                                                    <MetaRow label="Budget" value={processBudget(match.budget)} />
+                                                </>
+                                            )}
+
+                                            {/* BRAND DETAILS (If User is Influencer looking for Brands) */}
+                                            {role === 'influencer' && (
+                                                <>
+                                                    <MetaRow label="Niche" value={match.industry || match.niche} />
+                                                    {/* Handle Array or String for Content */}
+                                                    <MetaRow label="Preferred Content" value={match.contentType || (match.contentTypes?.join(", "))} />
+                                                    <MetaRow label="Req. Engagement" value={match.minEngagement} />
+                                                    <MetaRow label="Budget" value={processBudget(match.budget)} />
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {/* ACTION BUTTONS ROW */}
+                                        <div className="card-actions-row">
+                                            <button
+                                                className="connect-btn"
+                                                onClick={() => handleConnect(match)}
+                                            >
+                                                Connect 💬
+                                            </button>
+
+                                            {/* Inspact Button (Glassy, Shows on Hover) */}
+                                            <button
+                                                className="inspact-btn"
+                                                title="Inspect Nurotra Profile"
+                                                onClick={() => {
+                                                    const targetUserId = match.userId || match.user?._id || match._id;
+                                                    const targetRole = role === 'brand' ? 'influencer' : 'brand';
+                                                    if (targetUserId) {
+                                                        navigate(`/${targetRole}/profile/${targetUserId}`);
+                                                    } else {
+                                                        console.warn("Inspact: Missing User ID", match);
+                                                    }
+                                                }}
+                                            >
+                                                Inspact 👁️
+                                            </button>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            );
+                        })
+                    )}
                 </motion.div>
             </main>
 
