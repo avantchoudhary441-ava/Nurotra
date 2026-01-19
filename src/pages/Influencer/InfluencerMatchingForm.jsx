@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { profileService, matchService } from "../../services/apiService";
@@ -23,6 +23,8 @@ export default function InfluencerMatchingForm() {
 
     const [matches, setMatches] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [isCustomNiche, setIsCustomNiche] = useState(false);
+    const nicheInputRef = useRef(null);
 
     const [formData, setFormData] = useState({
         // Basic
@@ -83,6 +85,11 @@ export default function InfluencerMatchingForm() {
                         collabExperience: data.collabExperience || "New to collaborations",
                         noteToBrand: data.noteToBrand || ""
                     }));
+
+                    // If niche is not in predefined list, enable custom mode
+                    if (data.niche && !niches.includes(data.niche)) {
+                        setIsCustomNiche(true);
+                    }
                 } else if (!userId) {
                     // No data and not inspecting? Force edit mode
                     setIsEditing(true);
@@ -94,6 +101,13 @@ export default function InfluencerMatchingForm() {
         };
         fetchProfile();
     }, [user, userId]);
+
+    // Handle auto-focus for custom niche input
+    useEffect(() => {
+        if (isCustomNiche && nicheInputRef.current) {
+            nicheInputRef.current.focus();
+        }
+    }, [isCustomNiche]);
 
     const updateField = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -171,7 +185,7 @@ export default function InfluencerMatchingForm() {
     const platforms = ["Instagram", "YouTube", "TikTok", "X (Twitter)", "Facebook", "Other"];
     const followerRanges = ["Nano (1k-10k)", "Micro (10k-100k)", "Macro (100k-1M)", "Celebrity (1M+)"];
     const ageRanges = ["10-18", "18-25", "25-30", "30-65"];
-    const niches = ["Fitness", "Fashion", "Tech", "Beauty", "Lifestyle", "Food", "Travel", "Gaming", "Education", "Finance", "Home & Living", "Others"];
+    const niches = ["Fitness", "Fashion", "Tech", "Beauty", "Lifestyle", "Food", "Travel", "Gaming", "Education", "Finance", "Home & Living", "Other"];
     const contentOpts = ["Reel / Short Video", "Post", "Story", "Unboxing", "Review Video", "Carousel", "Live Session", "UGC Content Only"];
     const budgetRanges = ["₹500-₹5,000", "₹5,000-₹20,000", "₹20,000-₹50,000", "₹50,000+"];
     const expOpts = ["New to collaborations", "Barter experience", "Paid experience", "Both"];
@@ -335,11 +349,48 @@ export default function InfluencerMatchingForm() {
                 <h3 className="inf-section-title mt-large"> Match Preferences</h3>
                 <div className="inf-two-columns">
                     <div className="inf-group">
-                        <label>Niche / Industry</label>
-                        <select value={formData.niche} disabled={!isEditing} onChange={e => updateField("niche", e.target.value)}>
-                            <option value="">Select Niche</option>
-                            {niches.map(n => <option key={n}>{n}</option>)}
-                        </select>
+                        <label className="flex-between">
+                            <span>Niche / Industry</span>
+                            {isCustomNiche && isEditing && (
+                                <span
+                                    className="text-primary pointer"
+                                    style={{ fontSize: "11px", textDecoration: "underline" }}
+                                    onClick={() => {
+                                        setIsCustomNiche(false);
+                                        updateField("niche", "");
+                                    }}
+                                >
+                                    Back to list
+                                </span>
+                            )}
+                        </label>
+                        {isCustomNiche ? (
+                            <input
+                                ref={nicheInputRef}
+                                type="text"
+                                value={formData.niche === "Other" ? "" : formData.niche}
+                                placeholder="Type your niche..."
+                                disabled={!isEditing}
+                                onChange={e => updateField("niche", e.target.value)}
+                            />
+                        ) : (
+                            <select
+                                value={formData.niche}
+                                disabled={!isEditing}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    if (val === "Other") {
+                                        setIsCustomNiche(true);
+                                        updateField("niche", "");
+                                    } else {
+                                        updateField("niche", val);
+                                    }
+                                }}
+                            >
+                                <option value="">Select Niche</option>
+                                {niches.map(n => <option key={n}>{n}</option>)}
+                            </select>
+                        )}
                     </div>
                     <div className="inf-group">
                         <label>Minimum Budget Expectation</label>

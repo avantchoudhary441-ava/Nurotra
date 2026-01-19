@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { profileService, matchService } from "../../services/apiService";
@@ -22,6 +22,8 @@ export default function BrandMatchingForm() {
 
     const [matches, setMatches] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [isCustomIndustry, setIsCustomIndustry] = useState(false);
+    const industryInputRef = useRef(null);
 
     // ... existing state and effects ...
     const [formData, setFormData] = useState({
@@ -82,6 +84,11 @@ export default function BrandMatchingForm() {
                         collabDuration: data.collabDuration || "Immediate (24 hours)",
                         noteToInfluencer: data.noteToInfluencer || ""
                     }));
+
+                    // Detect if industry is custom
+                    if (data.industry && !industries.includes(data.industry)) {
+                        setIsCustomIndustry(true);
+                    }
                 } else if (!userId) {
                     // No data? Always edit mode
                     setIsEditing(true);
@@ -93,6 +100,13 @@ export default function BrandMatchingForm() {
         };
         fetchProfile();
     }, [user, userId]);
+
+    // Focus custom input when toggled
+    useEffect(() => {
+        if (isCustomIndustry && industryInputRef.current) {
+            industryInputRef.current.focus();
+        }
+    }, [isCustomIndustry]);
 
     const updateField = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -161,7 +175,7 @@ export default function BrandMatchingForm() {
     };
 
     // Constants
-    const industries = ["Tech", "Fashion", "Fitness", "Beauty", "Food", "Lifestyle", "Education", "Finance", "Home & Living", "Others"];
+    const industries = ["Tech", "Fashion", "Fitness", "Beauty", "Food", "Lifestyle", "Education", "Finance", "Home & Living", "Other"];
     const contentOpts = ["Reel / Video", "Post", "Story", "Unboxing", "Review", "Carousel", "Live Interaction", "UGC Content"];
     const budgetRanges = ["₹500-₹5,000", "₹5,000-₹20,000", "₹20,000-₹50,000", "₹50,000+"];
     const goals = ["Brand Awareness", "Product Promotion", "Event Promotion", "App Installs", "UGC Content", "Community Building", "Product Launch", "Product Awareness", "Other"];
@@ -233,11 +247,48 @@ export default function BrandMatchingForm() {
                 <h3 className="inf-section-title mt-large">Core Matching Information</h3>
                 <div className="inf-two-columns">
                     <div className="inf-group">
-                        <label>Brand's Industry / Niche</label>
-                        <select value={formData.industry} disabled={!isEditing} onChange={e => updateField("industry", e.target.value)}>
-                            <option value="">Select Industry</option>
-                            {industries.map(i => <option key={i}>{i}</option>)}
-                        </select>
+                        <label className="flex-between">
+                            <span>Brand's Industry / Niche</span>
+                            {isCustomIndustry && isEditing && (
+                                <span
+                                    className="text-primary pointer"
+                                    style={{ fontSize: "11px", textDecoration: "underline" }}
+                                    onClick={() => {
+                                        setIsCustomIndustry(false);
+                                        updateField("industry", "");
+                                    }}
+                                >
+                                    Back to list
+                                </span>
+                            )}
+                        </label>
+                        {isCustomIndustry ? (
+                            <input
+                                ref={industryInputRef}
+                                type="text"
+                                value={formData.industry === "Other" ? "" : formData.industry}
+                                placeholder="Type your industry..."
+                                disabled={!isEditing}
+                                onChange={e => updateField("industry", e.target.value)}
+                            />
+                        ) : (
+                            <select
+                                value={formData.industry}
+                                disabled={!isEditing}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    if (val === "Other") {
+                                        setIsCustomIndustry(true);
+                                        updateField("industry", "");
+                                    } else {
+                                        updateField("industry", val);
+                                    }
+                                }}
+                            >
+                                <option value="">Select Industry</option>
+                                {industries.map(i => <option key={i}>{i}</option>)}
+                            </select>
+                        )}
                     </div>
                     <div className="inf-group">
                         <label>Budget Range</label>
