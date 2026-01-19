@@ -17,6 +17,12 @@ export const NuroCoreProvider = ({ children }) => {
     // 🧠 INITIAL FETCH: Sync Nuro Memory from Cloud
     useEffect(() => {
         const fetchMemory = async () => {
+            const user = localStorage.getItem("nurotra_user");
+            if (!user) {
+                setLoading(false);
+                return;
+            }
+
             try {
                 const data = await nuroService.getMemory();
                 setMemory(data);
@@ -27,7 +33,7 @@ export const NuroCoreProvider = ({ children }) => {
             }
         };
         fetchMemory();
-    }, []);
+    }, [location.pathname]); // Re-check on path changes (e.g., after login)
 
     // 1) NURO’S CORE AGENTIC BEHAVIOR (Always-On)
     // Mode Switching Logic based on Context (Location/Actions)
