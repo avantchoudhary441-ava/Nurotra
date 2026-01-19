@@ -47,6 +47,46 @@ export default function UserProfile() {
         );
     }
 
+    const [uploading, setUploading] = useState(false);
+
+    const handleImageUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            setUploading(true);
+            const formData = new FormData();
+            formData.append("file", file);
+
+            // 1. Upload to Cloudinary
+            const uploadRes = await api.post("/upload", formData, {
+                headers: { "Content-Type": "multipart/form-data" }
+            });
+
+            if (uploadRes.data && uploadRes.data.url) {
+                const newUrl = uploadRes.data.url;
+
+                // 2. Sync to Backend (User AND Profile models)
+                // We can use the existing saveInfluencer/saveBrand logic or a dedicated user update
+                // Given the backend sync I just added, saving via the appropriate profile route will sync to User.
+                if (user.role === 'influencer') {
+                    await api.post("/influencer", { profileImg: newUrl });
+                } else if (user.role === 'brand') {
+                    await api.post("/brand", { profileImg: newUrl });
+                }
+
+                // 3. Update local context
+                updateUser({ profileImg: newUrl });
+                alert("Profile photo updated!");
+            }
+        } catch (err) {
+            console.error("Failed to upload profile photo", err);
+            alert("Failed to upload photo. Please try again.");
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleLogout = () => {
         logout();
         navigate("/");
@@ -77,12 +117,27 @@ export default function UserProfile() {
 
             <div className="profile-card-wrapper">
                 <div className="profile-header">
-                    <div className={user.profileImg ? "profile-avatar-large" : "profile-avatar-large placeholder"}>
+                    <div className={`profile-avatar-large ${!user.profileImg ? "placeholder" : ""} ${uploading ? "uploading" : ""}`}>
                         {user.profileImg ? (
                             <img src={user.profileImg} alt={user.name} />
                         ) : (
                             "👤"
                         )}
+
+                        {/* Hidden File Input */}
+                        <input
+                            type="file"
+                            id="avatar-upload"
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            style={{ display: 'none' }}
+                            disabled={uploading}
+                        />
+
+                        {/* Overlay Trigger */}
+                        <label htmlFor="avatar-upload" className="profile-photo-edit-overlay">
+                            {uploading ? "..." : "📷"}
+                        </label>
                     </div>
 
                     <h1>{user.name}</h1>

@@ -77,8 +77,13 @@ router.post("/", protect, async (req, res) => {
             await influencer.save();
 
             req.user.role = "influencer";
-            await req.user.save();
         }
+
+        // Always sync profileImg to User model
+        if (profileImg) {
+            req.user.profileImg = profileImg;
+        }
+        await req.user.save();
 
         res.json({ success: true, influencer, role: "influencer" });
 

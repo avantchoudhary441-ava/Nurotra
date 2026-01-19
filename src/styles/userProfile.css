@@ -101,6 +101,37 @@
     color: white;
 }
 
+/* Edit Overlay */
+.profile-photo-edit-overlay {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    width: 38px;
+    height: 38px;
+    background: rgba(139, 92, 246, 0.9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.2rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 10;
+}
+
+.profile-photo-edit-overlay:hover {
+    transform: scale(1.1) rotate(5deg);
+    background: var(--accent-1);
+    box-shadow: 0 6px 15px rgba(139, 92, 246, 0.6);
+}
+
+.profile-avatar-large.uploading img {
+    opacity: 0.5;
+    filter: blur(2px);
+}
+
 .profile-header h1 {
     font-size: 2.2rem;
     margin: 0;

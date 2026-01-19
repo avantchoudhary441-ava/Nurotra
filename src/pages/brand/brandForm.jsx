@@ -150,7 +150,10 @@ export default function BrandForm() {
       await profileService.saveBrand(payload, user.token);
 
       // Update Local User Role so they can access dashboard immediately
-      updateUser({ role: "brand" });
+      updateUser({
+        role: "brand",
+        profileImg: formData.profileImg
+      });
 
       // Clear Form Draft
       localStorage.removeItem("brandForm");

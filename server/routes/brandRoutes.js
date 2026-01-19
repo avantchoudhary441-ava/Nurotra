@@ -79,8 +79,13 @@ router.post("/", protect, async (req, res) => {
 
             // Update User Role only on creation/first time
             req.user.role = "brand";
-            await req.user.save();
         }
+
+        // Always sync profileImg to User model
+        if (profileImg) {
+            req.user.profileImg = profileImg;
+        }
+        await req.user.save();
 
         res.json({ success: true, brand, role: "brand" });
 
