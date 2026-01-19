@@ -22,9 +22,6 @@ api.interceptors.request.use((config) => {
 export const authService = {
     register: async (userData) => {
         const response = await axios.post(`${API_URL}/register`, userData);
-        if (response.data) {
-            localStorage.setItem("nurotra_user", JSON.stringify(response.data));
-        }
         return response.data;
     },
 
