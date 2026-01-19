@@ -19,14 +19,25 @@ app.use(express.json());
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5174",
-    process.env.CLIENT_URL,
-    process.env.VERCEL_URL
-].filter(Boolean);
+    "https://nurotra.online",
+    "https://www.nurotra.online",
+    "https://nurotra.vercel.app"
+];
+
+// Add environment variables if they exist
+if (process.env.CLIENT_URL) {
+    process.env.CLIENT_URL.split(',').forEach(url => allowedOrigins.push(url.trim()));
+}
+if (process.env.VERCEL_URL) {
+    allowedOrigins.push(process.env.VERCEL_URL);
+}
+
+const finalOrigins = [...new Set(allowedOrigins.filter(Boolean))];
 
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.some(o => origin && origin.startsWith(o))) {
+        if (finalOrigins.indexOf(origin) !== -1 || finalOrigins.some(o => origin && origin.startsWith(o))) {
             callback(null, true);
         } else {
             console.warn(`Blocked CORS request from: ${origin}`);

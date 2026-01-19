@@ -23,7 +23,9 @@ router.get(
     "/google/callback",
     (req, res, next) => {
         passport.authenticate("google", { session: false }, (err, user, info) => {
-            const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
+            // Support comma-separated list, take the first one or default to localhost
+            const rawURL = process.env.CLIENT_URL || "http://localhost:5173";
+            const clientURL = rawURL.split(',')[0].trim();
 
             // Handle Errors (including our custom EmailExists)
             if (err) {
