@@ -21,54 +21,79 @@ const registerUser = async (req, res) => {
             return res.status(403).json({ message: "Admin registration is restricted." });
         }
 
-        const userExists = await User.findOne({ email });
-        if (userExists) {
-            return res.status(400).json({ message: "User already exists" });
-        }
+        let user = await User.findOne({ email });
 
-        const uniqueId = Date.now().toString();
-
-        // 1. Generate 6-digit OTP
+        // Generate 6-digit OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpires = Date.now() + 10 * 60 * 1000; // 10 Minutes
 
-        // 2. Create User (Unverified)
-        const user = await User.create({
-            name,
-            email,
-            password,
-            role,
-            uniqueId,
-            otp,
-            otpExpires,
-            isVerified: false
-        });
-
         if (user) {
-            // Create empty profile with baseline data
-            if (role === 'brand') {
-                await Brand.create({
-                    userId: user._id,
-                    nuroId: user.uniqueId,
-                    website: "https://pending", // Temporary placeholders as these are required in model
-                    contact: user.email
-                });
-            } else if (role === 'influencer') {
-                await Influencer.create({
-                    userId: user._id,
-                    nuroId: user.uniqueId,
-                    email: user.email,
-                    primaryPlatform: "Other", // Placeholder
-                    platformUrl: "https://pending" // Placeholder
-                });
+            // 1. If user is already verified, block registration
+            if (user.isVerified) {
+                return res.status(400).json({ message: "User already exists" });
             }
 
-            // 3. Send OTP Email
+            // 2. If user exists but is NOT verified, we "resume/restart" the registration
+            // Update the existing unverified user with new details
+            user.name = name;
+            user.password = password; // Will be hashed by pre-save hook
+            user.role = role;
+            user.otp = otp;
+            user.otpExpires = otpExpires;
+            await user.save();
+        } else {
+            // 3. Create New User (Unverified)
+            const uniqueId = Date.now().toString();
+            user = await User.create({
+                name,
+                email,
+                password,
+                role,
+                uniqueId,
+                otp,
+                otpExpires,
+                isVerified: false
+            });
+        }
+
+        if (user) {
+            // Sync/Create profiles based on role
+            if (role === 'brand') {
+                // Ensure brand profile exists, create if not, update if it does
+                await Brand.findOneAndUpdate(
+                    { userId: user._id },
+                    {
+                        nuroId: user.uniqueId,
+                        website: "https://pending",
+                        contact: user.email
+                    },
+                    { upsert: true, new: true }
+                );
+                // Remove influencer profile if they switched roles while unverified
+                await Influencer.deleteOne({ userId: user._id });
+            } else if (role === 'influencer') {
+                await Influencer.findOneAndUpdate(
+                    { userId: user._id },
+                    {
+                        userId: user._id,
+                        nuroId: user.uniqueId,
+                        email: user.email,
+                        primaryPlatform: "Other",
+                        platformUrl: "https://pending",
+                        followers: "Pending" // Added this to satisfy required field in model
+                    },
+                    { upsert: true, new: true }
+                );
+                // Remove brand profile if they switched roles while unverified
+                await Brand.deleteOne({ userId: user._id });
+            }
+
+            // 4. Send OTP Email
             const message = `
                 <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
                     <h2 style="color: #6366f1;">Verify Your Email</h2>
                     <p>Hi ${user.name},</p>
-                    <p>Thank you for signing up for Nurotra (Collaborator). Please use the code below to verify your email address:</p>
+                    <p>Thank you for signing up for Nurotra. Please use the code below to verify your email address:</p>
                     <h1 style="font-size: 32px; letter-spacing: 5px; color: #333;">${otp}</h1>
                     <p>This code expires in 10 minutes.</p>
                 </div>
@@ -82,15 +107,13 @@ const registerUser = async (req, res) => {
                 });
 
                 res.status(201).json({
-                    message: "User registered. Please check your email for OTP.",
+                    message: "Registration updated. Please check your email for OTP.",
                     email: user.email
                 });
             } catch (emailError) {
                 console.error("Email send failed:", emailError);
-                // We still registered the user, but email failed.
-                // Could delete user or just let them resend. Letting them resend is safer.
                 res.status(201).json({
-                    message: "User registered, but email failed to send. Please try resending OTP.",
+                    message: "User registered/updated, but email failed to send. Please try resending OTP.",
                     email: user.email
                 });
             }
