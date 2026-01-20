@@ -51,39 +51,30 @@ router.get("/:userId", protect, async (req, res) => {
 // @desc    Create/Update Influencer Profile & Upgrade User Role
 router.post("/", protect, async (req, res) => {
     try {
-        const {
-            nuroId, email, primaryPlatform, platformUrl, socialHandle, fullName, contactNumber,
-            followers, engagementRate, audienceAge, targetingLocation, collabExperience, noteToBrand,
-            workedBefore, brandName, contentTypes, budget, niche, profileImg
-        } = req.body;
+        const updateData = {};
+        const fields = [
+            "nuroId", "email", "primaryPlatform", "platformUrl", "socialHandle", "fullName", "contactNumber",
+            "followers", "engagementRate", "audienceAge", "targetingLocation", "collabExperience", "noteToBrand",
+            "workedBefore", "brandName", "contentTypes", "budget", "niche", "profileImg"
+        ];
 
-        const influencerFields = {
-            userId: req.user._id,
-            nuroId, email, primaryPlatform, platformUrl, socialHandle, fullName, contactNumber,
-            followers, engagementRate, audienceAge, targetingLocation, collabExperience, noteToBrand,
-            workedBefore, brandName, contentTypes, budget, niche, profileImg
-        };
+        fields.forEach(field => {
+            if (req.body[field] !== undefined) {
+                updateData[field] = req.body[field];
+            }
+        });
 
-        let influencer = await Influencer.findOne({ userId: req.user._id });
+        let influencer = await Influencer.findOneAndUpdate(
+            { userId: req.user._id },
+            { $set: updateData },
+            { new: true, upsert: true }
+        );
 
-        if (influencer) {
-            influencer = await Influencer.findOneAndUpdate(
-                { userId: req.user._id },
-                { $set: influencerFields },
-                { new: true }
-            );
-        } else {
-            influencer = new Influencer(influencerFields);
-            await influencer.save();
-
-            req.user.role = "influencer";
+        // Always sync profileImg to User model if provided
+        if (req.body.profileImg) {
+            req.user.profileImg = req.body.profileImg;
+            await req.user.save();
         }
-
-        // Always sync profileImg to User model
-        if (profileImg) {
-            req.user.profileImg = profileImg;
-        }
-        await req.user.save();
 
         res.json({ success: true, influencer, role: "influencer" });
 

@@ -51,41 +51,29 @@ router.get("/:userId", protect, async (req, res) => {
 // @desc    Create/Update Brand Profile & Upgrade User Role
 router.post("/", protect, async (req, res) => {
     try {
-        const {
-            nuroId, brandName, website, companyType, contact, industry, contentTypes, budget, profileImg,
-            campaignGoal, influencerCategory, minEngagement, platform, collabDuration, noteToInfluencer
-        } = req.body;
+        const updateData = {};
+        const fields = [
+            "nuroId", "brandName", "website", "companyType", "contact", "industry", "contentTypes", "budget", "profileImg",
+            "campaignGoal", "influencerCategory", "minEngagement", "platform", "collabDuration", "noteToInfluencer"
+        ];
 
-        const brandFields = {
-            userId: req.user._id,
-            nuroId, brandName, website, companyType, contact, industry, contentTypes, budget, profileImg,
-            campaignGoal, influencerCategory, minEngagement, platform, collabDuration, noteToInfluencer
-        };
+        fields.forEach(field => {
+            if (req.body[field] !== undefined) {
+                updateData[field] = req.body[field];
+            }
+        });
 
-        // Check if profile exists
-        let brand = await Brand.findOne({ userId: req.user._id });
+        let brand = await Brand.findOneAndUpdate(
+            { userId: req.user._id },
+            { $set: updateData },
+            { new: true, upsert: true }
+        );
 
-        if (brand) {
-            // Update
-            brand = await Brand.findOneAndUpdate(
-                { userId: req.user._id },
-                { $set: brandFields },
-                { new: true }
-            );
-        } else {
-            // Create
-            brand = new Brand(brandFields);
-            await brand.save();
-
-            // Update User Role only on creation/first time
-            req.user.role = "brand";
+        // Always sync profileImg to User model if provided
+        if (req.body.profileImg) {
+            req.user.profileImg = req.body.profileImg;
+            await req.user.save();
         }
-
-        // Always sync profileImg to User model
-        if (profileImg) {
-            req.user.profileImg = profileImg;
-        }
-        await req.user.save();
 
         res.json({ success: true, brand, role: "brand" });
 

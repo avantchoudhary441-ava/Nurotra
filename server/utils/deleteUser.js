@@ -6,8 +6,8 @@ const path = require('path');
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const User = require('../models/User');
-const BrandProfile = require('../models/BrandProfile');
-const InfluencerProfile = require('../models/InfluencerProfile');
+const Brand = require('../models/Brand');
+const Influencer = require('../models/Influencer');
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const Deliverable = require('../models/Deliverable');
@@ -39,8 +39,8 @@ async function deleteUsers() {
             // 2. Delete related records
             const results = {
                 User: await User.deleteOne({ _id: userId }),
-                BrandProfile: await BrandProfile.deleteMany({ user: userId }),
-                InfluencerProfile: await InfluencerProfile.deleteMany({ user: userId }),
+                Brand: await Brand.deleteMany({ userId: userId }),
+                Influencer: await Influencer.deleteMany({ userId: userId }),
                 Deliverable: await Deliverable.deleteMany({ userId: userId }),
                 NuroMemory: await NuroMemory.deleteMany({ userId: userId }),
                 MessagesSent: await Message.deleteMany({ sender: userId }),

@@ -1,6 +1,6 @@
 const User = require("../models/User");
-const BrandProfile = require("../models/BrandProfile");
-const InfluencerProfile = require("../models/InfluencerProfile");
+const Brand = require("../models/Brand");
+const Influencer = require("../models/Influencer");
 const jwt = require("jsonwebtoken");
 
 const sendEmail = require("../utils/sendEmail");
@@ -45,9 +45,23 @@ const registerUser = async (req, res) => {
         });
 
         if (user) {
-            // Create empty profile
-            if (role === 'brand') await BrandProfile.create({ user: user._id });
-            else if (role === 'influencer') await InfluencerProfile.create({ user: user._id });
+            // Create empty profile with baseline data
+            if (role === 'brand') {
+                await Brand.create({
+                    userId: user._id,
+                    nuroId: user.uniqueId,
+                    website: "https://pending", // Temporary placeholders as these are required in model
+                    contact: user.email
+                });
+            } else if (role === 'influencer') {
+                await Influencer.create({
+                    userId: user._id,
+                    nuroId: user.uniqueId,
+                    email: user.email,
+                    primaryPlatform: "Other", // Placeholder
+                    platformUrl: "https://pending" // Placeholder
+                });
+            }
 
             // 3. Send OTP Email
             const message = `

@@ -8,7 +8,7 @@ import CurrencySelector from "../components/CurrencySelector";
 import api from "../services/apiService";
 
 export default function UserProfile() {
-    const { user, logout } = useAuth();
+    const { user, logout, updateUser } = useAuth();
     const navigate = useNavigate();
     const [isLabOpen, setLabOpen] = useState(false);
     const [deliverablesCount, setDeliverablesCount] = useState(0);
@@ -38,6 +38,8 @@ export default function UserProfile() {
         localStorage.setItem("theme", next);
     };
 
+    const [uploading, setUploading] = useState(false);
+
     if (!user) {
         return (
             <div className="profile-container profile-login-warning">
@@ -46,8 +48,6 @@ export default function UserProfile() {
             </div>
         );
     }
-
-    const [uploading, setUploading] = useState(false);
 
     const handleImageUpload = async (e) => {
         const file = e.target.files?.[0];
