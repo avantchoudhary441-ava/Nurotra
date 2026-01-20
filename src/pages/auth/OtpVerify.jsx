@@ -72,7 +72,7 @@ export default function OtpVerify() {
         setError("");
         setMsg("Sending code...");
         try {
-            await axios.post(`${API_BASE_URL}/api/auth/resend-otp`, { email });
+            await authService.resendOtp(email);
             setMsg("New code sent to your email.");
         } catch (err) {
             setError(err.response?.data?.message || "Failed to resend");

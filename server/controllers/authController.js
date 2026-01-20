@@ -1,8 +1,8 @@
 const User = require("../models/User");
 const Brand = require("../models/Brand");
 const Influencer = require("../models/Influencer");
+const PendingUser = require("../models/PendingUser");
 const jwt = require("jsonwebtoken");
-
 const sendEmail = require("../utils/sendEmail");
 
 // Generate JWT
@@ -21,78 +21,39 @@ const registerUser = async (req, res) => {
             return res.status(403).json({ message: "Admin registration is restricted." });
         }
 
-        let user = await User.findOne({ email });
+        // 1. Check if user is already in the main collection (Verified)
+        const userExists = await User.findOne({ email });
+        if (userExists && userExists.isVerified) {
+            return res.status(400).json({ message: "User already exists" });
+        }
 
-        // Generate 6-digit OTP
+        // 2. Clean up "ghost" users from previous system (Unverified records in main User collection)
+        if (userExists && !userExists.isVerified) {
+            // This cleans up the mess from the previous implementation
+            await User.deleteOne({ _id: userExists._id });
+            await Brand.deleteOne({ userId: userExists._id });
+            await Influencer.deleteOne({ userId: userExists._id });
+        }
+
+        // 3. Generate OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpires = Date.now() + 10 * 60 * 1000; // 10 Minutes
 
-        if (user) {
-            // 1. If user is already verified, block registration
-            if (user.isVerified) {
-                return res.status(400).json({ message: "User already exists" });
-            }
+        // 4. Save to PendingUser collection (Temporary)
+        // Upsert so if they try again, we just restart the timer and update the info
+        const uniqueId = Date.now().toString();
+        const pendingUser = await PendingUser.findOneAndUpdate(
+            { email },
+            { name, email, password, role, uniqueId, otp, otpExpires, createdAt: Date.now() },
+            { upsert: true, new: true }
+        );
 
-            // 2. If user exists but is NOT verified, we "resume/restart" the registration
-            // Update the existing unverified user with new details
-            user.name = name;
-            user.password = password; // Will be hashed by pre-save hook
-            user.role = role;
-            user.otp = otp;
-            user.otpExpires = otpExpires;
-            await user.save();
-        } else {
-            // 3. Create New User (Unverified)
-            const uniqueId = Date.now().toString();
-            user = await User.create({
-                name,
-                email,
-                password,
-                role,
-                uniqueId,
-                otp,
-                otpExpires,
-                isVerified: false
-            });
-        }
-
-        if (user) {
-            // Sync/Create profiles based on role
-            if (role === 'brand') {
-                // Ensure brand profile exists, create if not, update if it does
-                await Brand.findOneAndUpdate(
-                    { userId: user._id },
-                    {
-                        nuroId: user.uniqueId,
-                        website: "https://pending",
-                        contact: user.email
-                    },
-                    { upsert: true, new: true }
-                );
-                // Remove influencer profile if they switched roles while unverified
-                await Influencer.deleteOne({ userId: user._id });
-            } else if (role === 'influencer') {
-                await Influencer.findOneAndUpdate(
-                    { userId: user._id },
-                    {
-                        userId: user._id,
-                        nuroId: user.uniqueId,
-                        email: user.email,
-                        primaryPlatform: "Other",
-                        platformUrl: "https://pending",
-                        followers: "Pending" // Added this to satisfy required field in model
-                    },
-                    { upsert: true, new: true }
-                );
-                // Remove brand profile if they switched roles while unverified
-                await Brand.deleteOne({ userId: user._id });
-            }
-
-            // 4. Send OTP Email
+        if (pendingUser) {
+            // 5. Send OTP Email
             const message = `
                 <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
                     <h2 style="color: #6366f1;">Verify Your Email</h2>
-                    <p>Hi ${user.name},</p>
+                    <p>Hi ${pendingUser.name},</p>
                     <p>Thank you for signing up for Nurotra. Please use the code below to verify your email address:</p>
                     <h1 style="font-size: 32px; letter-spacing: 5px; color: #333;">${otp}</h1>
                     <p>This code expires in 10 minutes.</p>
@@ -101,23 +62,22 @@ const registerUser = async (req, res) => {
 
             try {
                 await sendEmail({
-                    email: user.email,
+                    email: pendingUser.email,
                     subject: "Nurotra - Your Verification Code",
                     message,
                 });
 
                 res.status(201).json({
-                    message: "Registration updated. Please check your email for OTP.",
-                    email: user.email
+                    message: "OTP sent to your email. Please verify to complete registration.",
+                    email: pendingUser.email
                 });
             } catch (emailError) {
                 console.error("Email send failed:", emailError);
                 res.status(201).json({
-                    message: "User registered/updated, but email failed to send. Please try resending OTP.",
-                    email: user.email
+                    message: "Registration recorded, but email failed to send. Please try resending OTP.",
+                    email: pendingUser.email
                 });
             }
-
         } else {
             res.status(400).json({ message: "Invalid user data" });
         }
@@ -126,40 +86,74 @@ const registerUser = async (req, res) => {
     }
 };
 
-// @desc    Verify OTP
+// @desc    Verify OTP & Commit User
 // @route   POST /api/auth/verify-otp
 // @access  Public
 const verifyOtp = async (req, res) => {
     const { email, otp } = req.body;
 
     try {
-        const user = await User.findOne({ email });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+        // 1. Check main User collection (in case already verified)
+        const existingUser = await User.findOne({ email });
+        if (existingUser && existingUser.isVerified) {
+            return res.status(200).json({ message: "User already verified", token: generateToken(existingUser._id), user: existingUser });
         }
 
-        if (user.isVerified) {
-            return res.status(200).json({ message: "User already verified", token: generateToken(user._id), user });
+        // 2. Check PendingUser collection
+        const pendingUser = await PendingUser.findOne({ email });
+
+        if (!pendingUser) {
+            return res.status(404).json({ message: "No pending registration found for this email. Please sign up again." });
         }
 
-        if (user.otp === otp && user.otpExpires > Date.now()) {
-            user.isVerified = true;
-            user.otp = undefined;
-            user.otpExpires = undefined;
-            await user.save();
-
-            res.status(200).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                uniqueId: user.uniqueId,
-                profileImg: user.profileImg,
-                totalCollabs: user.totalCollabs || 0,
-                successfulCollabs: user.successfulCollabs || 0,
-                token: generateToken(user._id),
+        if (pendingUser.otp === otp && pendingUser.otpExpires > Date.now()) {
+            // 3. Move data to main collections (Real Registration)
+            const newUser = await User.create({
+                name: pendingUser.name,
+                email: pendingUser.email,
+                password: pendingUser.password, // This will be RE-HASHED by User model's pre-save hook?
+                // Wait, if password was already hashed in PendingUser (if we used a hook there), 
+                // we should be careful. But User.js has a pre-save hook.
+                role: pendingUser.role,
+                uniqueId: pendingUser.uniqueId,
+                isVerified: true
             });
+
+            if (newUser) {
+                // Create profiles
+                if (newUser.role === 'brand') {
+                    await Brand.create({
+                        userId: newUser._id,
+                        nuroId: newUser.uniqueId,
+                        website: "https://pending",
+                        contact: newUser.email
+                    });
+                } else if (newUser.role === 'influencer') {
+                    await Influencer.create({
+                        userId: newUser._id,
+                        nuroId: newUser.uniqueId,
+                        email: newUser.email,
+                        primaryPlatform: "Other",
+                        platformUrl: "https://pending",
+                        followers: "Pending"
+                    });
+                }
+
+                // 4. Delete pending record
+                await PendingUser.deleteOne({ _id: pendingUser._id });
+
+                res.status(200).json({
+                    _id: newUser._id,
+                    name: newUser.name,
+                    email: newUser.email,
+                    role: newUser.role,
+                    uniqueId: newUser.uniqueId,
+                    profileImg: newUser.profileImg,
+                    totalCollabs: 0,
+                    successfulCollabs: 0,
+                    token: generateToken(newUser._id),
+                });
+            }
         } else {
             res.status(400).json({ message: "Invalid or expired OTP" });
         }
@@ -174,14 +168,22 @@ const verifyOtp = async (req, res) => {
 const resendOtp = async (req, res) => {
     const { email } = req.body;
     try {
-        const user = await User.findOne({ email });
-        if (!user) return res.status(404).json({ message: "User not found" });
-        if (user.isVerified) return res.status(400).json({ message: "Account already verified. Please login." });
+        // Only resend if they are in Pending collection
+        const pendingUser = await PendingUser.findOne({ email });
+
+        if (!pendingUser) {
+            const user = await User.findOne({ email });
+            if (user && user.isVerified) {
+                return res.status(400).json({ message: "Account already verified. Please login." });
+            }
+            return res.status(404).json({ message: "No pending registration found. Please sign up again." });
+        }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        user.otp = otp;
-        user.otpExpires = Date.now() + 10 * 60 * 1000;
-        await user.save();
+        pendingUser.otp = otp;
+        pendingUser.otpExpires = Date.now() + 10 * 60 * 1000;
+        pendingUser.createdAt = Date.now(); // Reset TTL
+        await pendingUser.save();
 
         const message = `
             <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
@@ -192,7 +194,7 @@ const resendOtp = async (req, res) => {
         `;
 
         await sendEmail({
-            email: user.email,
+            email: pendingUser.email,
             subject: "Nurotra - Resend Verification Code",
             message,
         });
@@ -214,10 +216,9 @@ const loginUser = async (req, res) => {
         const user = await User.findOne({ email });
 
         if (user && (await user.matchPassword(password))) {
-            // Check verification
+            // With the new system, only verified users exist in the User collection
+            // but we keep the check for backward compatibility/safety
             if (user.isVerified === false) {
-                // You might want to allow them to login but restrict access, 
-                // OR force them to verify. Let's force verify for safety.
                 return res.status(403).json({ message: "Email not verified. Please verify your email.", isVerified: false });
             }
 

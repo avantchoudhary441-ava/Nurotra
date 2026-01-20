@@ -11,8 +11,6 @@ const UserSchema = new mongoose.Schema({
     profileImg: { type: String, default: "" },
     createdAt: { type: Date, default: Date.now },
     isVerified: { type: Boolean, default: false },
-    otp: { type: String },
-    otpExpires: { type: Date },
     totalCollabs: { type: Number, default: 0 },
     successfulCollabs: { type: Number, default: 0 },
     seenMatches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
@@ -21,6 +19,10 @@ const UserSchema = new mongoose.Schema({
 // Encrypt password before save
 UserSchema.pre("save", async function () {
     if (!this.isModified("password") || !this.password) {
+        return;
+    }
+    // Skip if already hashed (starts with $2a$ or $2b$)
+    if (this.password.startsWith('$2a$') || this.password.startsWith('$2b$')) {
         return;
     }
     const salt = await bcrypt.genSalt(10);

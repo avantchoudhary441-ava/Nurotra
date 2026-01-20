@@ -45,6 +45,11 @@ export const authService = {
         localStorage.removeItem("nurotra_user");
     },
 
+    resendOtp: async (email) => {
+        const response = await axios.post(`${API_URL}/resend-otp`, { email });
+        return response.data;
+    },
+
     getMe: async (token) => {
         // Temporary set header just for this request if needed, 
         // OR rely on interceptor if we saved token to localStorage first

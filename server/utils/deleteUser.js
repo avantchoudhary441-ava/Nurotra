@@ -12,10 +12,11 @@ const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const Deliverable = require('../models/Deliverable');
 const NuroMemory = require('../models/NuroMemory');
+const PendingUser = require('../models/PendingUser');
 
 const emailsToDelete = [
-    'nurotra435@gmail.com',
-    'pulse9822@gmail.com'
+    'dwivediananya1406@gmail.com',
+    'shruti28052003@gmail.com'
 ];
 
 async function deleteUsers() {
@@ -27,14 +28,20 @@ async function deleteUsers() {
         for (const email of emailsToDelete) {
             console.log(`\n--- Deleting User: ${email} ---`);
 
-            // 1. Find the user
+            // 1. Find the user in main collection
             const user = await User.findOne({ email });
-            if (!user) {
-                console.log(`❌ User not found: ${email}`);
+            let userId = user ? user._id : null;
+
+            if (!userId) {
+                console.log(`ℹ️ User ${email} not found in main collection. Checking Pending...`);
+                const pending = await PendingUser.deleteOne({ email });
+                if (pending.deletedCount > 0) {
+                    console.log(`✅ Deleted ${email} from PendingUser collection.`);
+                } else {
+                    console.log(`❌ User ${email} not found anywhere.`);
+                }
                 continue;
             }
-
-            const userId = user._id;
 
             // 2. Delete related records
             const results = {
@@ -45,6 +52,7 @@ async function deleteUsers() {
                 NuroMemory: await NuroMemory.deleteMany({ userId: userId }),
                 MessagesSent: await Message.deleteMany({ sender: userId }),
                 ChatsParticipating: await Chat.deleteMany({ users: userId }),
+                PendingEntry: await PendingUser.deleteOne({ email: email })
             };
 
             console.log(`✅ Deletion results for ${email}:`);
