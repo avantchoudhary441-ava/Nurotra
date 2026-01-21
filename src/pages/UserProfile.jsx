@@ -59,9 +59,7 @@ export default function UserProfile() {
             formData.append("file", file);
 
             // 1. Upload to Cloudinary
-            const uploadRes = await api.post("/upload", formData, {
-                headers: { "Content-Type": "multipart/form-data" }
-            });
+            const uploadRes = await api.post("/upload", formData);
 
             if (uploadRes.data && uploadRes.data.url) {
                 const newUrl = uploadRes.data.url;
