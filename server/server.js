@@ -58,10 +58,7 @@ const passport = require("./config/passport");
 app.use(passport.initialize());
 
 // Database Connection
-connectDB().then(() => {
-    // TEMPORARY: Create admin user on startup. Remove after one successful deploy.
-    require("./scripts/createAdmin");
-});
+connectDB();
 
 // Routes
 app.use("/api/auth", require("./routes/authRoutes"));
