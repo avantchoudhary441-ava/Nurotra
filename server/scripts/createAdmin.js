@@ -1,4 +1,5 @@
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const connectDB = require("../config/db");
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
@@ -23,6 +24,7 @@ const createAdmin = async () => {
             password, // Schema pre-save will hash this
             role: "admin",
             uniqueId: "admin-001",
+            isVerified: true,
             profileImg: "https://cdn-icons-png.flaticon.com/512/2942/2942813.png" // Cool Admin Icon
         });
 
