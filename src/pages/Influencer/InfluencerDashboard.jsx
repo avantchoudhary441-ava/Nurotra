@@ -262,9 +262,6 @@ export default function InfluencerDashboard() {
                 </div>
               </div>
 
-              <button onClick={() => { logout(); navigate("/"); }} className="modal-logout-btn">
-                Log Out
-              </button>
             </div>
           </div>
         )}

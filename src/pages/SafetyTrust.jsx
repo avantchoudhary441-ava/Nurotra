@@ -131,24 +131,40 @@ export default function SafetyTrust({ role = "influencer" }) {
                     <section className="trust-snapshot">
                         <div className="snapshot-score-wrap">
                             <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
+                                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                                     <Pie
                                         data={scoreData}
-                                        innerRadius={65}
-                                        outerRadius={80}
+                                        innerRadius="75%"
+                                        outerRadius="95%"
                                         paddingAngle={0}
                                         dataKey="value"
                                         startAngle={90}
                                         endAngle={-270}
+                                        strokeWidth={0}
+                                        isAnimationActive={true}
                                     >
-                                        <Cell fill={COLORS[0]} stroke="none" />
-                                        <Cell fill={COLORS[1]} stroke="none" />
+                                        <Cell fill={COLORS[0]} stroke={COLORS[0]} strokeWidth={1} />
+                                        <Cell fill={COLORS[1]} stroke={COLORS[1]} strokeWidth={1} />
                                     </Pie>
                                 </PieChart>
                             </ResponsiveContainer>
-                            <div className="absolute flex flex-col items-center">
-                                <span className="text-4xl font-black text-white">{snapshot.compositeScore}%</span>
-                                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">Trust Index</span>
+                            <div className="snapshot-inner-text">
+                                <motion.span
+                                    className="trust-score-number"
+                                    initial={{ opacity: 0, scale: 0.5 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ duration: 0.8, delay: 0.5 }}
+                                >
+                                    {snapshot.compositeScore}%
+                                </motion.span>
+                                <motion.span
+                                    className="trust-index-label"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ duration: 1, delay: 1 }}
+                                >
+                                    Trust Index
+                                </motion.span>
                             </div>
                         </div>
 

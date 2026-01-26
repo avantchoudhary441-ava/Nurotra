@@ -123,14 +123,6 @@ export default function Sidebar({ role = "influencer" }) {
             </NavLink>
           ))}
         </nav>
-
-        {/* Sidebar Footer (Logout) */}
-        <div className="sidebar-footer">
-          <button className="sidebar-logout-btn" onClick={logout}>
-            <span className="dash-icon">🚪</span>
-            <span className="dash-label">Logout</span>
-          </button>
-        </div>
       </aside>
     </>
   );
