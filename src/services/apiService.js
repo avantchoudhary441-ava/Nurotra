@@ -189,4 +189,31 @@ export const nuroService = {
     }
 };
 
+export const adminService = {
+    getStats: async (params) => {
+        const response = await api.get("/admin/stats", { params });
+        return response.data;
+    },
+    getUsers: async (params) => {
+        const response = await api.get("/admin/users", { params });
+        return response.data;
+    },
+    updateUser: async (userId, data) => {
+        const response = await api.patch(`/admin/users/${userId}`, data);
+        return response.data;
+    },
+    addNote: async (userId, data) => {
+        const response = await api.post(`/admin/users/${userId}/notes`, data);
+        return response.data;
+    },
+    getUserTimeline: async (userId) => {
+        const response = await api.get(`/admin/users/${userId}/timeline`);
+        return response.data;
+    },
+    triggerBulkAction: async (data) => {
+        const response = await api.post(`/admin/bulk-action`, data);
+        return response.data;
+    }
+};
+
 export default api;

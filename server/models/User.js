@@ -13,7 +13,43 @@ const UserSchema = new mongoose.Schema({
     isVerified: { type: Boolean, default: false },
     totalCollabs: { type: Number, default: 0 },
     successfulCollabs: { type: Number, default: 0 },
-    seenMatches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+    seenMatches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
+    // Admin Control Room Fields
+    lifecycleStatus: {
+        type: String,
+        enum: [
+            "applied",
+            "onboarded",
+            "activated",
+            "brand_viewed",
+            "outreach_sent",
+            "brand_responded",
+            "collab_in_progress",
+            "collab_completed",
+            "retention_loop",
+            "dormant"
+        ],
+        default: "applied"
+    },
+    atRiskTags: [{ type: String }],
+    lastActivityAt: { type: Date, default: Date.now },
+    onboardingProgress: {
+        registered: { type: Boolean, default: true },
+        profileCompleted: { type: Boolean, default: false },
+        firstBrandViewed: { type: Boolean, default: false },
+        firstMessageDrafted: { type: Boolean, default: false },
+        firstMessageSent: { type: Boolean, default: false }
+    },
+    internalScores: {
+        reliability: { type: Number, default: 0 },
+        responsiveness: { type: Number, default: 0 }
+    },
+    adminNotes: [{
+        text: String,
+        createdAt: { type: Date, default: Date.now },
+        adminName: String
+    }]
 });
 
 // Encrypt password before save

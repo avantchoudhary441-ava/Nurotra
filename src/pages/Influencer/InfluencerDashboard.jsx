@@ -12,6 +12,7 @@ import InfluencerMatchResults from "./InfluencerMatchResults";
 import LeafTransition from "../../components/LeafTransition";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import CurrencySelector from "../../components/CurrencySelector";
+import { useNuroCore } from "../../context/NuroCoreContext";
 import { localizeText } from "../../utils/textUtils";
 
 import { useCurrency } from "../../context/CurrencyContext";
@@ -24,6 +25,7 @@ export default function InfluencerDashboard() {
   const navigate = useNavigate();
   const { userId } = useParams(); // Get target userId for inspection
   const { user, logout } = useAuth();
+  const { hasUnreadMessages } = useNuroCore();
 
   // ... rest of the component state ...
   // [Lines 25-56 remain same]
@@ -406,6 +408,7 @@ export default function InfluencerDashboard() {
           title="Open Chat Inbox"
         >
           <MessageCircle size={28} />
+          {hasUnreadMessages && <span className="glowing-dot"></span>}
         </button>
       )}
 

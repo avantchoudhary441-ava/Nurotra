@@ -2,6 +2,7 @@ import React, { createContext, useState, useRef, useEffect, useContext } from 'r
 import { io } from 'socket.io-client';
 import Peer from 'simple-peer';
 import { useAuth } from './AuthContext';
+import { useNuroCore } from './NuroCoreContext';
 
 const SocketContext = createContext();
 
@@ -10,6 +11,7 @@ const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export const SocketProvider = ({ children }) => {
     const { user, token } = useAuth();
+    const { setHasUnreadMessages } = useNuroCore();
     const [stream, setStream] = useState(null);
     const [me, setMe] = useState('');
     const [call, setCall] = useState({});
@@ -47,6 +49,13 @@ export const SocketProvider = ({ children }) => {
 
             socket.current.on("call-ended", () => {
                 leaveCall();
+            });
+
+            socket.current.on('message received', (newMessage) => {
+                // Check if we are NOT on the chat page or if the chat is not open
+                if (!window.location.pathname.includes('/chat')) {
+                    setHasUnreadMessages(true);
+                }
             });
         }
 

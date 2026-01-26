@@ -1,4 +1,6 @@
 const User = require("../models/User");
+const { logEvent } = require("../utils/eventLogger");
+
 const Brand = require("../models/Brand");
 const Influencer = require("../models/Influencer");
 const PendingUser = require("../models/PendingUser");
@@ -142,6 +144,9 @@ const verifyOtp = async (req, res) => {
                 // 4. Delete pending record
                 await PendingUser.deleteOne({ _id: pendingUser._id });
 
+                // Log discovery/activation
+                await logEvent(newUser._id, "apk_installed", { role: newUser.role });
+
                 res.status(200).json({
                     _id: newUser._id,
                     name: newUser.name,
@@ -233,6 +238,9 @@ const loginUser = async (req, res) => {
                 successfulCollabs: user.successfulCollabs || 0,
                 token: generateToken(user._id),
             });
+
+            // Log login
+            await logEvent(user._id, "login");
         } else {
             res.status(401).json({ message: "Invalid email or password" });
         }

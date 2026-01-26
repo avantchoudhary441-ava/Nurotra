@@ -3,33 +3,20 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import "../styles/userProfile.css";
 import BackgroundEffects from "../components/BackgroundEffects";
-import NuroLab from "../components/Nuro/NuroLab";
 import CurrencySelector from "../components/CurrencySelector";
 import api from "../services/apiService";
 
 export default function UserProfile() {
     const { user, logout, updateUser } = useAuth();
     const navigate = useNavigate();
-    const [isLabOpen, setLabOpen] = useState(false);
-    const [deliverablesCount, setDeliverablesCount] = useState(0);
+
 
     // Theme Toggle Logic
     const [theme, setTheme] = React.useState(localStorage.getItem("theme") || "light");
 
-    React.useEffect(() => {
-        if (user) {
-            fetchDeliverablesCount();
-        }
-    }, [user]);
 
-    const fetchDeliverablesCount = async () => {
-        try {
-            const res = await api.get("/deliverables");
-            setDeliverablesCount(Array.isArray(res.data) ? res.data.length : 0);
-        } catch (err) {
-            console.error("Error fetching deliverables count", err);
-        }
-    };
+
+
 
     const toggleTheme = () => {
         const next = theme === "light" ? "dark" : "light";
@@ -96,13 +83,7 @@ export default function UserProfile() {
 
             {/* Top Right Controls */}
             <div className="profile-theme-toggle-wrapper">
-                <button
-                    className="icon-btn-floating"
-                    onClick={() => setLabOpen(true)}
-                    title="Open Nuro Lab"
-                >
-                    🧪
-                </button>
+
                 <CurrencySelector />
                 <button
                     className="icon-btn-floating"
@@ -145,11 +126,7 @@ export default function UserProfile() {
                         <span className="profile-role-badge">
                             {user.role || "USER"}
                         </span>
-                        {deliverablesCount > 0 && (
-                            <span className="profile-role-badge" style={{ borderColor: '#4ade80', color: '#4ade80', background: 'rgba(74, 222, 128, 0.1)' }}>
-                                ✅ {deliverablesCount} PROVEN
-                            </span>
-                        )}
+
                     </div>
                 </div>
 
@@ -185,7 +162,7 @@ export default function UserProfile() {
                 </div>
             </div>
 
-            <NuroLab isOpen={isLabOpen} toggleLab={() => setLabOpen(false)} />
+
         </div>
     );
 }

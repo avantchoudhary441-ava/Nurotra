@@ -1,5 +1,6 @@
 const Chat = require("../models/Chat");
 const User = require("../models/User");
+const { logEvent } = require("../utils/eventLogger");
 
 // @desc    Access a chat (Create if not exists, else fetch)
 // @route   POST /api/chat
@@ -109,6 +110,24 @@ const recordCollaboration = async (req, res) => {
 
         chat.collabStatus = status;
         await chat.save();
+
+        // Admin Control Room: Update Lifecycle
+        for (const user of chat.users) {
+            const dbUser = await User.findById(user._id);
+            if (dbUser) {
+                dbUser.lastActivityAt = new Date();
+                if (status === 'Collaboration Successful') {
+                    dbUser.lifecycleStatus = "collab_completed";
+
+                    // Log event
+                    await logEvent(user._id, "collab_completed", { chatId: chat._id });
+                } else {
+                    // Log event
+                    await logEvent(user._id, "collab_started", { chatId: chat._id });
+                }
+                await dbUser.save();
+            }
+        }
 
         // 3. Trigger Nuro Post-Mortem for both users automatically
         try {

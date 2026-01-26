@@ -12,6 +12,7 @@ import { profileService, matchService, nuroService } from "../../services/apiSer
 import CurrencySelector from "../../components/CurrencySelector";
 import BrandMatchResults from "./BrandMatchResults"; // Import Match Results Overlay
 import LeafTransition from "../../components/LeafTransition"; // Import Animation
+import { useNuroCore } from "../../context/NuroCoreContext";
 import { localizeText } from "../../utils/textUtils";
 
 import { useCurrency } from "../../context/CurrencyContext";
@@ -21,6 +22,7 @@ export default function BrandDashboard() {
   const navigate = useNavigate();
   const { userId } = useParams(); // Get target userId for inspection
   const { user, logout } = useAuth();
+  const { hasUnreadMessages } = useNuroCore();
 
   // ... [Lines 21-53 remain same] ...
   const [profile, setProfile] = useState(null);
@@ -334,6 +336,7 @@ export default function BrandDashboard() {
           title="Open Chat Inbox"
         >
           <MessageCircle size={28} />
+          {hasUnreadMessages && <span className="glowing-dot"></span>}
         </button>
       )}
 
