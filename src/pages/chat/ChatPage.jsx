@@ -13,7 +13,7 @@ import { useNuroCore } from "../../context/NuroCoreContext";
 
 export default function ChatPage() {
     const { user } = useAuth();
-    const { checkSafety } = useNuroCore();
+    const { checkSafety, setHasUnreadMessages } = useNuroCore();
     const { callUser } = useSocket();
     const navigate = useNavigate();
     const location = useLocation();
@@ -34,6 +34,10 @@ export default function ChatPage() {
     const [showGrowthPathCTA, setShowGrowthPathCTA] = useState(false);
     const [growthPathType, setGrowthPathType] = useState(null); // 'success' or 'failure'
     const [isGrowthModalOpen, setIsGrowthModalOpen] = useState(false);
+
+    useEffect(() => {
+        setHasUnreadMessages(false);
+    }, [setHasUnreadMessages]);
 
     // Premium Call Modal State
     const [showCallModal, setShowCallModal] = useState(false);

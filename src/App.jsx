@@ -101,7 +101,13 @@ export default function App() {
             <Route path="/collab-conclusion" element={<CollabConclusionPage />} />
             <Route path="/influencer/matching" element={<InfluencerMatchingForm />} />
             <Route path="/influencer/matching-standards/:userId?" element={<InspectionRoute owner={<InfluencerMatchingForm />} target={<BrandMatchingForm />} />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin" element={<AdminDashboard />}>
+              <Route path="influencers" element={<AdminDashboard />} />
+              <Route path="brands" element={<AdminDashboard />} />
+              <Route path="analytics" element={<AdminDashboard />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route index element={<AdminDashboard />} />
+            </Route>
             <Route path="/profile" element={<UserProfile />} />
 
             <Route path="/influencer/deliverables/:userId?" element={<InspectionRoute owner={<DeliverablesDashboard role="influencer" />} target={<DeliverablesDashboard role="brand" />} />} />

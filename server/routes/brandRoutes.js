@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const Brand = require("../models/Brand");
 const User = require("../models/User");
+const { logEvent } = require("../utils/eventLogger");
+
 const jwt = require("jsonwebtoken");
 
 // Middleware to verify token (Simple version for speed, robust version is in middleware/authMiddleware.js if exists, but we'll implement inline for simplicity or reuse if available)
@@ -72,8 +74,16 @@ router.post("/", protect, async (req, res) => {
         // Always sync profileImg to User model if provided
         if (req.body.profileImg) {
             req.user.profileImg = req.body.profileImg;
-            await req.user.save();
         }
+
+        // Advance User Lifecycle
+        req.user.lifecycleStatus = "onboarded";
+        req.user.lastActivityAt = new Date();
+        req.user.onboardingProgress.profileCompleted = true;
+        await req.user.save();
+
+        // Log event
+        await logEvent(req.user._id, "profile_completed");
 
         res.json({ success: true, brand, role: "brand" });
 

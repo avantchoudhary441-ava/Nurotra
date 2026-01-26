@@ -2,8 +2,13 @@ import React from "react";
 import "../styles/dashboard.css";
 import NurotraLogo from "../assets/NurotraLogo.png";
 import { NavLink, useNavigate, useLocation, useParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useNuroCore } from "../context/NuroCoreContext";
+import "../styles/nuro.css";
 
 export default function Sidebar({ role = "influencer" }) {
+  const { memory } = useNuroCore();
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
@@ -21,9 +26,9 @@ export default function Sidebar({ role = "influencer" }) {
 
   if (role === "admin") {
     items = [
-      { id: "dash", label: "Dashboard", icon: "📊", to: "/admin/dashboard" },
-      { id: "users", label: "Users", icon: "👥", to: "/admin/users" },
-      { id: "settings", label: "Settings", icon: "⚙️", to: "/admin/settings" },
+      { id: "influencers", label: "Influencers", icon: "📊", to: "/admin/influencers" },
+      { id: "brands", label: "Brands", icon: "🏢", to: "/admin/brands" },
+      { id: "analytics", label: "Analytics", icon: "📈", to: "/admin/analytics" },
     ];
   } else {
     // Base items
@@ -92,7 +97,9 @@ export default function Sidebar({ role = "influencer" }) {
           <div className="dash-logo-compact cursor-pointer" onClick={() => navigate("/")}>
             <img src={NurotraLogo} alt="Nurotra Logo" />
           </div>
-          <div className="dash-brand cursor-pointer" onClick={() => navigate("/")}>Nurotra</div>
+          <div className="dash-brand cursor-pointer" onClick={() => navigate("/")}>
+            {role === "admin" ? "Admin Control Room" : "Nurotra"}
+          </div>
         </div>
 
         <nav className="dash-nav">
@@ -105,11 +112,25 @@ export default function Sidebar({ role = "influencer" }) {
                 "dash-nav-item" + (isActive ? " active" : "")
               }
             >
-              <span className="dash-icon">{it.icon}</span>
+              <span className="dash-icon">
+                {it.icon}
+                {/* Notification dot for unexplored features */}
+                {memory?.seenGuides && !memory.seenGuides.includes(`${it.id}_guide`) && (
+                  <span className="glowing-dot sidebar-dot"></span>
+                )}
+              </span>
               <span className="dash-label">{it.label}</span>
             </NavLink>
           ))}
         </nav>
+
+        {/* Sidebar Footer (Logout) */}
+        <div className="sidebar-footer">
+          <button className="sidebar-logout-btn" onClick={logout}>
+            <span className="dash-icon">🚪</span>
+            <span className="dash-label">Logout</span>
+          </button>
+        </div>
       </aside>
     </>
   );

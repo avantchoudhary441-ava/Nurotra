@@ -1,5 +1,6 @@
 const Brand = require("../models/Brand");
 const Influencer = require("../models/Influencer");
+const { logEvent } = require("../utils/eventLogger");
 
 // ---------------------------------------------------------
 // HELPER FUNCTIONS (Normalization)
@@ -152,8 +153,15 @@ exports.matchForBrand = async (req, res) => {
         if (results.length > 0) {
             const newSeenIds = results.slice(0, 3).map(r => r.userId);
             await require("../models/User").findByIdAndUpdate(req.user._id, {
-                $addToSet: { seenMatches: { $each: newSeenIds } }
+                $addToSet: { seenMatches: { $each: newSeenIds } },
+                $set: {
+                    lastActivityAt: new Date(),
+                    "onboardingProgress.firstBrandViewed": true
+                }
             });
+
+            // Log event
+            await logEvent(req.user._id, "brand_viewed");
         }
 
         res.json(results);
@@ -205,8 +213,15 @@ exports.matchForInfluencer = async (req, res) => {
         if (results.length > 0) {
             const newSeenIds = results.slice(0, 3).map(r => r.userId);
             await require("../models/User").findByIdAndUpdate(req.user._id, {
-                $addToSet: { seenMatches: { $each: newSeenIds } }
+                $addToSet: { seenMatches: { $each: newSeenIds } },
+                $set: {
+                    lastActivityAt: new Date(),
+                    "onboardingProgress.firstBrandViewed": true
+                }
             });
+
+            // Log event (Influencer viewing brands)
+            await logEvent(req.user._id, "brand_viewed");
         }
 
         res.json(results);

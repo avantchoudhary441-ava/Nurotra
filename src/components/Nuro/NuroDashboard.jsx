@@ -3,10 +3,34 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useSpring, useTransform, useMotionValue } from 'framer-motion';
 
 import { useNuroCore } from '../../context/NuroCoreContext';
+import tutorialVideo from '../../assets/nurotra tutorial 3.mp4';
+import { nuroService } from '../../services/apiService';
 
 export default function NuroDashboard({ onClose }) {
-    const { mode, switchMode, memory, loading } = useNuroCore();
+    const { mode, switchMode, memory, loading, hasSeenTutorial, setHasSeenTutorial, tutorialQueue, setTutorialQueue, tutorialChoice, triggerTutorialInterrupt } = useNuroCore();
     const navigate = useNavigate();
+    const [isPlayingTutorial, setIsPlayingTutorial] = useState(false);
+    const [promptResponse, setPromptResponse] = useState(null); // 'walkthrough', 'explore', or null
+
+    useEffect(() => {
+        if (!hasSeenTutorial && !loading) {
+            triggerTutorialInterrupt();
+        }
+    }, [hasSeenTutorial, loading]);
+
+    useEffect(() => {
+        if (tutorialQueue) {
+            setIsPlayingTutorial(true);
+            setTutorialQueue(false);
+            setPromptResponse('walkthrough');
+        }
+    }, [tutorialQueue]);
+
+    useEffect(() => {
+        if (tutorialChoice === 'explore') {
+            setPromptResponse('explore');
+        }
+    }, [tutorialChoice]);
 
     // Mapping implicit modes to dashboard views
     const getActiveView = () => {
@@ -94,13 +118,42 @@ export default function NuroDashboard({ onClose }) {
                             Advising
                         </span>
                     </div>
-                    <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        {hasSeenTutorial && (
+                            <button
+                                onClick={() => setIsPlayingTutorial(true)}
+                                style={{
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: 'rgba(255,255,255,0.8)',
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.75rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <span>▶</span> Walkthrough
+                            </button>
+                        )}
+                        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+                    </div>
                 </div>
 
                 {/* 2. MAIN CONTENT (Animated Transition) */}
                 <div className="nuro-content">
                     {loading ? (
                         <div style={{ color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>Calibrating Nuro Memory...</div>
+                    ) : isPlayingTutorial ? (
+                        <TutorialPlayer onComplete={() => {
+                            setIsPlayingTutorial(false);
+                            if (!hasSeenTutorial) {
+                                setHasSeenTutorial(true);
+                                nuroService.markGuideSeen('nuro_core_tutorial');
+                            }
+                        }} />
                     ) : (
                         <AnimatePresence mode="wait">
                             {/* ACTIVE MODE - LIVE MONITORING */}
@@ -144,6 +197,32 @@ export default function NuroDashboard({ onClose }) {
                                     transition={{ duration: 0.3 }}
                                     className="nuro-learning-grid"
                                 >
+                                    {/* Confirmation Message after "Explore" handled by promptResponse being set in handleFeedback? 
+                                        Wait, promptResponse is local to Dashboard. I should update it when tutorial completes or is declined.
+                                    */}
+
+                                    {/* Confirmation Message after "Explore" */}
+                                    {promptResponse === 'explore' && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="nuro-soft-confirm"
+                                            style={{
+                                                gridColumn: '1 / -1',
+                                                background: 'rgba(52, 211, 153, 0.1)',
+                                                border: '1px solid rgba(52, 211, 153, 0.2)',
+                                                padding: '1rem',
+                                                borderRadius: '12px',
+                                                color: '#34d399',
+                                                fontSize: '0.9rem',
+                                                textAlign: 'center',
+                                                marginBottom: '1rem'
+                                            }}
+                                        >
+                                            "You can access the walkthrough anytime from Nuro Core."
+                                        </motion.div>
+                                    )}
+
                                     {/* LEFT: SCORES */}
                                     <div className="nuro-left-col">
                                         <div className="nuro-score-panel">
@@ -395,5 +474,52 @@ function ComparisonBar({ label, past, current, delay }) {
                 <span>Now: {current}</span>
             </div>
         </div>
+    );
+}
+
+// ------------------------------------------------------------------
+// TUTORIAL COMPONENTS
+// ------------------------------------------------------------------
+
+function TutorialPlayer({ onComplete }) {
+    return (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+        >
+            <div style={{ width: '100%', flex: 1, background: '#000', borderRadius: '16px', overflow: 'hidden', position: 'relative' }}>
+                <video
+                    autoPlay
+                    src={tutorialVideo}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    onEnded={onComplete}
+                    disablePictureInPicture
+                    controlsList="nodownload nofullscreen noremoteplayback"
+                />
+
+                {/* Overlay to block interaction with video (prevent pause/seek) */}
+                <div style={{ position: 'absolute', inset: 0, zIndex: 1 }} />
+            </div>
+
+            <div style={{ marginTop: '1.5rem', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                <button
+                    onClick={onComplete}
+                    style={{
+                        padding: '1rem 3rem',
+                        background: 'var(--nuro-green)',
+                        border: 'none',
+                        borderRadius: '12px',
+                        color: '#000',
+                        fontWeight: '800',
+                        fontSize: '1rem',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 14px rgba(52, 211, 153, 0.4)'
+                    }}
+                >
+                    Got it
+                </button>
+            </div>
+        </motion.div>
     );
 }

@@ -12,6 +12,10 @@ export const NuroCoreProvider = ({ children }) => {
     const [activeInterrupt, setActiveInterrupt] = useState(null); // { type: 'question', content: '...' }
     const [memory, setMemory] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+    const [hasSeenTutorial, setHasSeenTutorial] = useState(false);
+    const [tutorialQueue, setTutorialQueue] = useState(false); // Signal to dashboard to start video
+    const [tutorialChoice, setTutorialChoice] = useState(null); // 'walkthrough' or 'explore'
     const location = useLocation();
 
     // 🧠 INITIAL FETCH: Sync Nuro Memory from Cloud
@@ -26,6 +30,10 @@ export const NuroCoreProvider = ({ children }) => {
             try {
                 const data = await nuroService.getMemory();
                 setMemory(data);
+                // Check if tutorial has been seen
+                if (data?.seenGuides?.includes('nuro_core_tutorial')) {
+                    setHasSeenTutorial(true);
+                }
             } catch (err) {
                 console.warn("Nuro Memory sync failed, using offline fallback.", err);
             } finally {
@@ -68,7 +76,7 @@ export const NuroCoreProvider = ({ children }) => {
         },
         {
             path: '/matching-standards',
-            id: 'standards_guide',
+            id: 'matching_standards_guide',
             content: "Let's define what matters most to you. I'll use these standards to protect your time and filter out any matches that don't fit your vibe."
         },
         {
@@ -78,7 +86,7 @@ export const NuroCoreProvider = ({ children }) => {
         },
         {
             path: '/collab-insights',
-            id: 'insights_guide',
+            id: 'collab_insights_guide',
             content: "I'm analyzing your deal patterns here. My goal is to show you exactly what's working so you can stop leaving money on the table."
         },
         {
@@ -88,8 +96,13 @@ export const NuroCoreProvider = ({ children }) => {
         },
         {
             path: '/safety',
-            id: 'safety_guide',
+            id: 'safety_trust_guide',
             content: "Your safety is my top priority. I'm constantly monitoring for risks or toxicity so you can focus on building trust with the right people."
+        },
+        {
+            path: '/deliverables',
+            id: 'deliverables_guide',
+            content: "This is your proof-of-work vault. Uploading your best materials here directly feeds into my reputation engine, helping you build trust faster."
         },
         {
             path: '/collab',
@@ -103,7 +116,7 @@ export const NuroCoreProvider = ({ children }) => {
         },
         {
             path: '/nuro-lab',
-            id: 'lab_guide',
+            id: 'nuro_lab_guide',
             content: "Welcome to my experimental core! This is where you can see the raw data and behavioral patterns I'm learning from our time together."
         }
     ];
@@ -203,6 +216,15 @@ export const NuroCoreProvider = ({ children }) => {
         nuroService.saveFeedback(`Intervention triggered: ${reason}`, context);
     };
 
+    const triggerTutorialInterrupt = () => {
+        setActiveInterrupt({
+            type: 'question',
+            title: 'Welcome to Nuro Core 🧠',
+            content: "I've prepared a quick walkthrough to help you orchestrate your collaborations effectively. Would you like to see it?",
+            options: ['▶ Quick walkthrough', 'I’ll explore on my own']
+        });
+    };
+
     // ⚡ REAL-TIME INTERVENTION LOGIC (Calibrator)
     const checkSafety = (content, context) => {
         // Calibrate: Check for "Negotiation Anxiety" patterns from memory
@@ -229,6 +251,18 @@ export const NuroCoreProvider = ({ children }) => {
         // Feedback collected: response
         console.log(`[NURO MEMORY] Feedback collected: ${response}`);
 
+        // Tutorial handling
+        if (response === '▶ Quick walkthrough') {
+            setTutorialQueue(true);
+            setHasSeenTutorial(true);
+            setTutorialChoice('walkthrough');
+            nuroService.markGuideSeen('nuro_core_tutorial');
+        } else if (response === 'I’ll explore on my own') {
+            setHasSeenTutorial(true);
+            setTutorialChoice('explore');
+            nuroService.markGuideSeen('nuro_core_tutorial');
+        }
+
         // PERSIST TO CLOUD
         nuroService.saveFeedback(response, activeInterrupt?.title || "Passive Engagement");
 
@@ -245,7 +279,16 @@ export const NuroCoreProvider = ({ children }) => {
             triggerIntervention,
             dismissInterrupt,
             handleFeedback,
-            checkSafety
+            checkSafety,
+            hasUnreadMessages,
+            setHasUnreadMessages,
+            hasSeenTutorial,
+            setHasSeenTutorial,
+            tutorialQueue,
+            setTutorialQueue,
+            tutorialChoice,
+            setTutorialChoice,
+            triggerTutorialInterrupt
         }}>
             {children}
         </NuroCoreContext.Provider>

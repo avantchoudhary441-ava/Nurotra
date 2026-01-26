@@ -70,6 +70,7 @@ app.use("/api/message", require("./routes/messageRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/nuro", require("./routes/nuroRoutes"));
 app.use("/api/deliverables", require("./routes/deliverableRoutes"));
+app.use("/api/admin", require("./routes/adminRoutes"));
 
 // Global Error Handler
 app.use((err, req, res, next) => {
@@ -93,6 +94,7 @@ const io = require('socket.io')(server, {
 
 // Attach Socket Handler
 require("./socket/socketHandler")(io);
+app.set("socketio", io);
 
 
 // Serve static assets in production
