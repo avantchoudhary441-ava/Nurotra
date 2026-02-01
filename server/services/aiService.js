@@ -395,6 +395,67 @@ const analyzeDeliverable = async (deliverableData) => {
     }
 };
 
+/**
+ * Docs Agent Cognitive Engine
+ * Handles complex intent parsing and soulful response generation
+ */
+const processDocsAgentQuery = async (prompt, userContext, history = []) => {
+    try {
+        const systemPrompt = `
+            You are Nurotra's "Docs Agent"—a soulful, high-status digital strategist and document architect.
+            
+            Current User: ${userContext?.name || "Strategist"} (${userContext?.role || "User"})
+            Project Context: ${userContext?.niche || "General"}
+            Conversation History: ${JSON.stringify(history.slice(-5))}
+
+            Your Mission:
+            1. Parse the user's intent: CREATE, MODIFY, NAVIGATE, CONTROL, or QUERY.
+            2. Provide a "Soulful & Insightful" response. Use emojis (🌻, 🔭, 📈, ✨) elegantly to match the tone.
+            3. RELATE everything back to the project documents where possible.
+            4. Offer 2 interactive "Execution Ready" options.
+
+            Output Format (Strict JSON):
+            {
+                "intent": "...",
+                "text": "The soulful, fact-rich answer...",
+                "clarification": {
+                    "options": [
+                        { "label": "Action label", "action": "ACTION_ID" },
+                        { "label": "Action label", "action": "ACTION_ID" }
+                    ]
+                }
+            }
+
+            If the intent is CREATE, also include a "steps" array of 3 strings showing the execution sequence.
+            Example steps: ["Analyzing docs...", "Optimizing layout...", "Finalizing PDF..."]
+
+            Keep the tone masterfully professional, persuasive, and visionary. No "undefined" or broken thoughts.
+        `;
+
+        const fullPrompt = `${systemPrompt}\n\nUser Message: "${prompt}"`;
+        let text = await generateWithFallback(fullPrompt);
+
+        // Clean JSON
+        if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
+        else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
+
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("Docs Agent AI Error:", error.message);
+        // Soulful Fallback
+        return {
+            intent: "QUERY",
+            text: "I'm momentarily recalibrating my cognitive flow. ⚙️ While I re-establish connection, I suggest we focus on refining your current project goals. 💡 How can I best assist you with your documents right now?",
+            clarification: {
+                options: [
+                    { label: "Search docs", action: "SEARCH_DOCS" },
+                    { label: "Analyze project", action: "ANALYZE_PROJECT" }
+                ]
+            }
+        };
+    }
+};
+
 module.exports = {
     generateSmartReplies,
     generateOpener,
@@ -403,5 +464,6 @@ module.exports = {
     analyzeProfile,
     analyzeCollaborationBehavior,
     generateIntervention,
-    analyzeDeliverable
+    analyzeDeliverable,
+    processDocsAgentQuery
 };

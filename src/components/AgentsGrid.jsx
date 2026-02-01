@@ -21,12 +21,12 @@ export default function AgentsGrid() {
     },
     {
       id: 2,
-      name: "Code Engineer AI",
-      role: "Senior Developer",
-      icon: "👨‍💻",
-      skills: "Bug fixing • Code generation",
+      name: "Docs Agent",
+      role: "Bored of creating & maintaining docs?",
+      icon: "📄",
+      skills: "This is the right place",
       status: "online",
-      route: "coming-soon",
+      route: "/docs-agent",
     },
     {
       id: 3,
