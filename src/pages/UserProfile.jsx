@@ -120,14 +120,6 @@ export default function UserProfile() {
                     </div>
 
                     <h1>{user.name}</h1>
-
-                    {/* Role & Status Badges */}
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '10px' }}>
-                        <span className="profile-role-badge">
-                            {user.role || "USER"}
-                        </span>
-
-                    </div>
                 </div>
 
                 <div className="profile-details">

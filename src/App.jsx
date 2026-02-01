@@ -40,6 +40,7 @@ import Overview from "./pages/dashboard/Overview";
 import CollabInsights from "./pages/CollabInsights";
 import History from "./pages/History";
 import SafetyTrust from "./pages/SafetyTrust";
+import DocsAgentPage from "./pages/DocsAgent/DocsAgentPage";
 
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
@@ -55,7 +56,7 @@ export default function App() {
     <NuroCoreProvider>
       <CurrencyProvider>
         <SocketProvider>
-          {location.pathname !== "/" && <NuroOrb />}
+          {location.pathname !== "/" && location.pathname !== "/docs-agent" && <NuroOrb />}
           <NuroInterrupt />
           <Routes>
 
@@ -82,6 +83,10 @@ export default function App() {
 
             {/* COLLBAI AGENT PAGE */}
             <Route path="/collab" element={<CollabLanding />} />
+
+            {/* DOCS AGENT PAGE */}
+            <Route path="/docs-agent" element={<DocsAgentPage />} />
+
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/verify-otp" element={<OtpVerify />} />
@@ -122,6 +127,7 @@ export default function App() {
 
 
             <Route path="/nuro-lab" element={<NuroLab />} />
+            <Route path="/docs-agent" element={<DocsAgentPage />} />
 
             {/* 404 Debug Catch-all */}
             <Route path="*" element={
