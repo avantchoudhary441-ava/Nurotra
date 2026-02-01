@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy } from 'lucide-react';
+import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap } from 'lucide-react';
 import EntryPoint from './EntryPoint';
 import { exportToExcel } from '../../../services/excelService';
 import { exportToWord } from '../../../services/wordService';
@@ -59,7 +59,7 @@ const LiveExecution = ({
                     </div>
 
                     <div className="plan-risks">
-                        <h4>Potential Optimization</h4>
+                        <h4><Zap size={14} style={{ marginRight: '8px' }} /> Potential Optimization</h4>
                         <p>I will use Smart Memory to ensure this aligns with your previous Expert Standards.</p>
                     </div>
 

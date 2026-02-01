@@ -40,6 +40,7 @@ export default function Sidebar({ role = "influencer" }) {
       { id: "history", label: "History", icon: "📜", to: `/${role}/history` },
       { id: "safety_trust", label: "Safety & Trust", icon: "🛡️", to: `/${role}/safety` },
       { id: "deliverables", label: "Deliverables", icon: "📁", to: `/${role}/deliverables` },
+      { id: "docs_agent", label: "Docs Agent", icon: "🤖", to: "/docs-agent" },
       { id: "nuro_lab", label: "Nuro Lab", icon: "🧪", to: "/nuro-lab" },
     ];
 

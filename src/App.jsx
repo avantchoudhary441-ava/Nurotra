@@ -2,7 +2,7 @@ import { useState } from "react";
 import { BrowserRouter, Routes, Route, useLocation, useParams } from "react-router-dom";
 import Login from "./pages/auth/login";
 import Signup from "./pages/auth/signUp";
-import OtpVerify from "./pages/auth/OtpVerify"; // Import OTP Page
+import OtpVerify from "./pages/auth/OtpVerify";
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import Categories from "./components/Categories";
@@ -51,12 +51,18 @@ import { CurrencyProvider } from "./context/CurrencyContext";
 
 export default function App() {
   const location = useLocation();
+  const isCollabRoute =
+    location.pathname.startsWith('/influencer') ||
+    location.pathname.startsWith('/brand') ||
+    location.pathname.startsWith('/collab') ||
+    location.pathname.startsWith('/chat') ||
+    location.pathname.startsWith('/match-results');
 
   return (
     <NuroCoreProvider>
       <CurrencyProvider>
         <SocketProvider>
-          {location.pathname !== "/" && location.pathname !== "/docs-agent" && <NuroOrb />}
+          {isCollabRoute && <NuroOrb />}
           <NuroInterrupt />
           <Routes>
 
@@ -83,10 +89,6 @@ export default function App() {
 
             {/* COLLBAI AGENT PAGE */}
             <Route path="/collab" element={<CollabLanding />} />
-
-            {/* DOCS AGENT PAGE */}
-            <Route path="/docs-agent" element={<DocsAgentPage />} />
-
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/verify-otp" element={<OtpVerify />} />
@@ -106,13 +108,7 @@ export default function App() {
             <Route path="/collab-conclusion" element={<CollabConclusionPage />} />
             <Route path="/influencer/matching" element={<InfluencerMatchingForm />} />
             <Route path="/influencer/matching-standards/:userId?" element={<InspectionRoute owner={<InfluencerMatchingForm />} target={<BrandMatchingForm />} />} />
-            <Route path="/admin" element={<AdminDashboard />}>
-              <Route path="influencers" element={<AdminDashboard />} />
-              <Route path="brands" element={<AdminDashboard />} />
-              <Route path="analytics" element={<AdminDashboard />} />
-              <Route path="dashboard" element={<AdminDashboard />} />
-              <Route index element={<AdminDashboard />} />
-            </Route>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/profile" element={<UserProfile />} />
 
             <Route path="/influencer/deliverables/:userId?" element={<InspectionRoute owner={<DeliverablesDashboard role="influencer" />} target={<DeliverablesDashboard role="brand" />} />} />

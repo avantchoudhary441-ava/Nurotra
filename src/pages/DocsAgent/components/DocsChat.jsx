@@ -13,9 +13,20 @@ import {
 import { docsAgentService } from '../../../services/docsAgentService';
 import ThinkingIndicator from './ThinkingIndicator';
 
-const DocsChat = ({ initialTrigger, executionMode, liveUpdates, onSetMode, onAgentIntent }) => {
+const DocsChat = ({
+    initialTrigger,
+    executionMode,
+    liveUpdates,
+    onSetMode,
+    onAgentIntent,
+    isPaused,
+    onTogglePause,
+    onUndo,
+    onRollback,
+    pastConversations,
+    onSelectHistory
+}) => {
     const [prompt, setPrompt] = useState('');
-    const [isPaused, setIsPaused] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [isThinking, setIsThinking] = useState(false);
     const [isAutoTyping, setIsAutoTyping] = useState(false);
@@ -58,6 +69,15 @@ const DocsChat = ({ initialTrigger, executionMode, liveUpdates, onSetMode, onAge
     useEffect(() => {
         scrollToBottom();
     }, [strategyMessages, isThinking, liveUpdates]);
+
+    // Antigravity-style Auto-expand Logic
+    useEffect(() => {
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            const newHeight = Math.min(textareaRef.current.scrollHeight, 200);
+            textareaRef.current.style.height = `${newHeight}px`;
+        }
+    }, [prompt]);
 
     const handleFileUpload = (e) => {
         const files = Array.from(e.target.files);
@@ -130,14 +150,37 @@ const DocsChat = ({ initialTrigger, executionMode, liveUpdates, onSetMode, onAge
                     </div>
                 </div>
                 <div className="header-controls">
-                    <button className="pause-btn" onClick={() => setShowPastConversations(!showPastConversations)}>
+                    <button className={`pause-btn ${showPastConversations ? 'active' : ''}`} onClick={() => setShowPastConversations(!showPastConversations)}>
                         <History size={16} />
                     </button>
-                    <button className="pause-btn" onClick={() => setIsPaused(!isPaused)}>
+                    <button className={`pause-btn ${isPaused ? 'paused' : ''}`} onClick={onTogglePause}>
                         {isPaused ? <Play size={16} /> : <Pause size={16} />}
                     </button>
                 </div>
             </div>
+
+            {showPastConversations && (
+                <div className="history-overlay">
+                    <div className="history-header">
+                        <h3>Past Conversations</h3>
+                        <button onClick={() => setShowPastConversations(false)}><X size={16} /></button>
+                    </div>
+                    <div className="history-list">
+                        {pastConversations?.map(conv => (
+                            <div key={conv.id} className="history-item" onClick={() => {
+                                onSelectHistory(conv);
+                                setShowPastConversations(false);
+                            }}>
+                                <History size={14} />
+                                <div className="history-item-info">
+                                    <span className="history-title">{conv.title}</span>
+                                    <span className="history-date">{conv.date}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div className="strategy-feed">
                 {strategyMessages.map((msg) => (
@@ -180,8 +223,8 @@ const DocsChat = ({ initialTrigger, executionMode, liveUpdates, onSetMode, onAge
             </div>
 
             <div className="chat-controls">
-                <button className="control-btn"><Undo size={14} /> <span>Undo</span></button>
-                <button className="control-btn"><RotateCcw size={14} /> <span>Rollback</span></button>
+                <button className="control-btn" onClick={onUndo}><Undo size={14} /> <span>Undo</span></button>
+                <button className="control-btn" onClick={onRollback}><RotateCcw size={14} /> <span>Rollback</span></button>
             </div>
 
             <div className="input-section">
@@ -192,7 +235,8 @@ const DocsChat = ({ initialTrigger, executionMode, liveUpdates, onSetMode, onAge
                         onChange={(e) => setPrompt(e.target.value)}
                         onKeyPress={handleKeyPress}
                         placeholder="Describe what you want to create..."
-                        className={isAutoTyping ? 'auto-typing' : ''}
+                        className={`prompt-textarea ${isAutoTyping ? 'auto-typing' : ''}`}
+                        rows={1}
                     />
                     <div className="prompt-actions">
                         <div className="left-actions">

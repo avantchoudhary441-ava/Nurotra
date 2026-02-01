@@ -42,6 +42,18 @@ const DocsAgentPage = () => {
 
     const [isSidebarSyncing, setIsSidebarSyncing] = useState(false);
     const [chatTrigger, setChatTrigger] = useState(null);
+    const [isPaused, setIsPaused] = useState(false);
+    const isPausedRef = useRef(false);
+
+    useEffect(() => {
+        isPausedRef.current = isPaused;
+    }, [isPaused]);
+
+    const [historyStack, setHistoryStack] = useState([]); // Array of { content, messages }
+    const [pastConversations, setPastConversations] = useState([
+        { id: 1, title: 'Q1 Marketing Strategy', date: 'Yesterday' },
+        { id: 2, title: 'Budget Allocation Plan', date: '2 days ago' }
+    ]);
 
     const containerRef = useRef(null);
     const isResizingLeft = useRef(false);
@@ -78,15 +90,23 @@ const DocsAgentPage = () => {
     }, []);
 
     // Orchestrator for Real Content & Granular Updates
-    const runDetailedExecution = (intentData) => {
+    const runDetailedExecution = async (intentData) => {
         const desc = intentData.description.toLowerCase();
         const isExcel = desc.includes('excel') || desc.includes('student') || desc.includes('mark');
         const isPPT = desc.includes('powerpoint') || desc.includes('ppt') || desc.includes('presentation') || desc.includes('slide');
-        const isWord = desc.includes('word') || desc.includes('report') || desc.includes('document');
 
         setIsSidebarSyncing(true);
+        setIsPaused(false);
+        isPausedRef.current = false;
+        console.log("Execution started - Pause reset to false");
 
-        // Ensure we have an active document to work with
+        // Snapshot current state for rollback
+        const initialSnapshot = {
+            docId: currentDoc?.id,
+            content: currentDoc?.content || '',
+            name: currentDoc?.name || 'New Document'
+        };
+
         if (!currentDoc) {
             const initialDoc = {
                 id: Date.now(),
@@ -100,78 +120,20 @@ const DocsAgentPage = () => {
         }
 
         let steps = [];
-
-        // Dynamic Metadata Analysis
-        const commonVerbs = ['create', 'make', 'generate', 'build', 'start'];
-        const promptWords = desc.split(' ').filter(w => w.length > 3 && !commonVerbs.includes(w));
-        const mainSubject = promptWords.length > 0 ? promptWords[0].charAt(0).toUpperCase() + promptWords[0].slice(1) : "Document";
+        const mainSubject = desc.split(' ').filter(w => w.length > 3)[0] || "Document";
 
         let metadata = {
-            name: `${mainSubject} Analysis.docx`,
-            summary: `Automated synthesis regarding ${desc.substring(0, 30)}...`,
-            type: 'word'
+            name: `${mainSubject.charAt(0).toUpperCase() + mainSubject.slice(1)} Analysis.${isExcel ? 'xlsx' : (isPPT ? 'pptx' : 'docx')}`,
+            summary: `Automated synthesis for ${desc.substring(0, 30)}...`,
+            type: isExcel ? 'excel' : (isPPT ? 'ppt' : 'word')
         };
 
         if (isPPT) {
-            metadata = {
-                name: `${mainSubject} Presentation.pptx`,
-                summary: `Slide deck orchestration for ${desc.substring(0, 40)}.`,
-                type: 'ppt'
-            };
-            steps = [
-                "Analyzing presentation intent...",
-                "Extracting AI Metadata (Naming/Summary)...",
-                "Establishing slide architecture...",
-                "Creating Slide 1: Introduction & Context...",
-                "Creating Slide 2: Strategic Objectives...",
-                "Creating Slide 3: Key Performance Indicators...",
-                "Creating Slide 4: Methodology & Execution...",
-                "Creating Slide 5: Conclusion & Recommendations...",
-                "Finalizing layout and expert standards...",
-                "Presentation ready for export."
-            ];
+            steps = ["Analyzing presentation intent...", "Extracting AI Metadata...", "Creating Slide 1...", "Creating Slide 2...", "Creating Slide 3...", "Finalizing layout..."];
         } else if (isExcel) {
-            metadata = {
-                name: `${mainSubject} Matrix.xlsx`,
-                summary: `Structured data grid for ${desc.substring(0, 40)}.`,
-                type: 'excel'
-            };
-            steps = [
-                "Analyzing document intent...",
-                "Extracting AI Metadata (Naming/Summary)...",
-                "Initializing document environment...",
-                "Defining grid structure (Students x Years)...",
-                "Adding Header: Student ID",
-                "Adding Header: Year 1 Marks",
-                "Adding Header: Year 2 Marks",
-                "Adding Header: Year 3 Marks",
-                "Adding Header: Year 4 Marks",
-                "Adding Header: Year 5 Marks",
-                "Injecting Student 1 data...",
-                "Injecting Student 2 data...",
-                "Injecting Student 3 data...",
-                "Injecting Student 4 data...",
-                "Injecting Student 5 data...",
-                "Finalizing spreadsheet formatting...",
-                "Cloud sync initiated (Expert Standards)..."
-            ];
+            steps = ["Analyzing document intent...", "Extracting AI Metadata...", "Defining grid structure...", "Adding Headers...", "Injecting data rows...", "Finalizing formatting..."];
         } else {
-            metadata = {
-                name: `${mainSubject} Analytics.docx`,
-                summary: `Coordinated knowledge draft for ${desc.substring(0, 40)}.`,
-                type: 'word'
-            };
-            steps = [
-                "Analyzing document intent...",
-                "Extracting AI Metadata (Naming/Summary)...",
-                "Setting up connected history...",
-                "Drafting executive summary...",
-                "Structuring section: Objectives...",
-                "Structuring section: Methodology...",
-                "Injecting expert standards...",
-                "Finalizing draft...",
-                "Document execution complete."
-            ];
+            steps = ["Analyzing document intent...", "Extracting AI Metadata...", "Drafting summary...", "Structuring sections...", "Injecting expert standards...", "Finalizing draft..."];
         }
 
         setExecutionState(prev => ({
@@ -182,64 +144,76 @@ const DocsAgentPage = () => {
             liveUpdates: []
         }));
 
-        let currentContent = isExcel ? "| Student ID | Year 1 | Year 2 | Year 3 | Year 4 | Year 5 |\n|------------|--------|--------|--------|--------|--------|\n" : (isPPT ? "--- SLIDE ---\n# Presentation Title\nAI Generated Strategic Deck\n\n" : "# Draft Document\n\n");
+        let currentContent = isExcel ? "| Header | Data |\n|---|---|\n" : (isPPT ? "# Slide 1\n" : "# Draft\n");
 
-        steps.forEach((step, index) => {
-            setTimeout(() => {
-                setExecutionState(prev => ({
-                    ...prev,
-                    currentStep: index + 1,
-                    liveUpdates: [...prev.liveUpdates, step]
-                }));
-
-                // Phase 1: Metadata Update
-                if (step.includes('Extracting AI Metadata')) {
-                    setCurrentDoc(prev => ({
-                        ...prev,
-                        name: metadata.name,
-                        summary: metadata.summary
-                    }));
+        // Execution Loop with Pause check
+        for (let i = 0; i < steps.length; i++) {
+            // Wait for unpause if needed
+            if (isPausedRef.current) {
+                console.log(`Execution paused at step ${i + 1}: ${steps[i]}`);
+                while (isPausedRef.current) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
                 }
+                console.log(`Execution resumed at step ${i + 1}`);
+            }
 
-                // Phase 2: Content Injection
-                if (isExcel && step.includes('Injecting Student')) {
-                    const match = step.match(/\d+/);
-                    const studentNum = match ? match[0] : (index - 7);
-                    currentContent += `| Student ${studentNum} | ${75 + Math.floor(Math.random() * 20)} | ${75 + Math.floor(Math.random() * 20)} | ${75 + Math.floor(Math.random() * 20)} | ${75 + Math.floor(Math.random() * 20)} | ${75 + Math.floor(Math.random() * 20)} |\n`;
-                    setCurrentDoc(prev => ({ ...prev, content: currentContent }));
-                } else if (!isExcel && !isPPT && step.includes('Structuring section')) {
-                    const sectionName = step.split(': ')[1] || "Section";
-                    currentContent += `## ${sectionName}\nGenerating detailed methodology based on your input aligned with Expert Standards...\n\n`;
-                    setCurrentDoc(prev => ({ ...prev, content: currentContent }));
-                } else if (isPPT && step.includes('Creating Slide')) {
-                    const slideName = step.split(': ')[1] || "Slide";
-                    currentContent += `--- SLIDE ---\n# ${slideName}\nStructured presentation content for ${slideName} aligned with Expert Standards.\n\n`;
-                    setCurrentDoc(prev => ({ ...prev, content: currentContent }));
-                }
-            }, (index + 1) * 800);
-        });
+            await new Promise(resolve => setTimeout(resolve, 800));
 
+            setExecutionState(prev => ({
+                ...prev,
+                currentStep: i + 1,
+                liveUpdates: [...prev.liveUpdates, steps[i]]
+            }));
+
+            if (steps[i].includes('Metadata')) {
+                setCurrentDoc(prev => ({ ...prev, name: metadata.name, summary: metadata.summary }));
+            }
+
+            // Simulate content growth
+            if (i > 1) {
+                currentContent += `> Added granular logic for step: ${steps[i]}\n`;
+                setCurrentDoc(prev => {
+                    // Save history before update
+                    setHistoryStack(h => [...h, { docId: prev.id, content: prev.content, time: Date.now() }].slice(-10));
+                    return { ...prev, content: currentContent };
+                });
+            }
+        }
+
+        setAgentStatus('Ready');
+        setExecutionState(prev => ({ ...prev, status: 'idle' }));
+        setIsSidebarSyncing(false);
+        console.log("Execution complete");
+    };
+
+    const handleUndo = () => {
+        if (historyStack.length === 0) return;
+        const lastState = historyStack[historyStack.length - 1];
+        setCurrentDoc(prev => ({ ...prev, content: lastState.content }));
+        setHistoryStack(prev => prev.slice(0, -1));
+    };
+
+    const handleRollback = () => {
+        // Simple rollback: clear current doc content if it was started in this session
+        setCurrentDoc(prev => ({ ...prev, content: '' }));
+        setHistoryStack([]);
+        setExecutionState(prev => ({ ...prev, status: 'idle', liveUpdates: [] }));
+    };
+
+    const handleSelectHistory = (conv) => {
+        // Simulation of restoring a past conversation
+        setAgentStatus('Restoring...');
         setTimeout(() => {
+            const mockDoc = {
+                id: Date.now(),
+                name: `${conv.title}.docx`,
+                type: 'word',
+                content: `# ${conv.title}\n\nThis document was restored from your history dated ${conv.date}.\n\nIt contains the previously executed expert standards and optimized logic.`
+            };
+            setCurrentDoc(mockDoc);
+            setStandaloneDocs(prev => [...prev, mockDoc]);
             setAgentStatus('Ready');
-            setExecutionState(prev => ({ ...prev, status: 'idle' }));
-            setIsSidebarSyncing(false);
-
-            // Finalize the document in the lists
-            setCurrentDoc(prev => {
-                const updatedDoc = { ...prev, ...metadata };
-
-                // Sync with Projects
-                setProjects(projectsPrev => projectsPrev.map(p => ({
-                    ...p,
-                    documents: p.documents.map(d => d.id === updatedDoc.id ? updatedDoc : d)
-                })));
-
-                // Sync with Standalone
-                setStandaloneDocs(standalonePrev => standalonePrev.map(d => d.id === updatedDoc.id ? updatedDoc : d));
-
-                return updatedDoc;
-            });
-        }, (steps.length + 1) * 800);
+        }, 1000);
     };
 
     // Intent Management (The Brain)
@@ -405,6 +379,19 @@ const DocsAgentPage = () => {
                     liveUpdates={executionState.liveUpdates}
                     onSetMode={(mode) => setExecutionState(prev => ({ ...prev, mode }))}
                     onAgentIntent={handleAgentIntent}
+                    isPaused={isPaused}
+                    onTogglePause={() => {
+                        setIsPaused(prev => {
+                            const next = !prev;
+                            isPausedRef.current = next;
+                            console.log("Pause toggled to:", next);
+                            return next;
+                        });
+                    }}
+                    onUndo={handleUndo}
+                    onRollback={handleRollback}
+                    pastConversations={pastConversations}
+                    onSelectHistory={handleSelectHistory}
                 />
             </div>
         </div>
