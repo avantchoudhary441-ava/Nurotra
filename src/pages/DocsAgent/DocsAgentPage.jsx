@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { docsAgentService } from '../../services/docsAgentService';
+import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../services/generatorService';
 import ProjectsDocs from './components/ProjectsDocs';
 import LiveExecution from './components/LiveExecution';
 import DocsChat from './components/DocsChat';
@@ -59,6 +61,10 @@ const DocsAgentPage = () => {
     const isResizingLeft = useRef(false);
     const isResizingRight = useRef(false);
 
+    const [statusPos, setStatusPos] = useState(null); // {x, y} or null
+    const isDraggingStatus = useRef(false);
+    const dragOffset = useRef({ x: 0, y: 0 });
+
     useEffect(() => {
         const handleMouseMove = (e) => {
             if (isResizingLeft.current) {
@@ -73,11 +79,18 @@ const DocsAgentPage = () => {
                     setRightWidth(newWidth);
                 }
             }
+            if (isDraggingStatus.current) {
+                setStatusPos({
+                    x: e.clientX - dragOffset.current.x,
+                    y: e.clientY - dragOffset.current.y
+                });
+            }
         };
 
         const handleMouseUp = () => {
             isResizingLeft.current = false;
             isResizingRight.current = false;
+            isDraggingStatus.current = false;
             document.body.style.cursor = 'default';
         };
 
@@ -89,101 +102,57 @@ const DocsAgentPage = () => {
         };
     }, []);
 
+    const handleStatusMouseDown = (e) => {
+        isDraggingStatus.current = true;
+        const rect = e.currentTarget.getBoundingClientRect();
+        dragOffset.current = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+        document.body.style.cursor = 'grabbing';
+
+        // If starting from default centered position, verify coordinates
+        if (!statusPos) {
+            setStatusPos({ x: rect.left, y: rect.top });
+        }
+    };
+
+
     // Orchestrator for Real Content & Granular Updates
+    // Orchestrator for Real Content - REPLACEMENT FOR FAKE SIMULATION
     const runDetailedExecution = async (intentData) => {
-        const desc = intentData.description.toLowerCase();
-        const isExcel = desc.includes('excel') || desc.includes('student') || desc.includes('mark');
-        const isPPT = desc.includes('powerpoint') || desc.includes('ppt') || desc.includes('presentation') || desc.includes('slide');
-
         setIsSidebarSyncing(true);
-        setIsPaused(false);
-        isPausedRef.current = false;
-        console.log("Execution started - Pause reset to false");
+        setAgentStatus('Generating...');
+        console.log("Starting Real Generation for:", intentData.description);
 
-        // Snapshot current state for rollback
-        const initialSnapshot = {
-            docId: currentDoc?.id,
-            content: currentDoc?.content || '',
-            name: currentDoc?.name || 'New Document'
-        };
+        try {
+            // 1. Call AI to get structured data
+            const response = await docsAgentService.generateResponse(intentData.description, 'CREATE');
 
-        if (!currentDoc) {
-            const initialDoc = {
-                id: Date.now(),
-                name: "Drafting...",
-                type: isPPT ? 'ppt' : (isExcel ? 'excel' : 'word'),
-                lastModified: 'Just now',
-                content: ''
-            };
-            setCurrentDoc(initialDoc);
-            setStandaloneDocs(prev => [...prev, initialDoc]);
-        }
+            // 2. Generate File
+            if (response && response.generation && response.generation.type) {
+                const { type, data } = response.generation;
+                console.log(`Generating ${type}...`);
 
-        let steps = [];
-        const mainSubject = desc.split(' ').filter(w => w.length > 3)[0] || "Document";
+                if (type === 'word') await generateWordDoc(data);
+                else if (type === 'excel') await generateExcelSheet(data);
+                else if (type === 'ppt') await generatePresentation(data);
 
-        let metadata = {
-            name: `${mainSubject.charAt(0).toUpperCase() + mainSubject.slice(1)} Analysis.${isExcel ? 'xlsx' : (isPPT ? 'pptx' : 'docx')}`,
-            summary: `Automated synthesis for ${desc.substring(0, 30)}...`,
-            type: isExcel ? 'excel' : (isPPT ? 'ppt' : 'word')
-        };
-
-        if (isPPT) {
-            steps = ["Analyzing presentation intent...", "Extracting AI Metadata...", "Creating Slide 1...", "Creating Slide 2...", "Creating Slide 3...", "Finalizing layout..."];
-        } else if (isExcel) {
-            steps = ["Analyzing document intent...", "Extracting AI Metadata...", "Defining grid structure...", "Adding Headers...", "Injecting data rows...", "Finalizing formatting..."];
-        } else {
-            steps = ["Analyzing document intent...", "Extracting AI Metadata...", "Drafting summary...", "Structuring sections...", "Injecting expert standards...", "Finalizing draft..."];
-        }
-
-        setExecutionState(prev => ({
-            ...prev,
-            status: 'executing',
-            currentStep: 1,
-            totalSteps: steps.length,
-            liveUpdates: []
-        }));
-
-        let currentContent = isExcel ? "| Header | Data |\n|---|---|\n" : (isPPT ? "# Slide 1\n" : "# Draft\n");
-
-        // Execution Loop with Pause check
-        for (let i = 0; i < steps.length; i++) {
-            // Wait for unpause if needed
-            if (isPausedRef.current) {
-                console.log(`Execution paused at step ${i + 1}: ${steps[i]}`);
-                while (isPausedRef.current) {
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                }
-                console.log(`Execution resumed at step ${i + 1}`);
+                // 3. Update UI
+                handleDocCreated({ name: data.fileName, type: type });
+                setAgentStatus('Success!');
+            } else {
+                console.warn("AI returned text but no generation payload:", response);
+                setAgentStatus('Text Only');
             }
-
-            await new Promise(resolve => setTimeout(resolve, 800));
-
-            setExecutionState(prev => ({
-                ...prev,
-                currentStep: i + 1,
-                liveUpdates: [...prev.liveUpdates, steps[i]]
-            }));
-
-            if (steps[i].includes('Metadata')) {
-                setCurrentDoc(prev => ({ ...prev, name: metadata.name, summary: metadata.summary }));
-            }
-
-            // Simulate content growth
-            if (i > 1) {
-                currentContent += `> Added granular logic for step: ${steps[i]}\n`;
-                setCurrentDoc(prev => {
-                    // Save history before update
-                    setHistoryStack(h => [...h, { docId: prev.id, content: prev.content, time: Date.now() }].slice(-10));
-                    return { ...prev, content: currentContent };
-                });
-            }
+        } catch (error) {
+            console.error("Generation Failed:", error);
+            setAgentStatus('Failed');
+        } finally {
+            setIsSidebarSyncing(false);
+            setExecutionState(prev => ({ ...prev, status: 'idle', plan: null }));
+            setTimeout(() => setAgentStatus('Ready'), 3000);
         }
-
-        setAgentStatus('Ready');
-        setExecutionState(prev => ({ ...prev, status: 'idle' }));
-        setIsSidebarSyncing(false);
-        console.log("Execution complete");
     };
 
     const handleUndo = () => {
@@ -238,7 +207,8 @@ const DocsAgentPage = () => {
             setAgentStatus('Planning');
         } else {
             // Direct Execution Flow
-            runDetailedExecution(intentData);
+            // runDetailedExecution(intentData); // DISABLE FAKE SIMULATION
+            console.log("Intepreted Intent:", intentData);
         }
     };
 
@@ -304,7 +274,19 @@ const DocsAgentPage = () => {
     return (
         <div className="docs-agent-container" ref={containerRef}>
             {/* Global Status Indicator */}
-            <div className="global-status">
+            <div
+                className="global-status"
+                onMouseDown={handleStatusMouseDown}
+                style={{
+                    ...(statusPos ? {
+                        left: `${statusPos.x}px`,
+                        top: `${statusPos.y}px`,
+                        transform: 'none',
+                        position: 'fixed', /* Use fixed to stay relative to window */
+                        cursor: 'grabbing'
+                    } : { cursor: 'grab' })
+                }}
+            >
                 <span className="status-dot"></span>
                 <span className="status-text">{agentStatus}</span>
             </div>

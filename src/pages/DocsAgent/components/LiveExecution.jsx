@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap } from 'lucide-react';
+import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap, ChevronDown } from 'lucide-react';
 import EntryPoint from './EntryPoint';
 import { exportToExcel } from '../../../services/excelService';
 import { exportToWord } from '../../../services/wordService';
 import { exportToPPT } from '../../../services/pptService';
+import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
 
 const LiveExecution = ({
     executionState,
@@ -17,13 +18,26 @@ const LiveExecution = ({
 }) => {
     // ... (existing state)
     const [editMode, setEditMode] = useState(false);
+    const [showExportMenu, setShowExportMenu] = useState(false);
 
-    const handleExport = () => {
+    const handleExport = async (format) => {
         if (!currentDoc) return;
-        const name = currentDoc.name.toLowerCase();
-        if (name.includes('.xlsx')) exportToExcel(currentDoc.name, currentDoc.content);
-        else if (name.includes('.docx')) exportToWord(currentDoc.name, currentDoc.content);
-        else if (name.includes('.pptx')) exportToPPT(currentDoc.name, currentDoc.content);
+        setShowExportMenu(false);
+        const name = currentDoc.name.replace(/\.[^/.]+$/, ""); // Strip existing extension if any
+
+        try {
+            if (format === 'xlsx') {
+                // Try generic export if strict data isn't available, or use excelService fallback
+                await exportToExcel(name, currentDoc.content);
+            } else if (format === 'docx') {
+                await exportToWord(name, currentDoc.content);
+            } else if (format === 'pptx') {
+                await exportToPPT(name, currentDoc.content);
+            }
+        } catch (e) {
+            console.error("Export failed:", e);
+            alert("Export failed. Please try again.");
+        }
     };
 
     // 1. Idle / Entrance
@@ -137,15 +151,79 @@ const LiveExecution = ({
                         <span className="doc-name-display">{currentDoc.name}</span>
                     </div>
                     <div className="toolbar-actions">
-                        {(currentDoc?.name?.toLowerCase().includes('.xlsx') ||
-                            currentDoc?.name?.toLowerCase().includes('.docx') ||
-                            currentDoc?.name?.toLowerCase().includes('.pptx')) && (
-                                <button className="tool-btn highlight" onClick={handleExport}>
-                                    <Download size={14} />
-                                    {currentDoc.name.toLowerCase().includes('.xlsx') ? 'Export XLSX' :
-                                        currentDoc.name.toLowerCase().includes('.docx') ? 'Export DOCX' : 'Export PPTX'}
-                                </button>
+
+                        <div style={{ position: 'relative' }}>
+                            <button
+                                className="tool-btn highlight"
+                                onClick={() => setShowExportMenu(!showExportMenu)}
+                            >
+                                <Download size={14} /> Export <ChevronDown size={14} />
+                            </button>
+                            {showExportMenu && (
+                                <div className="export-dropdown" style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    right: 0,
+                                    marginTop: '0.5rem',
+                                    background: '#000000',
+                                    border: '1px solid rgba(255,255,255,0.15)',
+                                    borderRadius: '8px',
+                                    padding: '0.5rem',
+                                    zIndex: 50,
+                                    minWidth: '160px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.25rem',
+                                    boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+                                }}>
+                                    <button className="dropdown-item" onClick={() => handleExport('docx')} style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#d1d5db',
+                                        padding: '0.5rem',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        fontSize: '0.8rem',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}>
+                                        <FileText size={14} /> As Word (.docx)
+                                    </button>
+                                    <button className="dropdown-item" onClick={() => handleExport('xlsx')} style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#d1d5db',
+                                        padding: '0.5rem',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        fontSize: '0.8rem',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}>
+                                        <FileText size={14} /> As Excel (.xlsx)
+                                    </button>
+                                    <button className="dropdown-item" onClick={() => handleExport('pptx')} style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#d1d5db',
+                                        padding: '0.5rem',
+                                        textAlign: 'left',
+                                        cursor: 'pointer',
+                                        fontSize: '0.8rem',
+                                        borderRadius: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem'
+                                    }}>
+                                        <FileText size={14} /> As PowerPoint (.pptx)
+                                    </button>
+                                </div>
                             )}
+                        </div>
                         <button className="tool-btn" onClick={() => {
                             navigator.clipboard.writeText(currentDoc.content);
                             alert("Copied to clipboard! Ready to paste into Google Docs.");

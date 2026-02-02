@@ -1,41 +1,112 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { OpenAI } = require("openai");
+const Anthropic = require("@anthropic-ai/sdk");
 
-// Initialize Gemini
-// Ensure GEMINI_API_KEY is in your .env file
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Initialize Providers
+const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
+const xai = process.env.XAI_API_KEY ? new OpenAI({
+    apiKey: process.env.XAI_API_KEY,
+    baseURL: "https://api.x.ai/v1"
+}) : null;
 
-// List of models to try in order of preference (Smartest -> Most Available)
-const modelsToTry = [
-    "models/gemini-2.0-flash",
-    "models/gemini-2.0-flash-exp",
-    "models/gemini-flash-latest"
-];
+// Simple In-Memory Cache for Cost Saving
+const responseCache = new Map();
+const CACHE_TTL = 1000 * 60 * 60; // 1 Hour
 
-// Helper to try generation with multiple models
-const generateWithFallback = async (prompt) => {
-    let lastError = null;
-    for (const modelName of modelsToTry) {
-        try {
-            console.log(`Debug: Attempting model: ${modelName}`);
-            const model = genAI.getGenerativeModel({
-                model: modelName,
-                generationConfig: {
-                    temperature: 0.9, // High creativity
-                    topP: 0.95,
-                    topK: 40,
-                }
-            });
+// Reservoir Priority
+const providerPriority = ["google", "openai", "anthropic", "xai"];
 
-            const result = await model.generateContent(prompt);
-            const response = result.response;
-            return response.text().trim();
-        } catch (error) {
-            console.warn(`Debug: Model ${modelName} failed: ${error.message.split('[')[0]}... (Check full log if needed)`);
-            lastError = error;
-            continue; // Try next model
+/**
+ * Unified Generation with Reservoir Fallback
+ */
+const generateWithFallback = async (prompt, systemPrompt = "") => {
+    // 1. Check Cache
+    const cacheKey = Buffer.from(prompt + systemPrompt).toString('base64').substring(0, 32);
+    if (responseCache.has(cacheKey)) {
+        const cached = responseCache.get(cacheKey);
+        if (Date.now() - cached.timestamp < CACHE_TTL) {
+            console.log("Debug: Cache Hit for prompt");
+            return cached.data;
         }
     }
-    throw lastError || new Error("All AI models failed");
+
+    let lastError = null;
+    const geminiModels = ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash"];
+
+    for (const provider of providerPriority) {
+        try {
+            console.log(`Debug: Attempting Reservoir Provider: ${provider}`);
+            let text = "";
+
+            if (provider === "google" && genAI) {
+                // Try multiple Gemini models if one fails
+                for (const modelName of geminiModels) {
+                    try {
+                        const model = genAI.getGenerativeModel({
+                            model: modelName,
+                            generationConfig: { responseMimeType: "application/json" } // Force JSON
+                        });
+                        const result = await model.generateContent(systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt);
+                        text = result.response.text().trim();
+                        break; // Success
+                    } catch (gError) {
+                        console.warn(`Debug: Gemini Model ${modelName} failed: ${gError.message}`);
+                        lastError = gError;
+                        continue;
+                    }
+                }
+                if (!text && lastError) throw lastError; // All Gemini models failed
+            }
+            else if (provider === "openai" && openai) {
+                const response = await openai.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    response_format: { type: "json_object" }, // Force JSON
+                    messages: [
+                        { role: "system", content: systemPrompt || "You are a helpful assistant. Output JSON." },
+                        { role: "user", content: prompt }
+                    ]
+                });
+                text = response.choices[0].message.content.trim();
+            }
+            else if (provider === "anthropic" && anthropic) {
+                const response = await anthropic.messages.create({
+                    model: "claude-3-haiku-20240307",
+                    max_tokens: 1024,
+                    system: systemPrompt || "You are a helpful assistant.",
+                    messages: [{ role: "user", content: prompt }]
+                });
+                text = response.content[0].text.trim();
+            }
+            else if (provider === "xai" && xai) {
+                const response = await xai.chat.completions.create({
+                    model: "grok-beta",
+                    messages: [
+                        { role: "system", content: systemPrompt || "You are a helpful assistant." },
+                        { role: "user", content: prompt }
+                    ]
+                });
+                text = response.choices[0].message.content.trim();
+            }
+
+            if (text) {
+                // Save to Cache
+                responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                return text;
+            }
+        } catch (error) {
+            const isRateLimit = error.status === 429 || error.message.includes("quota") || error.message.includes("limit");
+            console.warn(`Debug: Provider ${provider} failed: ${error.message}`); // Full error log
+            lastError = error;
+            if (isRateLimit) {
+                console.log(`Debug: ${provider} quota exhausted, switching reservoir...`);
+            }
+            continue;
+        }
+    }
+
+    throw lastError || new Error("All Reservoir AI Providers failed");
 };
 
 /**
@@ -43,34 +114,14 @@ const generateWithFallback = async (prompt) => {
  */
 const generateSmartReplies = async (history, userContext) => {
     try {
-        const prompt = `
-            You are a sharp, tactical negotiation coach on Nurotra.
-            
-            Context:
-            - User Role: ${userContext?.role || "User"}
-            - Chat History: ${JSON.stringify(history)}
+        const systemPrompt = `You are a tactical negotiation coach on Nurotra. User Role: ${userContext?.role || "User"}. Output strictly a JSON array of 3 strings: [psychological_hook, power_move, closer]. Short, punchy, human. No markdown.`;
+        const prompt = `Chat History: ${JSON.stringify(history.slice(-10))}`;
 
-            Task:
-            Generate 3 UNCONVENTIONAL and HIGH-IMPACT reply options.
-            Do NOT be boring. Do NOT use "Can you clarify?".
-            
-            Options must be:
-            1. psychological_hook: A deeply engaging question or statement.
-            2. power_move: A confident assertion of value.
-            3. closer: A direct path to agreement.
-
-            Style: Short, Punchy, Human. No robot-speak.
-            Output strictly a valid JSON array of strings.
-        `;
-
-        let text = await generateWithFallback(prompt);
-        // Clean up common markdown artifacts
-        if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
-        else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
-
+        let text = await generateWithFallback(prompt, systemPrompt);
+        text = text.replace(/```json|```/g, "").trim();
         return JSON.parse(text);
     } catch (error) {
-        console.error("Gemini Smart Reply Final Failure:", error.message);
+        console.error("Smart Reply Failure:", error.message);
         return ["Let's get straight to business.", "What's the best price you can do?", "I'm ready when you are."];
     }
 };
@@ -80,21 +131,11 @@ const generateSmartReplies = async (history, userContext) => {
  */
 const generateOpener = async (matchData, senderData) => {
     try {
-        const prompt = `
-            You are drafting an initial outreach message on Nurotra.
-            
-            Sender: ${senderData?.name} (${senderData?.role})
-            Recipient: ${matchData?.name || "Target User"}
-            Context: Compatibility ${matchData?.matchScore || "High"}, Niche: ${matchData?.niche}, Goal: ${matchData?.focus}
-
-            Task:
-            Write a single, highly engaging, personalized opening message (max 2 sentences).
-            Be warm but professional. Mention usage of Nurotra's matching to establish credibility.
-            NO hashtags.
-        `;
-        return await generateWithFallback(prompt);
+        const systemPrompt = "Write a high-engagement, 1-2 sentence opening message for a Nurotra collaboration. Warm, professional, no hashtags.";
+        const prompt = `Sender: ${senderData?.name} (${senderData?.role}). Recipient: ${matchData?.name}. Score: ${matchData?.matchScore}, Niche: ${matchData?.niche}.`;
+        return await generateWithFallback(prompt, systemPrompt);
     } catch (error) {
-        console.error("Gemini Opener Error:", error.message);
+        console.error("Opener Error:", error.message);
         return `Hi ${matchData?.name || "there"}, noticed our profiles are a strong match on Nurotra. Interested in collaborating?`;
     }
 };
@@ -104,26 +145,14 @@ const generateOpener = async (matchData, senderData) => {
  */
 const generateSummary = async (history) => {
     try {
-        const prompt = `
-            Analyze this chat:
-            ${JSON.stringify(history)}
+        const systemPrompt = 'Analyze chat history and output strictly JSON: {"status": "New"|"Negotiating"|"Agreed"|"Stalled", "keyPoints": "terms summary", "tone": "Positive"|"Neutral"|"Negative"}. No markdown.';
+        const prompt = `History: ${JSON.stringify(history)}`;
 
-            Output strictly JSON:
-            {
-                "status": "New" | "Negotiating" | "Agreed" | "Stalled",
-                "keyPoints": "Short summary of deal terms (price, deliverables)",
-                "tone": "Positive" | "Neutral" | "Negative"
-            }
-            No markdown.
-        `;
-
-        let text = await generateWithFallback(prompt);
-        if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
-        else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
-
+        let text = await generateWithFallback(prompt, systemPrompt);
+        text = text.replace(/```json|```/g, "").trim();
         return JSON.parse(text);
     } catch (error) {
-        console.error("Gemini Summary Error:", error.message);
+        console.error("Summary Error:", error.message);
         return { status: "Negotiating", keyPoints: "Discussion ongoing", tone: "Neutral" };
     }
 };
@@ -133,27 +162,13 @@ const generateSummary = async (history) => {
  */
 const enhanceText = async (draftText) => {
     try {
-        const prompt = `
-            Your goal is to TRANSFORM this text into a Masterpiece of Persuasion.
-            Do NOT just fix grammar. REWRITE IT COMPLETELY.
+        const systemPrompt = "Transform this text into professional, high-status English. Fix typos and maximize impact. Output ONLY the rewritten text.";
+        const prompt = `Input: "${draftText}"`;
 
-            Input: "${draftText}"
-
-            Instructions:
-            1. Fix all broken English/Typos immediately.
-            2. Make it sound Confident, Professional, and High-Status.
-            3. If the input is weak (e.g. "plz reply"), change it to strong (e.g. "I look forward to your prompt response.").
-            4. Keep the core meaning but MAXIMIZE the impact.
-
-            Output ONLY the rewritten text. pure text.
-        `;
-
-        let text = await generateWithFallback(prompt);
-        // Remove quotes if any
-        text = text.replace(/^"|"$/g, '').trim();
-        return text;
+        let text = await generateWithFallback(prompt, systemPrompt);
+        return text.replace(/^"|"$/g, '').trim();
     } catch (error) {
-        console.error("Gemini Enhance Error:", error.message);
+        console.error("Enhance Error:", error.message);
         return draftText; // Fail safe
     }
 };
@@ -164,10 +179,21 @@ const enhanceText = async (draftText) => {
  */
 const analyzeProfile = async (profileData) => {
     try {
-        const prompt = `
+        const systemPrompt = `
             You are Nurotra's Elite Profile Coach & Content Strategist.
-            Analyze this Creator/Brand profile and provide a PREMIUM "Upgrade Report" with GENERATIVE content.
-
+            Analyze this profile and provide a PREMIUM "Upgrade Report" with GENERATIVE content.
+            Output a STRICT JSON object with these exact keys:
+            1. "strengthAnalysis": { "score": (0-100), "strengths": Array of 3 short strings }
+            2. "gapAnalysis": { "gaps": Array of objects { "title", "severity", "reason" } }
+            3. "marketComparison": { "you": { "clarity", "engagement", "professionalism" }, "top10": {...}, "average": {...} }
+            4. "optimizationSuggestions": { "platform": Array of 3 objects { "title", "impact", "instruction" }, "nurotra": Array of 3 objects {...} }
+            5. "projectedImpact": { "matchQualityUplift": (10-30), "replyRateUplift": (10-30) }
+            6. "enhancedBios": Array of 3 objects: { "style", "content", "reasoning" }
+            7. "contentStrategy": Array of 3 objects: { "title", "idea", "caption", "hashtags" }
+            8. "compatibility": { "budgetFit": { "score", "label", "insight" }, "nicheDemand": {...}, "contentViability": {...} }
+            No markdown.
+        `;
+        const prompt = `
             Profile Data:
             - Role: ${profileData.role || "Influencer"}
             - Niche: ${profileData.niche || "Unspecified"}
@@ -175,54 +201,17 @@ const analyzeProfile = async (profileData) => {
             - Followers: ${profileData.followers || "N/A"}
             - Platform: ${profileData.primaryPlatform} (${profileData.platformUrl})
             - Budget/Rate: ${profileData.budget || "Unspecified"}
-
-            Task:
-            Analyze and GENERATE specific content. Output a STRICT JSON object with these exact keys:
-
-            1. "strengthAnalysis":
-               - "score": (0-100 integer)
-               - "strengths": Array of 3 short strings.
-            
-            2. "gapAnalysis":
-               - "gaps": Array of objects { "title": "Missing Portfolio", "severity": "Medium", "reason": "Brands need proof of past work." }
-
-            3. "marketComparison":
-               - "you": { "clarity": 70, "engagement": 60, "professionalism": 50 }
-               - "top10": { "clarity": 95, "engagement": 90, "professionalism": 95 }
-               - "average": { "clarity": 60, "engagement": 50, "professionalism": 60 }
-
-            4. "optimizationSuggestions":
-               - "platform": Array of 3 objects { "title", "impact", "instruction" } (For Instagram/LinkedIn/etc.)
-               - "nurotra": Array of 3 objects { "title", "impact", "instruction" } (For Nurotra Profile Completeness)
-
-            5. "projectedImpact":
-               - "matchQualityUplift": (10-30 integer)
-               - "replyRateUplift": (10-30 integer)
-
-            6. "enhancedBios":
-               - Array of 3 objects: { "style": "Professional | Viral | Minimalist", "content": "The generated bio text...", "reasoning": "Why this works..." }
-
-            7. "contentStrategy":
-               - Array of 3 objects: { "title": "Content Idea Title", "idea": "Brief description", "caption": "Draft caption with hook...", "hashtags": "3-5 relevant hashtags" }
-
-            8. "compatibility":
-               - "budgetFit": { "score": (0-100), "label": "Competitive | Premium | Undervalued", "insight": "Analysis of their rate vs niche" }
-               - "nicheDemand": { "score": (0-100), "label": "High Demand | Niche | Saturated", "insight": "Market appetite for this niche" }
-               - "contentViability": { "score": (0-100), "label": "Strong | Needs Video | Needs Variety", "insight": "Based on platform trends" }
-
-            Structure the JSON strictly. No markdown.
         `;
 
-        let text = await generateWithFallback(prompt);
+        let text = await generateWithFallback(prompt, systemPrompt);
         // Clean JSON
         if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
         else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
 
         return JSON.parse(text);
-
     } catch (error) {
         console.error("Profile Analysis Error:", error.message);
-        // Fallback Mock Data to prevent UI crash
+        // Fallback Mock Data
         return {
             strengthAnalysis: { score: 70, strengths: ["Active Account", "Defined Platform"] },
             gapAnalysis: { gaps: [{ title: "Optimization Pending", severity: "Low", reason: "AI connection failed." }] },
@@ -249,42 +238,33 @@ const analyzeProfile = async (profileData) => {
     }
 };
 
-// ------------------------------------------
-// NURO AGENTIC AI CORE
-// ------------------------------------------
-
 /**
  * Deep Behavioral Analysis after a collaboration context
- * @param {Object} context - { chatLogs, timeline, feedback, outcome }
  */
 const analyzeCollaborationBehavior = async (context) => {
-    const prompt = `
+    const systemPrompt = `
         You are Nuro, an Agentic AI Coach for influencer collaborations.
         Analyze this collaboration history deepy. Do NOT just summarize.
-        
+        Generate a "Nuro Post-Mortem" JSON:
+        1. "overallScore": (0-100)
+        2. "scoreDelta": (Integer, e.g. +14 or -5) compared to a baseline of 70.
+        3. "metrics": { "communicationClarity": (0-100), "reliability": (0-100), "trustIndex": (0-100) }
+        4. "positives": Array of 2-3 specific good behaviors.
+        5. "negatives": Array of 2-3 specific mistakes (e.g. "Over-negotiation").
+        6. "rootCause": One sentence explaining the PSYCHOLOGICAL reason for the mistakes.
+        7. "fixes": Array of 2 concrete actions for next time.
+        8. "predictedSuccessProbability": (0-100) for next collab if fixes are applied.
+        Return strictly JSON. No markdown.
+    `;
+    const prompt = `
         Context:
         - Chat logs duration: ${context.chatLogs?.length || 0} messages
         - Final Outcome: ${context.outcome || "Completed"}
         - User Role: Influencer
-
-        Generate a "Nuro Post-Mortem" JSON:
-        1. "overallScore": (0-100)
-        2. "scoreDelta": (Integer, e.g. +14 or -5) compared to a baseline of 70.
-        3. "metrics":
-           - "communicationClarity": (0-100)
-           - "reliability": (0-100)
-           - "trustIndex": (0-100)
-        4. "positives": Array of 2-3 specific good behaviors.
-        5. "negatives": Array of 2-3 specific mistakes (e.g. "Over-negotiation").
-        6. "rootCause": One sentence explaining the PSYCHOLOGICAL reason for the mistakes (e.g. "Tone shifted to defensive after price objection").
-        7. "fixes": Array of 2 concrete actions for next time.
-        8. "predictedSuccessProbability": (0-100) for next collab if fixes are applied.
-
-        Return strictly JSON.
     `;
 
     try {
-        let text = await generateWithFallback(prompt);
+        let text = await generateWithFallback(prompt, systemPrompt);
         // Clean JSON
         if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
         else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
@@ -307,24 +287,20 @@ const analyzeCollaborationBehavior = async (context) => {
 
 /**
  * Real-time Intervention Engine
- * @param {String} currentAction - "typing_message", "negotiating_price"
- * @param {Object} history - User's NuroMemory (weaknesses)
  */
 const generateIntervention = async (currentAction, history) => {
-    // Only intervene if history shows a weakness relevant to currentAction
-    // For MVP, we simulate a check
+    const systemPrompt = `
+        You are Nuro. If the user is at risk of repeating a mistake based on their past weaknesses,
+        generate a short, helpful intervention. If no risk, return NULL.
+        Output format: JSON { "shouldIntervene": boolean, "message": "Short advice", "type": "warning|tip" }.
+        No markdown.
+    `;
     const prompt = `
-        You are Nuro. The user is currently: "${currentAction}".
+        The user is currently: "${currentAction}".
         Their past weaknesses include: ${JSON.stringify(history?.weaknesses || [])}.
-        
-        If they are at risk of repeating a mistake, generate a short, helpful intervention.
-        If no risk, return NULL.
-        
-        Output format: JSON { "shouldIntervene": boolean, "message": "Short advice", "type": "warning|tip" }
     `;
 
-    // Simulating robust response for now to save tokens/latency in dev
-    // In prod, this calls Gemini
+    // Simulating robust response for now
     return {
         shouldIntervene: false,
         message: null
@@ -333,54 +309,25 @@ const generateIntervention = async (currentAction, history) => {
 
 /**
  * Analyze a deliverable (Proof of Work)
- * @param {Object} deliverableData - { fileName, fileType, textContent (optional) }
  */
 const analyzeDeliverable = async (deliverableData) => {
+    const systemPrompt = `
+        You are Nuro, the Agentic AI Trust Engine.
+        Categorize the deliverable into: Campaign Execution Proof, Performance Evidence, Communication & Professionalism,
+        Compliance & Safety, Reliability & Consistency, Experience Level, Industry Exposure.
+        Determine "Score Impact" (0-5) for: compatibility, experience, trust, safety, reliability.
+        Generate a 1-sentence summary and 2-3 key takeaways.
+        Return strictly JSON: { "category": "...", "summary": "...", "keyTakeaways": ["...", "..."], "scoreImpact": {...} }.
+        No markdown.
+    `;
     const prompt = `
-        You are Nuro, the Agentic AI Trust Engine. 
-        A user has uploaded a deliverable as proof of their work.
-        
         File Info:
         - Name: ${deliverableData.fileName}
         - Type: ${deliverableData.fileType}
-        
-        Task:
-        1. Categorize this into one of these buckets:
-           - Campaign Execution Proof
-           - Performance Evidence
-           - Communication & Professionalism
-           - Compliance & Safety
-           - Reliability & Consistency
-           - Experience Level
-           - Industry Exposure
-        
-        2. Determine the "Score Impact" (0 to 5) for the following metrics based on the file's perceived value:
-           - compatibility: alignment with potential brands
-           - experience: proof of real-world expertise
-           - trust: credibility boost
-           - safety: compliance and risk reduction
-           - reliability: consistency proof
-        
-        3. Generate a short 1-sentence summary of the proof.
-        4. List 2-3 key takeaways.
-
-        Return strictly JSON:
-        {
-            "category": "...",
-            "summary": "...",
-            "keyTakeaways": ["...", "..."],
-            "scoreImpact": {
-                "compatibility": 2,
-                "experience": 3,
-                "trust": 4,
-                "safety": 1,
-                "reliability": 2
-            }
-        }
     `;
 
     try {
-        let text = await generateWithFallback(prompt);
+        let text = await generateWithFallback(prompt, systemPrompt);
         if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
         else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
         return JSON.parse(text);
@@ -401,51 +348,27 @@ const analyzeDeliverable = async (deliverableData) => {
  */
 const processDocsAgentQuery = async (prompt, userContext, history = []) => {
     try {
-        const systemPrompt = `
-            You are Nurotra's "Docs Agent"—a soulful, high-status digital strategist and document architect.
-            
-            Current User: ${userContext?.name || "Strategist"} (${userContext?.role || "User"})
-            Project Context: ${userContext?.niche || "General"}
-            Conversation History: ${JSON.stringify(history.slice(-5))}
+        const systemPrompt = `You are Nurotra's "Docs Agent"—a soulful digital strategist. User: ${userContext?.name} (${userContext?.role}). Niche: ${userContext?.niche}. 
+        MISSION:
+        1. Intent: CREATE, MODIFY, NAVIGATE, CONTROL, or QUERY.
+        2. Soulful & Insightful response with 🌻, 🔭, 📈.
+        3. 2 interactive options {label, action}.
+        4. IF generating a file, add a "generation" object with strict schema:
+           - WORD: { "type": "word", "data": { "fileName": "Name.docx", "title": "...", "sections": [{ "heading": "...", "content": "..." }] } }
+           - PPT: { "type": "ppt", "data": { "fileName": "Name.pptx", "slides": [{ "title": "...", "bullets": ["..."] }] } }
+           - EXCEL: { "type": "excel", "data": { "fileName": "Name.xlsx", "sheets": [{ "name": "...", "rows": [[1,2], ["A","B"]], "formulas": { "C3": "SUM(C1:C2)" } }] } }
+        Output STRICT JSON. No markdown.`;
 
-            Your Mission:
-            1. Parse the user's intent: CREATE, MODIFY, NAVIGATE, CONTROL, or QUERY.
-            2. Provide a "Soulful & Insightful" response. Use emojis (🌻, 🔭, 📈, ✨) elegantly to match the tone.
-            3. RELATE everything back to the project documents where possible.
-            4. Offer 2 interactive "Execution Ready" options.
+        const userPrompt = `Query: "${prompt}"\nHistory: ${JSON.stringify(history.slice(-5))}`;
+        let text = await generateWithFallback(userPrompt, systemPrompt);
 
-            Output Format (Strict JSON):
-            {
-                "intent": "...",
-                "text": "The soulful, fact-rich answer...",
-                "clarification": {
-                    "options": [
-                        { "label": "Action label", "action": "ACTION_ID" },
-                        { "label": "Action label", "action": "ACTION_ID" }
-                    ]
-                }
-            }
-
-            If the intent is CREATE, also include a "steps" array of 3 strings showing the execution sequence.
-            Example steps: ["Analyzing docs...", "Optimizing layout...", "Finalizing PDF..."]
-
-            Keep the tone masterfully professional, persuasive, and visionary. No "undefined" or broken thoughts.
-        `;
-
-        const fullPrompt = `${systemPrompt}\n\nUser Message: "${prompt}"`;
-        let text = await generateWithFallback(fullPrompt);
-
-        // Clean JSON
-        if (text.startsWith('```json')) text = text.replace(/^```json/, '').replace(/```$/, '');
-        else if (text.startsWith('```')) text = text.replace(/^```/, '').replace(/```$/, '');
-
+        text = text.replace(/```json|```/g, "").trim();
         return JSON.parse(text);
     } catch (error) {
         console.error("Docs Agent AI Error:", error.message);
-        // Soulful Fallback
         return {
             intent: "QUERY",
-            text: "I'm momentarily recalibrating my cognitive flow. ⚙️ While I re-establish connection, I suggest we focus on refining your current project goals. 💡 How can I best assist you with your documents right now?",
+            text: "I'm momentarily recalibrating. ⚙️ Let's focus on your project goals. 💡 How can I assist?",
             clarification: {
                 options: [
                     { label: "Search docs", action: "SEARCH_DOCS" },
