@@ -11,6 +11,7 @@ import {
     Undo
 } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
+import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
 import ThinkingIndicator from './ThinkingIndicator';
 
 const DocsChat = ({
@@ -102,20 +103,51 @@ const DocsChat = ({
         }
 
         setIsThinking(true);
-        setTimeout(async () => {
-            setIsThinking(false);
-            const intent = docsAgentService.parseIntent(userPrompt);
-            const response = await docsAgentService.generateResponse(userPrompt, intent);
+        // Remove setTimeout for real API call performance, or keep it short
+        setIsThinking(false);
+        const intent = docsAgentService.parseIntent(userPrompt);
+        const response = await docsAgentService.generateResponse(userPrompt, intent);
 
-            const agentMsg = {
-                id: Date.now() + 1,
-                type: response.intent === 'CREATE' ? 'narration' : 'agent_answer',
-                text: response.text,
-                clarification: response.clarification,
+        const agentMsg = {
+            id: Date.now() + 1,
+            type: response.intent === 'CREATE' ? 'narration' : 'agent_answer',
+            text: response.text,
+            clarification: response.clarification,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setStrategyMessages(prev => [...prev, agentMsg]);
+
+        // HANDLE GENERATION PAYLOAD
+        if (response.generation && response.generation.type) {
+            const { type, data } = response.generation;
+            setStrategyMessages(prev => [...prev, {
+                id: Date.now() + 2,
+                type: 'system',
+                text: `Generating ${type.toUpperCase()} file: ${data.fileName}...`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            };
-            setStrategyMessages(prev => [...prev, agentMsg]);
-        }, 1500);
+            }]);
+
+            try {
+                if (type === 'word') await generateWordDoc(data);
+                else if (type === 'excel') await generateExcelSheet(data);
+                else if (type === 'ppt') await generatePresentation(data);
+
+                setStrategyMessages(prev => [...prev, {
+                    id: Date.now() + 3,
+                    type: 'system',
+                    text: `✅ Downloaded ${data.fileName}`,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }]);
+            } catch (error) {
+                console.error("Generation Failed", error);
+                setStrategyMessages(prev => [...prev, {
+                    id: Date.now() + 3,
+                    type: 'error',
+                    text: `❌ Generation failed: ${error.message}`,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }]);
+            }
+        }
     };
 
     const handleKeyPress = (e) => {
