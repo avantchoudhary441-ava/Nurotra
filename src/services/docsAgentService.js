@@ -37,18 +37,41 @@ export const docsAgentService = {
             // The backend returns { intent, text, clarification, steps? }
             return response.data;
         } catch (error) {
+            // Log full error details for debugging
             console.error("Docs Agent AI Engine Failure:", error);
-            // Soulful Fallback if API fails
-            return {
-                text: "My cognitive link is shielding a minor interference. ⚙️ Let's try that again, or I can focus on your local documents for a moment. 💡",
-                clarification: {
-                    options: [
-                        { label: "Retry", action: "RETRY_QUERY" },
-                        { label: "Check docs", action: "SEARCH_DOCS" }
-                    ]
-                },
-                intent: 'QUERY'
-            };
+            if (error.response) {
+                console.error("Server Response:", error.response.status, error.response.data);
+            }
+
+            // Re-throw error to let the caller handle it instead of showing generic fallback
+            // This allows the actual error message to reach the user
+            throw new Error(error.response?.data?.message || error.message || "Failed to connect to AI service");
+        }
+    },
+
+    /**
+     * Get all projects for current user
+     */
+    getProjects: async () => {
+        try {
+            const response = await api.get('/docs-agent/projects');
+            return response.data;
+        } catch (error) {
+            console.error("Failed to fetch projects:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get all standalone documents
+     */
+    getDocuments: async () => {
+        try {
+            const response = await api.get('/docs-agent/documents');
+            return response.data;
+        } catch (error) {
+            console.error("Failed to fetch documents:", error);
+            throw error;
         }
     },
 
@@ -88,14 +111,39 @@ export const docsAgentService = {
             const response = await api.post('/docs-agent/extract-metadata', { prompt });
             return response.data; // Expected: { name, purpose, category, entities, confidence }
         } catch (error) {
-            console.error("Metadata extraction failed:", error);
+            console.error("Metadata extraction failed, using local fallback:", error);
+
+            // Smart local fallback naming
+            const p = prompt.toLowerCase();
+            let name = "New Document.docx";
+            let category = "General";
+
+            if (p.includes('market')) { name = "Marketing_Plan.docx"; category = "Marketing"; }
+            else if (p.includes('legal') || p.includes('contract')) { name = "Contract_Draft.docx"; category = "Legal"; }
+            else if (p.includes('tech') || p.includes('code')) { name = "Technical_Spec.docx"; category = "Technical"; }
+            else if (p.includes('study') || p.includes('lesson')) { name = "Education_Material.docx"; category = "Education"; }
+            else if (p.includes('budget') || p.includes('finance')) { name = "Financial_Report.xlsx"; category = "Finance"; }
+
             return {
-                name: "Draft Document",
-                purpose: "General Execution",
-                category: "Generic",
+                name: name,
+                purpose: "Local fallback due to AI quota",
+                category: category,
                 entities: [],
-                confidenceScore: 0.5
+                confidenceScore: 0.3
             };
+        }
+    },
+
+    /**
+     * Structure raw voice transcript into actionable intent
+     */
+    structureVoicePrompt: async (transcript) => {
+        try {
+            const response = await api.post('/docs-agent/structure-voice', { transcript });
+            return response.data;
+        } catch (error) {
+            console.error("Failed to structure voice prompt:", error);
+            throw error;
         }
     }
 };

@@ -202,46 +202,45 @@ export default function AdminDashboard() {
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        {users.map((u, i) => (
-                                            <tr key={u._id}> <td>{i + 1}</td>
-                                                <td>
-                                                    <div className="user-info-cell">
-                                                        <img src={u.profileImg || "/default-avatar.png"} alt="" className="avatar-small" />
-                                                        <div>
-                                                            <strong>{u.name}</strong>
-                                                            <span className="text-gray">{u.email}</span>
-                                                        </div>
+                                    <tbody>{users.map((u, i) => (
+                                        <tr key={u._id}><td>{i + 1}</td>
+                                            <td>
+                                                <div className="user-info-cell">
+                                                    <img src={u.profileImg || "/default-avatar.png"} alt="" className="avatar-small" />
+                                                    <div>
+                                                        <strong>{u.name}</strong>
+                                                        <span className="text-gray">{u.email}</span>
                                                     </div>
-                                                </td>
-                                                <td>
-                                                    <span className={`status-badge status-${u.lifecycleStatus}`}>
-                                                        {u.lifecycleStatus.replace("_", " ")}
-                                                    </span>
-                                                    {getInactivityDays(u.lastActivityAt) >= 2 && <span className="risk-tag">At Risk</span>}
-                                                </td>
-                                                <td>
-                                                    <div className="onboarding-dots">
-                                                        {Object.entries(u.onboardingProgress || {}).map(([step, done]) => (
-                                                            <span key={step} className={`dot ${done ? "done" : ""}`} title={step} />
-                                                        ))}
-                                                    </div>
-                                                </td>
-                                                <td>{getInactivityDays(u.lastActivityAt)}d ago</td>
-                                                <td>
-                                                    <div className="score-stack">
-                                                        <span className="score-label">REL: {u.internalScores?.reliability || 0}</span>
-                                                        <div className="score-bar"><div style={{ width: `${u.internalScores?.reliability || 0}%` }} /></div>
-                                                        <span className="score-label">RES: {u.internalScores?.responsiveness || 0}</span>
-                                                        <div className="score-bar"><div style={{ width: `${u.internalScores?.responsiveness || 0}%` }} /></div>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <button className="btn-icon" title="View Timeline" onClick={() => handleFetchTimeline(u)}>🕒</button>
-                                                    <button className="btn-icon" title="Add Note" onClick={() => setSelectedUser(u)}>📝</button>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className={`status-badge status-${u.lifecycleStatus}`}>
+                                                    {u.lifecycleStatus.replace("_", " ")}
+                                                </span>
+                                                {getInactivityDays(u.lastActivityAt) >= 2 && <span className="risk-tag">At Risk</span>}
+                                            </td>
+                                            <td>
+                                                <div className="onboarding-dots">
+                                                    {Object.entries(u.onboardingProgress || {}).map(([step, done]) => (
+                                                        <span key={step} className={`dot ${done ? "done" : ""}`} title={step} />
+                                                    ))}
+                                                </div>
+                                            </td>
+                                            <td>{getInactivityDays(u.lastActivityAt)}d ago</td>
+                                            <td>
+                                                <div className="score-stack">
+                                                    <span className="score-label">REL: {u.internalScores?.reliability || 0}</span>
+                                                    <div className="score-bar"><div style={{ width: `${u.internalScores?.reliability || 0}%` }} /></div>
+                                                    <span className="score-label">RES: {u.internalScores?.responsiveness || 0}</span>
+                                                    <div className="score-bar"><div style={{ width: `${u.internalScores?.responsiveness || 0}%` }} /></div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <button className="btn-icon" title="View Timeline" onClick={() => handleFetchTimeline(u)}>🕒</button>
+                                                <button className="btn-icon" title="Add Note" onClick={() => setSelectedUser(u)}>📝</button>
+                                            </td>
+                                        </tr>
+                                    ))}
                                     </tbody>
                                 </table>
                             </div>

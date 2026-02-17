@@ -33,6 +33,11 @@ const DocsChat = ({
     const [isAutoTyping, setIsAutoTyping] = useState(false);
     const [uploadedFiles, setUploadedFiles] = useState([]);
     const [showPastConversations, setShowPastConversations] = useState(false);
+    const [structuredVoiceResult, setStructuredVoiceResult] = useState(null);
+    const [isStructuring, setIsStructuring] = useState(false);
+    const recognitionRef = useRef(null);
+    const silenceTimerRef = useRef(null);
+    const transcriptAccumulatorRef = useRef('');
     const [strategyMessages, setStrategyMessages] = useState([
         {
             id: 1,
@@ -86,6 +91,10 @@ const DocsChat = ({
     };
 
     const handleExecute = async () => {
+        if (isListening) {
+            stopVoiceCapture();
+            return;
+        }
         if (!prompt.trim()) return;
         const userPrompt = prompt.trim();
         setPrompt('');
@@ -98,55 +107,46 @@ const DocsChat = ({
         };
         setStrategyMessages(prev => [...prev, userMsg]);
 
-        if (onAgentIntent) {
-            onAgentIntent({ description: userPrompt, type: 'TASK_EXECUTION' });
-        }
-
         setIsThinking(true);
-        // Remove setTimeout for real API call performance, or keep it short
-        setIsThinking(false);
-        const intent = docsAgentService.parseIntent(userPrompt);
-        const response = await docsAgentService.generateResponse(userPrompt, intent);
 
-        const agentMsg = {
-            id: Date.now() + 1,
-            type: response.intent === 'CREATE' ? 'narration' : 'agent_answer',
-            text: response.text,
-            clarification: response.clarification,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setStrategyMessages(prev => [...prev, agentMsg]);
+        try {
+            const intent = docsAgentService.parseIntent(userPrompt);
+            // Pass history context from strategyMessages
+            const historyContext = strategyMessages
+                .filter(m => m.type === 'user' || m.type === 'agent_answer')
+                .slice(-5)
+                .map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.text }));
 
-        // HANDLE GENERATION PAYLOAD
-        if (response.generation && response.generation.type) {
-            const { type, data } = response.generation;
+            const response = await docsAgentService.generateResponse(userPrompt, intent, { history: historyContext });
+
+            setIsThinking(false);
+
+            const agentMsg = {
+                id: Date.now() + 1,
+                type: response.intent === 'CREATE' ? 'narration' : 'agent_answer',
+                text: response.text,
+                clarification: response.clarification,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setStrategyMessages(prev => [...prev, agentMsg]);
+
+            // DELEGATE EXECUTION to parent page with the FULL response payload
+            if (onAgentIntent) {
+                onAgentIntent({
+                    description: userPrompt,
+                    type: 'TASK_EXECUTION',
+                    payload: response
+                });
+            }
+        } catch (error) {
+            console.error("Docs Agent Error:", error);
+            setIsThinking(false);
             setStrategyMessages(prev => [...prev, {
-                id: Date.now() + 2,
-                type: 'system',
-                text: `Generating ${type.toUpperCase()} file: ${data.fileName}...`,
+                id: Date.now() + 1,
+                type: 'error',
+                text: `❌ An error occurred: ${error.message || 'Unable to process your request. Please try again.'}`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             }]);
-
-            try {
-                if (type === 'word') await generateWordDoc(data);
-                else if (type === 'excel') await generateExcelSheet(data);
-                else if (type === 'ppt') await generatePresentation(data);
-
-                setStrategyMessages(prev => [...prev, {
-                    id: Date.now() + 3,
-                    type: 'system',
-                    text: `✅ Downloaded ${data.fileName}`,
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                }]);
-            } catch (error) {
-                console.error("Generation Failed", error);
-                setStrategyMessages(prev => [...prev, {
-                    id: Date.now() + 3,
-                    type: 'error',
-                    text: `❌ Generation failed: ${error.message}`,
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                }]);
-            }
         }
     };
 
@@ -158,7 +158,186 @@ const DocsChat = ({
     };
 
     const toggleVoice = () => {
-        setIsListening(!isListening);
+        if (isListening) {
+            stopVoiceCapture();
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            setStrategyMessages(prev => [...prev, {
+                id: Date.now(),
+                type: 'error',
+                text: '❌ Speech recognition is not supported in this browser.',
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }]);
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+        transcriptAccumulatorRef.current = '';
+
+        recognition.onstart = () => {
+            setIsListening(true);
+            setPrompt('');
+        };
+
+        recognition.onresult = (event) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+
+            if (finalTranscript) {
+                transcriptAccumulatorRef.current += finalTranscript + ' ';
+            }
+
+            setPrompt(transcriptAccumulatorRef.current + interimTranscript);
+
+            // Silence Detection: If user stops for 2 seconds, auto-stop and process
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = setTimeout(() => {
+                stopVoiceCapture();
+            }, 10000);
+        };
+
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            if (event.error !== 'no-speech') {
+                setIsListening(false);
+                setPrompt('');
+            }
+        };
+
+        recognition.onend = () => {
+            // Note: Don't set isListening false here if we want to handle internal stops vs manual
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+    };
+
+    const stopVoiceCapture = () => {
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        if (recognitionRef.current) {
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+        setIsListening(false);
+
+        const finalOutput = transcriptAccumulatorRef.current.trim();
+        if (finalOutput) {
+            handleVoiceProcess(finalOutput);
+        }
+    };
+
+    const handleVoiceProcess = async (transcript) => {
+        setIsStructuring(true);
+        setStrategyMessages(prev => [...prev, {
+            id: Date.now(),
+            type: 'system',
+            text: 'Designing structured prompt from voice...',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }]);
+
+        try {
+            const result = await docsAgentService.structureVoicePrompt(transcript);
+            setIsStructuring(false);
+            setStructuredVoiceResult(result);
+
+            if (result.clarificationNeeded) {
+                setStrategyMessages(prev => [...prev, {
+                    id: Date.now(),
+                    type: 'agent_answer',
+                    text: result.clarificationNeeded,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }]);
+                return;
+            }
+
+            if (result.isHighRisk) {
+                setStrategyMessages(prev => [...prev, {
+                    id: Date.now(),
+                    type: 'system',
+                    text: `⚠️ High-risk action detected: ${result.structuredPrompt}. Please confirm execution.`,
+                    confirmation: true,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }]);
+            } else {
+                // Auto-execute for low risk
+                executeStructuredPrompt(result);
+            }
+        } catch (error) {
+            setIsStructuring(false);
+            setStrategyMessages(prev => [...prev, {
+                id: Date.now(),
+                type: 'error',
+                text: `❌ Failed to structure voice: ${error.message}`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }]);
+        }
+    };
+
+    const executeStructuredPrompt = async (result) => {
+        const finalPrompt = result.structuredPrompt;
+        setPrompt(finalPrompt);
+        setStructuredVoiceResult(null);
+
+        // Use existing handleExecute logic but with the structured prompt
+        const userMsg = {
+            id: Date.now(),
+            type: 'user',
+            text: finalPrompt,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setStrategyMessages(prev => [...prev, userMsg]);
+        setIsThinking(true);
+
+        try {
+            const intent = docsAgentService.parseIntent(finalPrompt);
+            const historyContext = strategyMessages
+                .filter(m => m.type === 'user' || m.type === 'agent_answer')
+                .slice(-5)
+                .map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.text }));
+
+            const response = await docsAgentService.generateResponse(finalPrompt, intent, { history: historyContext });
+            setIsThinking(false);
+
+            const agentMsg = {
+                id: Date.now() + 1,
+                type: response.intent === 'CREATE' ? 'narration' : 'agent_answer',
+                text: response.text,
+                clarification: response.clarification,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setStrategyMessages(prev => [...prev, agentMsg]);
+
+            if (onAgentIntent) {
+                onAgentIntent({
+                    description: finalPrompt,
+                    type: 'TASK_EXECUTION',
+                    payload: response
+                });
+            }
+            setPrompt('');
+        } catch (error) {
+            setIsThinking(false);
+            setStrategyMessages(prev => [...prev, {
+                id: Date.now() + 1,
+                type: 'error',
+                text: `❌ Error: ${error.message}`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }]);
+        }
     };
 
     return (
@@ -235,6 +414,49 @@ const DocsChat = ({
                                         ))}
                                     </div>
                                 )}
+                                {msg.confirmation && structuredVoiceResult && (
+                                    <div className="clarification-options" style={{ marginTop: '10px' }}>
+                                        <button
+                                            className="confirm-voice-btn"
+                                            onClick={() => executeStructuredPrompt(structuredVoiceResult)}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '6px',
+                                                fontSize: '12px',
+                                                background: 'rgba(74, 222, 128, 0.1)',
+                                                border: '1px solid #4ade80',
+                                                color: '#4ade80',
+                                                marginRight: '8px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Proceed
+                                        </button>
+                                        <button
+                                            className="cancel-voice-btn"
+                                            onClick={() => {
+                                                setStructuredVoiceResult(null);
+                                                setStrategyMessages(prev => [...prev, {
+                                                    id: Date.now(),
+                                                    type: 'system',
+                                                    text: 'Action cancelled.',
+                                                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                }]);
+                                            }}
+                                            style={{
+                                                padding: '6px 12px',
+                                                borderRadius: '6px',
+                                                fontSize: '12px',
+                                                background: 'rgba(248, 113, 113, 0.1)',
+                                                border: '1px solid #f87171',
+                                                color: '#f87171',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -266,9 +488,10 @@ const DocsChat = ({
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        placeholder="Describe what you want to create..."
-                        className={`prompt-textarea ${isAutoTyping ? 'auto-typing' : ''}`}
+                        placeholder={isListening ? "Listening..." : isStructuring ? "Structuring..." : "Describe what you want to create..."}
+                        className={`prompt-textarea ${isAutoTyping ? 'auto-typing' : ''} ${isListening ? 'listening' : ''}`}
                         rows={1}
+                        disabled={isStructuring}
                     />
                     <div className="prompt-actions">
                         <div className="left-actions">

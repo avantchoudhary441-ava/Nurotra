@@ -1,25 +1,12 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { OpenAI } = require("openai");
-const Anthropic = require("@anthropic-ai/sdk");
-
-// Initialize Providers
-const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
-const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
-const xai = process.env.XAI_API_KEY ? new OpenAI({
-    apiKey: process.env.XAI_API_KEY,
-    baseURL: "https://api.x.ai/v1"
-}) : null;
+const axios = require("axios");
 
 // Simple In-Memory Cache for Cost Saving
 const responseCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 Hour
 
-// Reservoir Priority
-const providerPriority = ["google", "openai", "anthropic", "xai"];
-
 /**
- * Unified Generation with Reservoir Fallback
+ * Direct Gemini Generation using Raw REST (Axios)
+ * Bypasses SDK limits and reservoir complexity.
  */
 const generateWithFallback = async (prompt, systemPrompt = "") => {
     // 1. Check Cache
@@ -32,81 +19,70 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
         }
     }
 
+    if (!process.env.GEMINI_API_KEY) {
+        throw new Error("GEMINI_API_KEY is missing from environment");
+    }
+
+    const geminiModels = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"];
     let lastError = null;
-    const geminiModels = ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash"];
 
-    for (const provider of providerPriority) {
-        try {
-            console.log(`Debug: Attempting Reservoir Provider: ${provider}`);
-            let text = "";
+    for (const modelName of geminiModels) {
+        let retries = 0;
+        const maxRetries = 1; // Reduced retries to save quota
 
-            if (provider === "google" && genAI) {
-                // Try multiple Gemini models if one fails
-                for (const modelName of geminiModels) {
-                    try {
-                        const model = genAI.getGenerativeModel({
-                            model: modelName,
-                            generationConfig: { responseMimeType: "application/json" } // Force JSON
-                        });
-                        const result = await model.generateContent(systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt);
-                        text = result.response.text().trim();
-                        break; // Success
-                    } catch (gError) {
-                        console.warn(`Debug: Gemini Model ${modelName} failed: ${gError.message}`);
-                        lastError = gError;
+        while (retries <= maxRetries) {
+            try {
+                console.log(`Debug: Attempting Gemini via REST: ${modelName} (Retry: ${retries})`);
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+                const response = await axios.post(url, {
+                    contents: [{
+                        parts: [{ text: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json"
+                    }
+                });
+
+                if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    const text = response.data.candidates[0].content.parts[0].text.trim();
+                    console.log(`Debug: Gemini success with model ${modelName}`);
+                    responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                    return text;
+                } else {
+                    throw new Error("Invalid response format from Gemini REST API");
+                }
+            } catch (gError) {
+                const errorMsg = gError.response?.data?.error?.message || gError.message;
+                const statusCode = gError.response?.status;
+
+                console.warn(`Debug: Gemini model ${modelName} attempt ${retries} failed: ${errorMsg}`);
+
+                // If 429 (Rate Limit) or 400 (Quota), don't keep cycling models aggressively
+                if (statusCode === 429 || errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("limit")) {
+                    if (retries < maxRetries) {
+                        const waitTime = 3000;
+                        console.log(`Debug: Quota/Rate Limit. Waiting ${waitTime}ms before final retry...`);
+                        await new Promise(r => setTimeout(r, waitTime));
+                        retries++;
                         continue;
                     }
+                    throw new Error(`Gemini Quota Exceeded (${modelName}): ${errorMsg}`);
                 }
-                if (!text && lastError) throw lastError; // All Gemini models failed
-            }
-            else if (provider === "openai" && openai) {
-                const response = await openai.chat.completions.create({
-                    model: "gpt-4o-mini",
-                    response_format: { type: "json_object" }, // Force JSON
-                    messages: [
-                        { role: "system", content: systemPrompt || "You are a helpful assistant. Output JSON." },
-                        { role: "user", content: prompt }
-                    ]
-                });
-                text = response.choices[0].message.content.trim();
-            }
-            else if (provider === "anthropic" && anthropic) {
-                const response = await anthropic.messages.create({
-                    model: "claude-3-haiku-20240307",
-                    max_tokens: 1024,
-                    system: systemPrompt || "You are a helpful assistant.",
-                    messages: [{ role: "user", content: prompt }]
-                });
-                text = response.content[0].text.trim();
-            }
-            else if (provider === "xai" && xai) {
-                const response = await xai.chat.completions.create({
-                    model: "grok-beta",
-                    messages: [
-                        { role: "system", content: systemPrompt || "You are a helpful assistant." },
-                        { role: "user", content: prompt }
-                    ]
-                });
-                text = response.choices[0].message.content.trim();
-            }
 
-            if (text) {
-                // Save to Cache
-                responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
-                return text;
+                // If 503, wait and retry
+                if (statusCode === 503 && retries < maxRetries) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    retries++;
+                    continue;
+                }
+
+                lastError = new Error(`Gemini Error (${modelName}): ${errorMsg}`);
+                break; // Move to next model for other errors
             }
-        } catch (error) {
-            const isRateLimit = error.status === 429 || error.message.includes("quota") || error.message.includes("limit");
-            console.warn(`Debug: Provider ${provider} failed: ${error.message}`); // Full error log
-            lastError = error;
-            if (isRateLimit) {
-                console.log(`Debug: ${provider} quota exhausted, switching reservoir...`);
-            }
-            continue;
         }
     }
 
-    throw lastError || new Error("All Reservoir AI Providers failed");
+    throw lastError || new Error("All Gemini models failed to generate a response");
 };
 
 /**
@@ -344,37 +320,190 @@ const analyzeDeliverable = async (deliverableData) => {
 
 /**
  * Docs Agent Cognitive Engine
- * Handles complex intent parsing and soulful response generation
+ * Handles complex intent parsing and structured response generation.
+ * Stripped of persona to avoid refusal and "shielding" errors.
  */
 const processDocsAgentQuery = async (prompt, userContext, history = []) => {
     try {
-        const systemPrompt = `You are Nurotra's "Docs Agent"—a soulful digital strategist. User: ${userContext?.name} (${userContext?.role}). Niche: ${userContext?.niche}. 
+        const systemPrompt = `You are the Nurotra Document Execution Engine.
         MISSION:
-        1. Intent: CREATE, MODIFY, NAVIGATE, CONTROL, or QUERY.
-        2. Soulful & Insightful response with 🌻, 🔭, 📈.
-        3. 2 interactive options {label, action}.
-        4. IF generating a file, add a "generation" object with strict schema:
-           - WORD: { "type": "word", "data": { "fileName": "Name.docx", "title": "...", "sections": [{ "heading": "...", "content": "..." }] } }
-           - PPT: { "type": "ppt", "data": { "fileName": "Name.pptx", "slides": [{ "title": "...", "bullets": ["..."] }] } }
-           - EXCEL: { "type": "excel", "data": { "fileName": "Name.xlsx", "sheets": [{ "name": "...", "rows": [[1,2], ["A","B"]], "formulas": { "C3": "SUM(C1:C2)" } }] } }
-        Output STRICT JSON. No markdown.`;
+        - Parse user request for document creation or modification.
+        - Output strictly valid JSON matching the schema below.
+        - No conversational filler, no personality-driven refusals.
 
-        const userPrompt = `Query: "${prompt}"\nHistory: ${JSON.stringify(history.slice(-5))}`;
-        let text = await generateWithFallback(userPrompt, systemPrompt);
+        JSON SCHEMA:
+        {
+          "intent": "CREATE" | "MODIFY" | "QUERY",
+          "text": "A brief status update about what you are building.",
+          "metadata": {
+            "name": "Suggested File Name (with extension, e.g. Strategy_v1.docx)",
+            "purpose": "1-sentence document goal",
+            "category": "Marketing|Legal|Technical|Education",
+            "entities": ["list", "of", "key", "entities"]
+          },
+          "clarification": { "options": [{ "label": "Retry Plan", "action": "RETRY" }] },
+          "generation": {
+            "type": "word" | "ppt" | "excel",
+            "data": { 
+              "fileName": "Same as metadata.name",
+              "title": "Document Title", 
+              "sections": [{ "heading": "Heading", "content": "Detailed content..." }],
+              "sheets": [{ "name": "Sheet1", "rows": [["Column1", "Column2"]], "formulas": {} }]
+            }
+          }
+        }
+        
+        ONLY output the JSON. No markdown backticks.`;
 
+        const userPrompt = `User: ${userContext?.name}. niche: ${userContext?.niche}. Request: "${prompt}"`;
+        let rawResponse = await generateWithFallback(userPrompt, systemPrompt);
+
+        // Aggressive JSON Cleaning
+        let cleanJson = rawResponse
+            .replace(/```json/gi, "")
+            .replace(/```/g, "")
+            .replace(/^[^[{]*/, "")
+            .replace(/[^\]}]*$/, "")
+            .trim();
+
+        try {
+            const parsed = JSON.parse(cleanJson);
+            return parsed;
+        } catch (jsonError) {
+            console.warn("JSON Parse Error, manual recovery...", jsonError.message);
+            // If it's not JSON, it might be a text refusal from the AI
+            if (rawResponse.toLowerCase().includes("interference") || rawResponse.toLowerCase().includes("cannot")) {
+                throw new Error("AI engine refusal detected. System is recalibrating safety parameters.");
+            }
+            throw jsonError;
+        }
+    } catch (error) {
+        console.error("Docs Agent Execution Error:", error.message);
+        return {
+            intent: "QUERY",
+            text: `System alert: ${error.message}. The cognitive engine is momentarily unstable. 🔭`,
+            clarification: {
+                options: [
+                    { label: "Retry Generation", action: "RETRY" },
+                    { label: "View Support Docs", action: "HELP" }
+                ]
+            }
+        };
+    }
+};
+
+/**
+ * Semantic Metadata Extraction
+ * Uses Gemini to parse human intent and extract document context.
+ */
+const extractMetadata = async (prompt) => {
+    try {
+        const systemPrompt = `You are a semantic analyzer for Nurotra.
+        Analyze the document creation request and extract metadata.
+        Output STRICT JSON:
+        {
+          "name": "Suggested File Name (with .docx, .xlsx, or .pptx)",
+          "purpose": "1-sentence document goal",
+          "category": "Marketing|Legal|Technical|Education",
+          "entities": ["list", "of", "key", "entities"],
+          "confidenceScore": 0.0-1.0
+        }
+        No markdown. No conversational filler.`;
+
+        let text = await generateWithFallback(prompt, systemPrompt);
         text = text.replace(/```json|```/g, "").trim();
         return JSON.parse(text);
     } catch (error) {
-        console.error("Docs Agent AI Error:", error.message);
+        console.error("Metadata Extraction Failure:", error.message);
         return {
-            intent: "QUERY",
-            text: "I'm momentarily recalibrating. ⚙️ Let's focus on your project goals. 💡 How can I assist?",
-            clarification: {
-                options: [
-                    { label: "Search docs", action: "SEARCH_DOCS" },
-                    { label: "Analyze project", action: "ANALYZE_PROJECT" }
-                ]
-            }
+            name: "New Document.docx",
+            purpose: "General document creation",
+            category: "General",
+            entities: [],
+            confidenceScore: 0.5
+        };
+    }
+};
+
+/**
+ * Structure Voice Transcript into Docs Agent Action
+ * Converts casual speech to structured intent for execution.
+ */
+const structureVoiceIntent = async (transcript, userContext = {}) => {
+    try {
+        const systemPrompt = `You are the Nurotra Voice Interpreter for the Document Agent.
+        Your job is to take a raw voice transcript and convert it into a structured JSON instruction.
+        
+        USER CONTEXT:
+        - Name: ${userContext.name || 'User'}
+        - Role: ${userContext.role || 'Professional'}
+        - Niche: ${userContext.niche || 'General'}
+
+        SUPPORTED ACTION TYPES:
+        1. CREATE: "Make a presentation about X", "Generate a report on Y"
+        2. EDIT: "Make the intro professional", "Fix grammar in section 2"
+        3. DATA_OP: "Merge these excels", "Analyze this dataset"
+        4. CONVERT: "Turn this report into a PPT", "Summarize this to bullets"
+        5. ENHANCE: "Add charts", "Create a table of contents"
+
+        JSON OUTPUT SCHEMA:
+        {
+          "action": "CREATE" | "EDIT" | "DATA_OP" | "CONVERT" | "ENHANCE",
+          "docType": "word" | "ppt" | "excel" | "email" | "generic",
+          "topic": "Explicit topic or subject",
+          "editingScope": "Target section or 'full'",
+          "details": "Additional constraints (tone, formatting, etc.)",
+          "isHighRisk": boolean (set to true if action modifies/overwrites existing content),
+          "clarificationNeeded": "If critical info missing, ask a short question here, else null",
+          "structuredPrompt": "A clean, professional prompt for the Docs Agent to execute"
+        }
+
+        STRICT RULES:
+        - Use USER CONTEXT to interpret industry-specific terms accurately. 
+        - The 'structuredPrompt' must be a formal, command-oriented version of the transcript.
+        - Remove all fillers (um, ah, like) and conversational fluff.
+        - If the user niche is ${userContext.niche}, prioritize terminology relevant to that field.
+        - Only output JSON. No markdown.`;
+
+        let rawResponse = await generateWithFallback(`Transcript: "${transcript}"`, systemPrompt);
+
+        // Clean and parse
+        let cleanJson = rawResponse
+            .replace(/```json/gi, "")
+            .replace(/```/g, "")
+            .replace(/^[^[{]*/, "")
+            .replace(/[^\]}]*$/, "")
+            .trim();
+
+        try {
+            const parsed = JSON.parse(cleanJson);
+            return parsed;
+        } catch (jsonError) {
+            console.error("Voice JSON Parse Error:", jsonError.message);
+            // Fallback for malformed JSON
+            return {
+                action: "CREATE",
+                docType: "generic",
+                topic: transcript.substring(0, 50),
+                editingScope: "full",
+                details: "Raw voice input (AI parsing failed)",
+                isHighRisk: false,
+                clarificationNeeded: null,
+                structuredPrompt: transcript
+            };
+        }
+    } catch (error) {
+        console.error("Voice Structuring Critical Failure:", error.message);
+        // Universal fallback for API errors (Quota, etc)
+        return {
+            action: "CREATE",
+            docType: "generic",
+            topic: transcript.substring(0, 50),
+            editingScope: "full",
+            details: "System currently using raw voice due to heavy load.",
+            isHighRisk: false,
+            clarificationNeeded: null,
+            structuredPrompt: transcript
         };
     }
 };
@@ -388,5 +517,7 @@ module.exports = {
     analyzeCollaborationBehavior,
     generateIntervention,
     analyzeDeliverable,
-    processDocsAgentQuery
+    processDocsAgentQuery,
+    extractMetadata,
+    structureVoiceIntent
 };

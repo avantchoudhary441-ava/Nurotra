@@ -13,24 +13,26 @@ const DocsAgentPage = () => {
     const [agentStatus, setAgentStatus] = useState('Ready');
 
     // Data State
-    const [projects, setProjects] = useState([
-        {
-            id: 1,
-            name: 'Marketing Campaign Q1',
-            status: 'Active',
-            docCount: 4,
-            lastModified: '2 hours ago',
-            summary: 'Active campaign focusing on Q1 conversion targets and brand awareness.',
-            documents: [
-                { id: 1, name: 'Campaign Proposal.docx', type: 'word', content: '# Campaign Proposal\n\nThis is the initial draft for the Q1 Marketing Campaign...' },
-                { id: 2, name: 'Budget Analysis.xlsx', type: 'excel', content: 'Budget Data' },
-                { id: 3, name: 'Presentation Deck.pptx', type: 'ppt', content: 'Slides' },
-                { id: 4, name: 'Final Report.pdf', type: 'pdf', content: 'PDF' },
-            ]
-        }
-    ]);
+    const [projects, setProjects] = useState([]);
     const [standaloneDocs, setStandaloneDocs] = useState([]);
     const [currentDoc, setCurrentDoc] = useState(null); // Active document in editor
+
+    const fetchInitialData = async () => {
+        try {
+            const [fetchedProjects, fetchedDocs] = await Promise.all([
+                docsAgentService.getProjects(),
+                docsAgentService.getDocuments()
+            ]);
+            setProjects(fetchedProjects);
+            setStandaloneDocs(fetchedDocs);
+        } catch (error) {
+            console.error("Failed to load initial data:", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchInitialData();
+    }, []);
 
     // Execution State Machine
     const [executionState, setExecutionState] = useState({
@@ -118,40 +120,150 @@ const DocsAgentPage = () => {
     };
 
 
-    // Orchestrator for Real Content & Granular Updates
-    // Orchestrator for Real Content - REPLACEMENT FOR FAKE SIMULATION
+    // Helper to log micro-updates
+    const addLiveUpdate = (msg) => {
+        setExecutionState(prev => ({
+            ...prev,
+            liveUpdates: [...prev.liveUpdates, msg]
+        }));
+    };
+
+    // Helper to convert structured AI data to Preview-able Text
+    const convertToMarkdown = (generation) => {
+        const { type, data } = generation;
+        if (type === 'word') {
+            let md = `# ${data.title || 'Untitled Document'}\n\n`;
+            data.sections?.forEach(sec => {
+                md += `## ${sec.heading}\n${sec.content}\n\n`;
+            });
+            return md;
+        }
+        if (type === 'excel') {
+            let md = `# ${data.fileName}\n\n`;
+            data.sheets?.forEach(sheet => {
+                md += `### Sheet: ${sheet.name}\n`;
+                sheet.rows?.forEach(row => {
+                    md += `| ${row.join(' | ')} |\n`;
+                });
+                md += '\n';
+            });
+            return md;
+        }
+        if (type === 'ppt') {
+            let md = `# ${data.fileName}\n\n`;
+            data.slides?.forEach((slide, i) => {
+                md += `--- Slide ${i + 1} ---\n# ${slide.title}\n`;
+                slide.bullets?.forEach(b => md += `* ${b}\n`);
+                md += '\n';
+            });
+            return md;
+        }
+        return 'Empty Content';
+    };
+
     const runDetailedExecution = async (intentData) => {
         setIsSidebarSyncing(true);
-        setAgentStatus('Generating...');
-        console.log("Starting Real Generation for:", intentData.description);
+        setAgentStatus('Executing');
+
+        // Ensure status is 'executing' and preserve any initial logs (like Analyst output)
+        setExecutionState(prev => ({
+            ...prev,
+            status: 'executing',
+            currentStep: 1,
+            totalSteps: 5
+        }));
 
         try {
-            // 1. Call AI to get structured data
-            const response = await docsAgentService.generateResponse(intentData.description, 'CREATE');
+            // Step 1: Logic Mapping
+            addLiveUpdate('Mapping logic to expert standards...');
+            await new Promise(r => setTimeout(r, 600));
+            setExecutionState(prev => ({ ...prev, currentStep: 2 }));
 
-            // 2. Generate File
+            // Step 2: Querying the Engine
+            addLiveUpdate('Querying cognitive engine for implementation data...');
+            let response = intentData.payload;
+
+            // If we don't have a payload or it's not a CREATE intent
+            if (!response || response.intent !== 'CREATE') {
+                response = await docsAgentService.generateResponse(intentData.description, 'CREATE');
+
+                // Explicitly check for rate limit/fallback messages or system alerts
+                if (response.intent === 'QUERY' && (response.text.includes('alert') || response.text.includes('unstable'))) {
+                    throw new Error(response.text.split(': ')[1] || response.text);
+                }
+            }
+
+            // Sync metadata if returned by consolidated query
+            if (response.metadata) {
+                intentData.metadata = { ...intentData.metadata, ...response.metadata };
+            }
+
+            addLiveUpdate('Synthesis progress: Constructing internal knowledge graph...');
+            setExecutionState(prev => ({ ...prev, currentStep: 3 }));
+            await new Promise(r => setTimeout(r, 500));
+
+            // Step 3: Handle Generation Payload
             if (response && response.generation && response.generation.type) {
                 const { type, data } = response.generation;
-                console.log(`Generating ${type}...`);
+                addLiveUpdate(`Executing synthesis for ${type.toUpperCase()} object...`);
+                setExecutionState(prev => ({ ...prev, currentStep: 4 }));
 
+                // Convert to preview content
+                const content = convertToMarkdown(response.generation);
+
+                // Step 4: Physical Document Generation
+                addLiveUpdate(`Generating binary stream: ${data.fileName}`);
                 if (type === 'word') await generateWordDoc(data);
                 else if (type === 'excel') await generateExcelSheet(data);
                 else if (type === 'ppt') await generatePresentation(data);
 
-                // 3. Update UI
-                handleDocCreated({ name: data.fileName, type: type });
+                // Step 5: Final Persistance
+                addLiveUpdate('Finalizing storage and syncing context boundary...');
+                setExecutionState(prev => ({ ...prev, currentStep: 5 }));
+
+                // FINAL: Persist to Backend
+                const metadata = intentData.metadata || {};
+                const newDoc = await docsAgentService.createDocument({
+                    name: data.fileName,
+                    type: type,
+                    content: content,
+                    projectId: intentData.projectId,
+                    metadata: {
+                        purpose: metadata.purpose || 'Generated Document',
+                        category: metadata.category || 'General',
+                        entities: metadata.entities || [],
+                        confidenceScore: metadata.confidenceScore || 0.9
+                    }
+                });
+
+                // Update UI state
+                if (intentData.projectId) {
+                    await fetchInitialData(); // Refresh to get populated list
+                } else {
+                    setStandaloneDocs(prev => [newDoc, ...prev]);
+                }
+
+                setCurrentDoc(newDoc);
+                addLiveUpdate('✅ Implementation successful. Document is ready.');
                 setAgentStatus('Success!');
             } else {
-                console.warn("AI returned text but no generation payload:", response);
-                setAgentStatus('Text Only');
+                // Return to idle but keep the text response visible in chat
+                addLiveUpdate('⚠️ Cognitive engine provided insights but no implementation plan.');
+                addLiveUpdate(`Response: "${response.text.substring(0, 40)}..."`);
+                setAgentStatus('Ready');
             }
         } catch (error) {
-            console.error("Generation Failed:", error);
+            console.error("Execution Failed:", error);
+            addLiveUpdate(`❌ Execution failure: ${error.message}`);
             setAgentStatus('Failed');
         } finally {
             setIsSidebarSyncing(false);
-            setExecutionState(prev => ({ ...prev, status: 'idle', plan: null }));
-            setTimeout(() => setAgentStatus('Ready'), 3000);
+            // If it failed, don't auto-reset the logs immediately so user can read them
+            const resetDelay = agentStatus === 'Failed' ? 8000 : 4000;
+            setTimeout(() => {
+                setExecutionState(prev => ({ ...prev, status: 'idle' }));
+                setAgentStatus('Ready');
+            }, resetDelay);
         }
     };
 
@@ -186,29 +298,55 @@ const DocsAgentPage = () => {
     };
 
     // Intent Management (The Brain)
-    const handleAgentIntent = (intentData) => {
-        // This is called when the chat parses a significant intent
-        if (executionState.mode === 'guided') {
-            setExecutionState(prev => ({
-                ...prev,
-                status: 'planning',
-                activeObject: intentData.object || prev.activeObject,
-                plan: {
-                    goal: `Execute: ${intentData.description}`,
-                    steps: [
-                        { label: 'Analyze context and data points', status: 'pending' },
-                        { label: 'Architect document structure', status: 'pending' },
-                        { label: 'Populate granular data (cell/row level)', status: 'pending' },
-                        { label: 'Verify Expert Standards sync', status: 'pending' }
-                    ],
-                    data: intentData
+    const handleAgentIntent = async (intentData) => {
+        // 1. Give IMMEDIATE feedback
+        setAgentStatus('Analyzing...');
+        setExecutionState(prev => ({
+            ...prev,
+            status: executionState.mode === 'fast' ? 'executing' : 'planning',
+            liveUpdates: ['Establishing cognitive connection...', 'Analyzing user intent...']
+        }));
+
+        try {
+            // 2. Extract metadata locally or via AI if in fast mode
+            // (Guided mode will now get metadata concurrently with the generation payload later)
+            if (!intentData.metadata && intentData.description) {
+                if (executionState.mode === 'fast') {
+                    const meta = await docsAgentService.extractMetadata(intentData.description);
+                    intentData.metadata = meta;
+                    addLiveUpdate(`Analysis complete: Targetting ${meta.category} framework.`);
+                } else {
+                    addLiveUpdate(`Standby: Initializing structural analysis...`);
                 }
-            }));
-            setAgentStatus('Planning');
-        } else {
-            // Direct Execution Flow
-            // runDetailedExecution(intentData); // DISABLE FAKE SIMULATION
-            console.log("Intepreted Intent:", intentData);
+            }
+
+            // 3. Delegation logic
+            if (executionState.mode === 'guided') {
+                setExecutionState(prev => ({
+                    ...prev,
+                    status: 'planning',
+                    activeObject: intentData.object || prev.activeObject,
+                    plan: {
+                        goal: `Execute: ${intentData.description}`,
+                        steps: [
+                            { label: 'Analyze context and data points', status: 'pending' },
+                            { label: 'Architect document structure', status: 'pending' },
+                            { label: 'Populate granular data (cell/row level)', status: 'pending' },
+                            { label: 'Verify Expert Standards sync', status: 'pending' }
+                        ],
+                        data: intentData
+                    }
+                }));
+                setAgentStatus('Planning');
+            } else {
+                // Direct Execution Flow
+                runDetailedExecution(intentData);
+            }
+        } catch (error) {
+            console.error("Intent Processing Failed:", error);
+            addLiveUpdate(`❌ Initialization error: ${error.message}`);
+            setAgentStatus('Ready');
+            setTimeout(() => setExecutionState(prev => ({ ...prev, status: 'idle' })), 3000);
         }
     };
 
@@ -216,41 +354,49 @@ const DocsAgentPage = () => {
         runDetailedExecution(executionState.plan.data);
     };
 
-    const handleProjectCreated = (project) => {
-        const newProject = {
-            ...project,
-            id: Date.now(),
-            status: 'Active',
-            docCount: 0,
-            lastModified: 'Just now',
-            summary: `New project: ${project.name}. Awaiting document execution.`,
-            documents: []
-        };
-        setProjects(prev => [...prev, newProject]);
-        setChatTrigger({
-            id: Date.now(),
-            text: `create the document under the ${project.name} with the details like-`,
-            type: 'project'
-        });
-        setActiveMobileScreen('chat');
+    const handleProjectCreated = async (project) => {
+        setIsSidebarSyncing(true);
+        try {
+            const newProject = await docsAgentService.createProject(project);
+            setProjects(prev => [newProject, ...prev]);
+            setChatTrigger({
+                id: Date.now(),
+                text: `create the document under the ${project.name} with the details like-`,
+                type: 'project',
+                projectId: newProject.id
+            });
+            setActiveMobileScreen('chat');
+        } catch (error) {
+            console.error("Failed to create project:", error);
+        } finally {
+            setIsSidebarSyncing(false);
+        }
     };
 
-    const handleDocCreated = (doc) => {
-        const newDoc = {
-            id: Date.now(),
-            name: (doc && typeof doc === 'object' && doc.name) ? doc.name : 'New Document.docx',
-            type: (doc && typeof doc === 'object' && doc.type) ? doc.type : 'word',
-            lastModified: 'Just now',
-            content: '# New Document\nStart typing here...'
-        };
-        setStandaloneDocs(prev => [...prev, newDoc]);
-        setCurrentDoc(newDoc);
-        setChatTrigger({
-            id: Date.now(),
-            text: `create the document with the details like-`,
-            type: 'single'
-        });
-        setActiveMobileScreen('chat');
+    const handleDocCreated = async (doc) => {
+        // For fast creation, we might want to extract metadata first
+        setIsSidebarSyncing(true);
+        try {
+            const meta = await docsAgentService.extractMetadata(doc.name || 'document creation');
+            const newDoc = await docsAgentService.createDocument({
+                name: doc.name || meta.name,
+                type: doc.type || 'word',
+                content: doc.content || '# New Document\nStart typing here...',
+                metadata: meta
+            });
+            setStandaloneDocs(prev => [newDoc, ...prev]);
+            setCurrentDoc(newDoc);
+            setChatTrigger({
+                id: Date.now(),
+                text: `create the document with the details like-`,
+                type: 'single'
+            });
+            setActiveMobileScreen('chat');
+        } catch (error) {
+            console.error("Failed to create document:", error);
+        } finally {
+            setIsSidebarSyncing(false);
+        }
     };
 
     const openDocument = (doc) => {
