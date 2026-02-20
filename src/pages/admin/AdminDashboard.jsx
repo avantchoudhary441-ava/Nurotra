@@ -16,7 +16,7 @@ export default function AdminDashboard() {
     const subRoute = pathParts[2] || "influencers";
     const activeTab = subRoute;
 
-    const [stats, setStats] = useState({ funnel: {}, atRiskCount: 0, onboardingFunnel: [] });
+    const [stats, setStats] = useState({ funnel: { undecided: 0 }, atRiskCount: 0, onboardingFunnel: [] });
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
@@ -26,12 +26,12 @@ export default function AdminDashboard() {
     const [userTimeline, setUserTimeline] = useState([]);
     const [timelineLoading, setTimelineLoading] = useState(false);
     const [newNote, setNewNote] = useState("");
-    const [globalStats, setGlobalStats] = useState({ onboardingFunnel: [] });
+    const [globalStats, setGlobalStats] = useState({ combinedFunnel: [], brandFunnel: [], influencerFunnel: [] });
 
     const fetchData = useCallback(async () => {
         try {
             setLoading(true);
-            const role = activeTab === "influencers" ? "influencer" : activeTab === "brands" ? "brand" : "";
+            const role = activeTab === "influencers" ? "influencer" : activeTab === "brands" ? "brand" : activeTab === "undecided" ? "user" : "";
             const [statsRes, usersRes, globalRes] = await Promise.all([
                 adminService.getStats({ role }),
                 adminService.getUsers({
@@ -178,6 +178,7 @@ export default function AdminDashboard() {
                                 <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                                     <option value="">All Stages</option>
                                     <option value="applied">Applied</option>
+                                    <option value="undecided">Undecided</option>
                                     <option value="onboarded">Onboarded</option>
                                     <option value="activated">Activated</option>
                                     <option value="brand_viewed">Brand Viewed</option>

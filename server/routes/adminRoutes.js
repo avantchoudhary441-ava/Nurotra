@@ -10,6 +10,7 @@ router.get("/stats", adminController.getDashboardStats);
 router.get("/users", adminController.getAdminUsers);
 router.patch("/users/:userId", adminController.updateUser);
 router.get("/users/:userId/timeline", adminController.getUserTimeline);
+router.post("/users/:userId/notes", adminController.addAdminNote);
 router.post("/bulk-action", adminController.triggerBulkAction);
 
 module.exports = router;

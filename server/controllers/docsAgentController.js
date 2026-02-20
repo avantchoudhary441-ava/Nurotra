@@ -1,6 +1,7 @@
 const Project = require("../models/Project");
 const Document = require("../models/Document");
 const aiService = require("../services/aiService");
+const intentEngine = require("../services/intentEngine");
 
 /**
  * Process Docs Agent Query
@@ -20,7 +21,30 @@ const processQuery = async (req, res) => {
             niche: req.user.niche || "General"
         };
 
-        const response = await aiService.processDocsAgentQuery(prompt, userContext, history);
+        // 1. Hybrid Intent Detection (Invisible Intelligence)
+        let intentInfo = intentEngine.classifyIntent(prompt);
+        let categoryOverride = null;
+
+        // If confidence is low, trigger Intent Rescue (Invisible to user)
+        if (intentInfo.confidence < 0.8) {
+            console.log(`Debug: Low confidence (${intentInfo.confidence}). Rescuing intent via LLM...`);
+            const rescue = await aiService.extractIntentWithLLM(prompt);
+            intentInfo.intent = rescue.intent;
+            categoryOverride = rescue.category;
+            intentInfo.confidence = 0.9; // Boost confidence after rescue
+        }
+
+        const risk = intentEngine.detectRisk(prompt);
+
+        // 2. Metadata Generation (Hybrid)
+        const metadata = intentEngine.generateMetadata(prompt, intentInfo.intent, categoryOverride);
+
+        // 3. Narrative Execution (AI Personality)
+        const response = await aiService.processDocsAgentQuery(prompt, userContext, history, {
+            intent: intentInfo.intent,
+            risk,
+            metadata
+        });
         res.json(response);
     } catch (error) {
         console.error("Docs Agent Controller Error:", error);
@@ -123,7 +147,8 @@ const createDocument = async (req, res) => {
 const extractMetadata = async (req, res) => {
     try {
         const { prompt } = req.body;
-        const metadata = await aiService.extractMetadata(prompt);
+        // Use deterministic metadata generation first
+        const metadata = intentEngine.generateMetadata(prompt);
         res.json(metadata);
     } catch (error) {
         console.error("Extract Metadata Error:", error);
@@ -146,7 +171,11 @@ const structureVoicePrompt = async (req, res) => {
             role: req.user.role,
             niche: req.user.niche || "General"
         };
-        const structured = await aiService.structureVoiceIntent(transcript, userContext);
+
+        // Deterministic Cleanup
+        const cleanTranscript = intentEngine.cleanVoiceTranscript(transcript);
+
+        const structured = await aiService.structureVoiceIntent(cleanTranscript, userContext);
         res.json(structured);
     } catch (error) {
         console.error("Structure Voice Error:", error);

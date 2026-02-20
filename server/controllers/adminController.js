@@ -9,18 +9,24 @@ exports.getDashboardStats = async (req, res) => {
         const { role } = req.query;
         let matchStage = {};
 
-        if (role === "influencer" || role === "brand") {
+        if (role === "influencer" || role === "brand" || role === "user") {
             matchStage.role = role;
         } else {
-            // Default to both influencers and brands, but EXCLUDE regular "user" role
-            matchStage.role = { $in: ["influencer", "brand"] };
+            // Default to ALL roles including undecided "user"
+            matchStage.role = { $in: ["influencer", "brand", "user", "admin"] };
         }
 
         const stats = await User.aggregate([
             { $match: matchStage },
             {
                 $group: {
-                    _id: "$lifecycleStatus",
+                    _id: {
+                        $cond: [
+                            { $eq: ["$role", "user"] },
+                            "undecided",
+                            { $ifNull: ["$lifecycleStatus", "applied"] }
+                        ]
+                    },
                     count: { $sum: 1 }
                 }
             }
@@ -36,7 +42,8 @@ exports.getDashboardStats = async (req, res) => {
             collab_in_progress: 0,
             collab_completed: 0,
             retention_loop: 0,
-            dormant: 0
+            dormant: 0,
+            undecided: 0
         };
 
         stats.forEach(s => {
@@ -55,27 +62,75 @@ exports.getDashboardStats = async (req, res) => {
         };
         const atRiskCount = await User.countDocuments(atRiskQuery);
 
-        // Onboarding Funnel Logic (Primary/Combined)
+        // Dynamic Funnel Calculation (Heuristics)
         const totalUsers = await User.countDocuments(matchStage);
+
+        // Count actual profile existence instead of just boolean flags
+        const profileCountResult = await User.aggregate([
+            { $match: matchStage },
+            {
+                $lookup: {
+                    from: "influencers",
+                    localField: "_id",
+                    foreignField: "userId",
+                    as: "infProfile"
+                }
+            },
+            {
+                $lookup: {
+                    from: "brands",
+                    localField: "_id",
+                    foreignField: "userId",
+                    as: "brandProfile"
+                }
+            },
+            {
+                $project: {
+                    hasProfile: {
+                        $or: [
+                            { $gt: [{ $size: "$infProfile" }, 0] },
+                            { $gt: [{ $size: "$brandProfile" }, 0] },
+                            { $eq: ["$onboardingProgress.profileCompleted", true] }
+                        ]
+                    }
+                }
+            },
+            { $match: { hasProfile: true } },
+            { $count: "count" }
+        ]);
+
+        const profileCount = profileCountResult[0]?.count || 0;
+
+        // Use Activity Logs for funnel accuracy
+        const getUniqueUsersWithEvent = async (eventType) => {
+            const result = await ActivityLog.aggregate([
+                { $match: { eventType } },
+                { $group: { _id: "$userId" } },
+                { $count: "count" }
+            ]);
+            return result[0]?.count || 0;
+        };
+
         const funnelSteps = [
             { label: "Registered", count: totalUsers },
-            { label: "Profile Completed", count: await User.countDocuments({ ...matchStage, "onboardingProgress.profileCompleted": true }) },
-            { label: "First Brand Viewed", count: await User.countDocuments({ ...matchStage, "onboardingProgress.firstBrandViewed": true }) },
-            { label: "First Message Sent", count: await User.countDocuments({ ...matchStage, "onboardingProgress.firstMessageSent": true }) }
+            { label: "Profile Completed", count: profileCount },
+            { label: "First Brand Viewed", count: await getUniqueUsersWithEvent("brand_viewed") },
+            { label: "First Message Sent", count: await getUniqueUsersWithEvent("message_sent") }
         ];
 
-        // Role-Specific funnels for Analytics view
-        let influencerFunnel = [];
-        let brandFunnel = [];
+        // Analytics Funnels
+        const inflMatch = { role: "influencer" };
+        const brandMatch = { role: "brand" };
 
-        influencerFunnel = [
-            { label: "Registered", count: await User.countDocuments({ role: "influencer" }) },
-            { label: "Profile Completed", count: await User.countDocuments({ role: "influencer", "onboardingProgress.profileCompleted": true }) },
+        const influencerFunnel = [
+            { label: "Registered", count: await User.countDocuments(inflMatch) },
+            { label: "Profile Completed", count: await User.countDocuments({ role: "influencer", "onboardingProgress.profileCompleted": true }) }, // Fallback to flags for speed in detail view if needed, but let's be robust
             { label: "First Brand Viewed", count: await User.countDocuments({ role: "influencer", "onboardingProgress.firstBrandViewed": true }) },
             { label: "First Message Sent", count: await User.countDocuments({ role: "influencer", "onboardingProgress.firstMessageSent": true }) }
         ];
-        brandFunnel = [
-            { label: "Registered", count: await User.countDocuments({ role: "brand" }) },
+
+        const brandFunnel = [
+            { label: "Registered", count: await User.countDocuments(brandMatch) },
             { label: "Profile Completed", count: await User.countDocuments({ role: "brand", "onboardingProgress.profileCompleted": true }) },
             { label: "First Brand Viewed", count: await User.countDocuments({ role: "brand", "onboardingProgress.firstBrandViewed": true }) },
             { label: "First Message Sent", count: await User.countDocuments({ role: "brand", "onboardingProgress.firstMessageSent": true }) }
@@ -99,10 +154,10 @@ exports.getAdminUsers = async (req, res) => {
         const { status, atRisk, search, role } = req.query;
         let query = { role: { $ne: "admin" } };
 
-        if (role === "influencer" || role === "brand") {
+        if (role === "influencer" || role === "brand" || role === "user") {
             query.role = role;
         } else {
-            query.role = { $in: ["influencer", "brand"] };
+            query.role = { $in: ["influencer", "brand", "user"] };
         }
 
         if (status) query.lifecycleStatus = status;

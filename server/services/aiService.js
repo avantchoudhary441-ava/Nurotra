@@ -5,84 +5,104 @@ const responseCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 Hour
 
 /**
+ * API Key Reservoir & Rotation
+ * Supports GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3...
+ */
+const getApiKeys = () => {
+    const keys = [];
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
+    let i = 2;
+    while (process.env[`GEMINI_API_KEY_${i}`]) {
+        keys.push(process.env[`GEMINI_API_KEY_${i}`]);
+        i++;
+    }
+    return keys;
+};
+
+let currentKeyIndex = 0;
+
+/**
  * Direct Gemini Generation using Raw REST (Axios)
  * Bypasses SDK limits and reservoir complexity.
+ * Implements Multi-Key Rotation & Model Fallback.
  */
 const generateWithFallback = async (prompt, systemPrompt = "") => {
-    // 1. Check Cache
     const cacheKey = Buffer.from(prompt + systemPrompt).toString('base64').substring(0, 32);
     if (responseCache.has(cacheKey)) {
         const cached = responseCache.get(cacheKey);
         if (Date.now() - cached.timestamp < CACHE_TTL) {
-            console.log("Debug: Cache Hit for prompt");
             return cached.data;
         }
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-        throw new Error("GEMINI_API_KEY is missing from environment");
+    const apiKeys = getApiKeys();
+    if (apiKeys.length === 0) {
+        throw new Error("No GEMINI_API_KEY found in environment");
     }
 
-    const geminiModels = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"];
+    const geminiModels = ["gemini-flash-latest", "gemini-pro-latest", "gemini-2.0-flash-lite", "gemini-pro"];
     let lastError = null;
 
-    for (const modelName of geminiModels) {
-        let retries = 0;
-        const maxRetries = 1; // Reduced retries to save quota
+    // Outer Loop: API Keys (The Reservoir)
+    for (let k = 0; k < apiKeys.length; k++) {
+        const keyAttemptIndex = (currentKeyIndex + k) % apiKeys.length;
+        const apiKey = apiKeys[keyAttemptIndex];
 
-        while (retries <= maxRetries) {
-            try {
-                console.log(`Debug: Attempting Gemini via REST: ${modelName} (Retry: ${retries})`);
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-                const response = await axios.post(url, {
-                    contents: [{
-                        parts: [{ text: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }]
-                    }],
-                    generationConfig: {
-                        responseMimeType: "application/json"
+        // Inner Loop: Models (The Fallback)
+        for (const modelName of geminiModels) {
+            let retries = 0;
+            const maxRetries = 1;
+
+            while (retries <= maxRetries) {
+                try {
+                    console.log(`Debug: Key ${keyAttemptIndex + 1}/${apiKeys.length} | Model: ${modelName} | Retry: ${retries}`);
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+                    const response = await axios.post(url, {
+                        contents: [{
+                            parts: [{ text: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }]
+                        }],
+                        generationConfig: { responseMimeType: "application/json" }
+                    });
+
+                    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                        const text = response.data.candidates[0].content.parts[0].text.trim();
+                        // Update current starting key for next request (load balancing)
+                        currentKeyIndex = keyAttemptIndex;
+                        responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                        return text;
                     }
-                });
+                    throw new Error("Invalid response format");
+                } catch (gError) {
+                    const errorMsg = gError.response?.data?.error?.message || gError.message;
+                    const statusCode = gError.response?.status;
 
-                if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-                    const text = response.data.candidates[0].content.parts[0].text.trim();
-                    console.log(`Debug: Gemini success with model ${modelName}`);
-                    responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
-                    return text;
-                } else {
-                    throw new Error("Invalid response format from Gemini REST API");
-                }
-            } catch (gError) {
-                const errorMsg = gError.response?.data?.error?.message || gError.message;
-                const statusCode = gError.response?.status;
+                    console.warn(`Debug: Key ${keyAttemptIndex + 1} | Model ${modelName} failed: ${errorMsg}`);
 
-                console.warn(`Debug: Gemini model ${modelName} attempt ${retries} failed: ${errorMsg}`);
+                    // If Quota Exceeded, break model loop and try next key immediately OR try next model
+                    // Usually, 429 means THIS key is out of quota for THIS model or ALL models.
+                    if (statusCode === 429 || errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("limit")) {
+                        console.log(`Debug: Key ${keyAttemptIndex + 1} hit quota. Trying next fallback...`);
+                        lastError = new Error(`Quota Exceeded: ${errorMsg}`);
+                        break; // Try next model with same key, or if all models fail, next key
+                    }
 
-                // If 429 (Rate Limit) or 400 (Quota), don't keep cycling models aggressively
-                if (statusCode === 429 || errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("limit")) {
-                    if (retries < maxRetries) {
-                        const waitTime = 3000;
-                        console.log(`Debug: Quota/Rate Limit. Waiting ${waitTime}ms before final retry...`);
-                        await new Promise(r => setTimeout(r, waitTime));
+                    if (statusCode === 503 && retries < maxRetries) {
+                        await new Promise(r => setTimeout(r, 2000));
                         retries++;
                         continue;
                     }
-                    throw new Error(`Gemini Quota Exceeded (${modelName}): ${errorMsg}`);
-                }
 
-                // If 503, wait and retry
-                if (statusCode === 503 && retries < maxRetries) {
-                    await new Promise(r => setTimeout(r, 2000));
-                    retries++;
-                    continue;
+                    lastError = new Error(`Gemini Error (${modelName}): ${errorMsg}`);
+                    break; // Next model
                 }
-
-                lastError = new Error(`Gemini Error (${modelName}): ${errorMsg}`);
-                break; // Move to next model for other errors
             }
         }
+        // If we reach here, this key failed for all models
+        console.warn(`Debug: Key ${keyAttemptIndex + 1} exhausted for all models.`);
     }
 
-    throw lastError || new Error("All Gemini models failed to generate a response");
+    throw lastError || new Error("All API keys and models in the reservoir have failed.");
 };
 
 /**
@@ -319,43 +339,69 @@ const analyzeDeliverable = async (deliverableData) => {
 };
 
 /**
+ * Semantic Metadata Extraction
+ * Uses Gemini to parse human intent and extract document context.
+ * Used only when Backend confidence is low.
+ */
+const extractIntentWithLLM = async (prompt) => {
+    try {
+        const systemPrompt = `You are the Nurotra Intent Analyst. 
+        Determine the user intent for the Document Agent.
+        Output STRICT JSON:
+        {
+          "intent": "CREATE" | "MODIFY" | "QUERY" | "DATA_OP" | "CONVERT",
+          "category": "Marketing|Legal|Technical|Education|Financial|General",
+          "reasoning": "1-sentence explanation"
+        }`;
+
+        let text = await generateWithFallback(prompt, systemPrompt);
+        text = text.replace(/```json|```/g, "").trim();
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("Intent Rescue Failure:", error.message);
+        return { intent: "QUERY", category: "General", reasoning: "Fallback due to error" };
+    }
+};
+
+/**
  * Docs Agent Cognitive Engine
  * Handles complex intent parsing and structured response generation.
  * Stripped of persona to avoid refusal and "shielding" errors.
  */
-const processDocsAgentQuery = async (prompt, userContext, history = []) => {
+const processDocsAgentQuery = async (prompt, userContext, history = [], preParsed = null) => {
     try {
-        const systemPrompt = `You are the Nurotra Document Execution Engine.
-        MISSION:
-        - Parse user request for document creation or modification.
-        - Output strictly valid JSON matching the schema below.
-        - No conversational filler, no personality-driven refusals.
+        const intent = preParsed?.intent || "QUERY";
+        const metadata = preParsed?.metadata || {};
+        const risk = preParsed?.risk || { isHighRisk: false };
 
-        JSON SCHEMA:
+        const systemPrompt = `You are the Nurotra Document Content Architect.
+        MISSION:
+        - Generate high-quality, professional content for a ${intent} action.
+        - User Niche: ${userContext?.niche}. User Role: ${userContext?.role}.
+        - Metadata Context: ${JSON.stringify(metadata)}.
+        - Risk Level: ${risk.isHighRisk ? 'HIGH' : 'Standard'}.
+
+        PERSONALITY RULES:
+        - Always provide a confident, intelligent summary of the execution.
+        - Act as a high-level consultant.
+        - Explain "why" you structured the document this way (storytelling).
+
+        OUTPUT SCHEMA (Strict JSON):
         {
-          "intent": "CREATE" | "MODIFY" | "QUERY",
-          "text": "A brief status update about what you are building.",
-          "metadata": {
-            "name": "Suggested File Name (with extension, e.g. Strategy_v1.docx)",
-            "purpose": "1-sentence document goal",
-            "category": "Marketing|Legal|Technical|Education",
-            "entities": ["list", "of", "key", "entities"]
-          },
-          "clarification": { "options": [{ "label": "Retry Plan", "action": "RETRY" }] },
+          "intent": "${intent}",
+          "text": "The Execution Summary (Narrative Personality).",
           "generation": {
-            "type": "word" | "ppt" | "excel",
+            "type": "${metadata.name?.endsWith('.pptx') ? 'ppt' : (metadata.name?.endsWith('.xlsx') ? 'excel' : 'word')}",
             "data": { 
-              "fileName": "Same as metadata.name",
+              "fileName": "${metadata.name}",
               "title": "Document Title", 
               "sections": [{ "heading": "Heading", "content": "Detailed content..." }],
               "sheets": [{ "name": "Sheet1", "rows": [["Column1", "Column2"]], "formulas": {} }]
             }
           }
-        }
-        
-        ONLY output the JSON. No markdown backticks.`;
+        }`;
 
-        const userPrompt = `User: ${userContext?.name}. niche: ${userContext?.niche}. Request: "${prompt}"`;
+        const userPrompt = `Request: "${prompt}"`;
         let rawResponse = await generateWithFallback(userPrompt, systemPrompt);
 
         // Aggressive JSON Cleaning
@@ -431,41 +477,20 @@ const extractMetadata = async (prompt) => {
  */
 const structureVoiceIntent = async (transcript, userContext = {}) => {
     try {
-        const systemPrompt = `You are the Nurotra Voice Interpreter for the Document Agent.
-        Your job is to take a raw voice transcript and convert it into a structured JSON instruction.
+        const systemPrompt = `You are the Nurotra Voice-to-Action Mapper.
+        Convert the following CLEAN transcript into a structured JSON instruction.
         
-        USER CONTEXT:
-        - Name: ${userContext.name || 'User'}
-        - Role: ${userContext.role || 'Professional'}
-        - Niche: ${userContext.niche || 'General'}
-
-        SUPPORTED ACTION TYPES:
-        1. CREATE: "Make a presentation about X", "Generate a report on Y"
-        2. EDIT: "Make the intro professional", "Fix grammar in section 2"
-        3. DATA_OP: "Merge these excels", "Analyze this dataset"
-        4. CONVERT: "Turn this report into a PPT", "Summarize this to bullets"
-        5. ENHANCE: "Add charts", "Create a table of contents"
+        USER CONTEXT: ${userContext.niche} (${userContext.role})
 
         JSON OUTPUT SCHEMA:
         {
           "action": "CREATE" | "EDIT" | "DATA_OP" | "CONVERT" | "ENHANCE",
-          "docType": "word" | "ppt" | "excel" | "email" | "generic",
-          "topic": "Explicit topic or subject",
-          "editingScope": "Target section or 'full'",
-          "details": "Additional constraints (tone, formatting, etc.)",
-          "isHighRisk": boolean (set to true if action modifies/overwrites existing content),
-          "clarificationNeeded": "If critical info missing, ask a short question here, else null",
-          "structuredPrompt": "A clean, professional prompt for the Docs Agent to execute"
-        }
+          "docType": "word" | "ppt" | "excel" | "generic",
+          "topic": "Clear subject",
+          "structuredPrompt": "Formal command version of transcript"
+        }`;
 
-        STRICT RULES:
-        - Use USER CONTEXT to interpret industry-specific terms accurately. 
-        - The 'structuredPrompt' must be a formal, command-oriented version of the transcript.
-        - Remove all fillers (um, ah, like) and conversational fluff.
-        - If the user niche is ${userContext.niche}, prioritize terminology relevant to that field.
-        - Only output JSON. No markdown.`;
-
-        let rawResponse = await generateWithFallback(`Transcript: "${transcript}"`, systemPrompt);
+        let rawResponse = await generateWithFallback(`Clean Transcript: "${transcript}"`, systemPrompt);
 
         // Clean and parse
         let cleanJson = rawResponse
@@ -519,5 +544,6 @@ module.exports = {
     analyzeDeliverable,
     processDocsAgentQuery,
     extractMetadata,
-    structureVoiceIntent
+    structureVoiceIntent,
+    extractIntentWithLLM
 };
