@@ -68,16 +68,39 @@ export const generateExcelSheet = async (data) => {
             sheets.forEach(sheetData => {
                 const sheet = workbook.addWorksheet(sheetData.name || 'Sheet 1');
 
-                // Add Rows
-                if (sheetData.rows && Array.isArray(sheetData.rows)) {
-                    sheet.addRows(sheetData.rows);
+                // 1. Process Headers
+                if (sheetData.headers && Array.isArray(sheetData.headers)) {
+                    const headerRow = sheet.addRow(sheetData.headers);
+                    headerRow.font = { bold: true };
                 }
 
-                // Apply Formulas (Expected format: { "C5": "SUM(C2:C4)", "D10": "AVERAGE(D2:D9)" })
-                if (sheetData.formulas) {
-                    Object.entries(sheetData.formulas).forEach(([cellRef, formula]) => {
-                        const cell = sheet.getCell(cellRef);
-                        cell.value = { formula: formula };
+                // 2. Process Rows (Handling structured cell objects)
+                if (sheetData.rows && Array.isArray(sheetData.rows)) {
+                    sheetData.rows.forEach((rowObj) => {
+                        const cells = rowObj.cells || rowObj; // Support both structures
+                        const row = sheet.addRow([]);
+
+                        cells.forEach((cell, colIdx) => {
+                            const excelCell = row.getCell(colIdx + 1);
+                            const val = typeof cell === 'object' ? cell.value : cell;
+                            const formula = typeof cell === 'object' ? cell.formula : null;
+
+                            // Set value and handle data type for calculation
+                            if (!isNaN(val) && val !== '' && typeof val !== 'boolean') {
+                                excelCell.value = parseFloat(val);
+                            } else {
+                                excelCell.value = val;
+                            }
+
+                            // Inject formula if present
+                            if (formula) {
+                                let cleanFormula = formula.startsWith('=') ? formula.substring(1) : formula;
+                                excelCell.value = {
+                                    formula: cleanFormula,
+                                    result: excelCell.value // Fallback to current value if formula fails
+                                };
+                            }
+                        });
                     });
                 }
             });

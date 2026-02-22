@@ -3,6 +3,10 @@
    Dark, Clean Design (Google Antigravity Inspired)
    ======================================== */
 
+* {
+    box-sizing: border-box;
+}
+
 .docs-agent-container {
     display: flex;
     height: 100vh;
@@ -66,11 +70,13 @@
 .docs-panel {
     display: flex;
     flex-direction: column;
-    min-width: 250px;
     position: relative;
     background: #000000;
     border: 1px solid rgba(255, 255, 255, 0.15);
     transition: background 0.3s ease;
+    overflow: hidden;
+    contain: size layout paint;
+    /* Render isolation */
 }
 
 .docs-panel:hover {
@@ -78,15 +84,21 @@
 }
 
 .left-panel {
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    z-index: 2;
 }
 
 .center-panel {
-    flex: 1;
+    flex: 1 1 0;
+    /* Grow, Shrink, Basis 0 */
+    min-width: 350px !important;
+    z-index: 1;
 }
 
 .right-panel {
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    /* No Grow, No Shrink, Basis Auto (overridden by JSX) */
+    z-index: 2;
 }
 
 .docs-divider {
@@ -199,7 +211,18 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 10px;
     overflow: hidden;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.project-item.selected-context {
+    background: rgba(99, 102, 241, 0.1) !important;
+    border-color: rgba(99, 102, 241, 0.4) !important;
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+}
+
+.project-item.working-glow {
+    border-color: var(--accent-1);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
 }
 
 .project-item:hover {
@@ -283,6 +306,12 @@
 
 .document-item:hover {
     background: rgba(255, 255, 255, 0.05);
+}
+
+.document-item.active {
+    background: rgba(139, 92, 246, 0.15);
+    color: #ffffff;
+    border-left: 2px solid var(--accent-2);
 }
 
 .doc-icon {
@@ -425,6 +454,85 @@
     height: 100%;
     background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     transition: width 0.3s ease;
+}
+
+/* ========================================
+   EXECUTION ACTIVITY LOGS
+   ======================================== */
+
+@keyframes logFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.execution-activity {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1.25rem 1.5rem;
+    max-height: 280px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 10px;
+    animation: logFadeIn 0.45s ease-out both;
+    transition: background 0.3s ease, opacity 0.3s ease;
+}
+
+.activity-item.active {
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.activity-item.historical {
+    opacity: 0.55;
+    background: transparent;
+    border: 1px solid transparent;
+}
+
+.activity-dot {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+}
+
+.activity-item.active .activity-dot {
+    background: var(--accent-1);
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+}
+
+.activity-item.historical .activity-dot {
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: none;
+}
+
+.activity-text {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: #d1d5db;
+    font-weight: 400;
+}
+
+.activity-item.active .activity-text {
+    color: #ffffff;
+    font-weight: 500;
 }
 
 .document-canvas {
@@ -1132,12 +1240,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    position: relative;
+    z-index: 5;
 }
 
 .toolbar-actions {
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
+    /* Prevent button overflow */
 }
 
 .tool-btn {
@@ -1646,4 +1757,282 @@
 .create-submit-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* ========================================
+   RESPONSIVE CONTENT REFLOW
+   ======================================== */
+
+.canvas-content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #000000;
+}
+
+.rich-editor {
+    flex: 1;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    padding: 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.markdown-preview {
+    flex: 1;
+    padding: 1.5rem;
+    overflow-y: auto;
+    background: #000000;
+}
+
+.preview-text {
+    color: #d1d5db;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: inherit;
+    margin: 0;
+}
+
+.empty-canvas {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #4b5563;
+    gap: 1rem;
+}
+
+.document-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.doc-main-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    overflow: hidden;
+}
+
+.doc-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.doc-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 0.5rem;
+}
+
+.doc-mini-action {
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 0.2rem;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    opacity: 0;
+}
+
+.document-item:hover .doc-mini-action {
+    opacity: 1;
+}
+
+.doc-mini-action:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--accent-1);
+}
+
+.doc-sync-icon {
+    color: var(--accent-1);
+}
+
+.empty-icon {
+    opacity: 0.3;
+}
+
+/* Workspace Sync Notification Styles */
+.sync-notification {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-top: 1rem;
+    animation: slideUp 0.3s ease-out;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sync-notification.info {
+    background: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.2);
+}
+
+.sync-notification.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.2);
+}
+
+.sync-notification.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.sync-notification strong.clickable-path {
+    color: var(--accent-1);
+    text-decoration: underline;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.sync-notification strong.clickable-path:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.sync-notification.sidebar-sync {
+    margin-top: 1.5rem;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.75rem;
+    gap: 0.5rem;
+}
+
+/* Office-Themed Export Dropdown Styles */
+.export-dropdown-item {
+    background: transparent;
+    border: none;
+    color: #d1d5db;
+    padding: 0.8rem;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.85rem;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+    font-weight: 500;
+}
+
+.export-dropdown-item:hover {
+    color: #ffffff;
+}
+
+.export-item-word:hover {
+    background: rgba(74, 144, 226, 0.2) !important;
+    border: 1px solid rgba(74, 144, 226, 0.4);
+    box-shadow: 0 4px 15px rgba(74, 144, 226, 0.25);
+}
+
+.export-item-word:hover svg {
+    color: #4a90e2;
+}
+
+.export-item-excel:hover {
+    background: rgba(52, 211, 153, 0.2) !important;
+    border: 1px solid rgba(52, 211, 153, 0.4);
+    box-shadow: 0 4px 15px rgba(52, 211, 153, 0.25);
+}
+
+.export-item-excel:hover svg {
+    color: #34d399;
+}
+
+.export-item-ppt:hover {
+    background: rgba(251, 146, 60, 0.2) !important;
+    border: 1px solid rgba(251, 146, 60, 0.4);
+    box-shadow: 0 4px 15px rgba(251, 146, 60, 0.25);
+}
+
+.export-item-ppt:hover svg {
+    color: #fb923c;
+}
+
+/* Nurotra Animated Working Context Glow */
+.working-context-glow {
+    position: relative;
+    border-radius: 20px;
+    z-index: 1;
+    margin: -2px;
+    /* Compensate for the border spread */
+    padding: 2px;
+}
+
+.working-context-glow::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg,
+            #6366f1,
+            #8b5cf6,
+            #ffffff,
+            #6366f1);
+    background-size: 300% 300%;
+    border-radius: 20px;
+    z-index: -1;
+    animation: nurotraGlow 6s linear infinite;
+    filter: blur(8px);
+    opacity: 0.6;
+}
+
+@keyframes nurotraGlow {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+.working-context-glow .live-execution-panel {
+    border-color: transparent !important;
+    background: rgba(10, 10, 15, 0.98);
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(10px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }

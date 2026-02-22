@@ -373,6 +373,7 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         const intent = preParsed?.intent || "QUERY";
         const metadata = preParsed?.metadata || {};
         const risk = preParsed?.risk || { isHighRisk: false };
+        const currentDoc = preParsed?.currentDoc || null;
 
         const systemPrompt = `You are the Nurotra Document Content Architect.
         MISSION:
@@ -380,6 +381,7 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         - User Niche: ${userContext?.niche}. User Role: ${userContext?.role}.
         - Metadata Context: ${JSON.stringify(metadata)}.
         - Risk Level: ${risk.isHighRisk ? 'HIGH' : 'Standard'}.
+        ${currentDoc ? `- CURRENT DOCUMENT STATE: """${currentDoc.content}""" (Refine or update this instead of starting from scratch)` : ''}
 
         PERSONALITY RULES:
         - Always provide a confident, intelligent summary of the execution.
@@ -396,10 +398,23 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
               "fileName": "${metadata.name}",
               "title": "Document Title", 
               "sections": [{ "heading": "Heading", "content": "Detailed content..." }],
-              "sheets": [{ "name": "Sheet1", "rows": [["Column1", "Column2"]], "formulas": {} }]
+              "sheets": [
+                { 
+                  "name": "Sheet1", 
+                  "headers": ["Header A", "Header B"], 
+                  "rows": [
+                    { "cells": [{ "value": "100", "formula": "" }, { "value": "200", "formula": "=A1*2" }] }
+                  ] 
+                }
+              ]
             }
           }
-        }`;
+        }
+        
+        CRITICAL EXCEL RULES:
+        - For EVERY cell that contains a calculation or derived value, you MUST provide the "formula" string (starting with =) and the calculated "value".
+        - Ensure formulas use standard Excel syntax (e.g., =SUM(A1:A10), =B2*0.15).
+        - If no formula is applicable, leave the "formula" field as an empty string.`;
 
         const userPrompt = `Request: "${prompt}"`;
         let rawResponse = await generateWithFallback(userPrompt, systemPrompt);

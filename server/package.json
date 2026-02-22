@@ -18,7 +18,9 @@
     "cloudinary": "^1.41.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
+    "docx": "^9.5.3",
     "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
@@ -29,6 +31,7 @@
     "nodemailer": "^6.9.9",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "pptxgenjs": "^4.0.1",
     "resend": "^6.6.0",
     "socket.io": "^4.8.3"
   },

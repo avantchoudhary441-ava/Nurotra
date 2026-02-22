@@ -1,28 +1,49 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, Download, Cloud, FolderOpen, File, RefreshCw, Copy } from 'lucide-react';
-import { exportToExcel } from '../../../services/excelService';
-import { exportToWord } from '../../../services/wordService';
-import { exportToPPT } from '../../../services/pptService';
+import { docsAgentService } from '../../../services/docsAgentService';
 
-const ProjectsDocs = ({ projects, standaloneDocs, onOpenDoc, isSyncing, activeDocId }) => {
+const ProjectsDocs = ({
+    projects,
+    standaloneDocs,
+    onOpenDoc,
+    onOpenProject, // New callback
+    isSyncing,
+    activeDocId,
+    activeProjectId // New prop
+}) => {
     const [expandedProjects, setExpandedProjects] = useState([1]);
     const [syncing, setSyncing] = useState(false);
+    const [localSyncStatus, setLocalSyncStatus] = useState(null);
 
     // Find the active document object
     const allDocs = [...standaloneDocs, ...projects.flatMap(p => p.documents)];
-    const activeDoc = allDocs.find(d => d.id === activeDocId);
+    const activeDoc = allDocs.find(d => String(d.id) === String(activeDocId));
 
-    const handleExportXLSX = () => {
-        if (activeDoc) exportToExcel(activeDoc.name, activeDoc.content || "");
+    const handleLocalSync = async (doc, type) => {
+        if (!doc) return;
+        setLocalSyncStatus('syncing');
+
+        try {
+            // Find project name for folder nesting
+            let projectName = "";
+            const project = projects.find(p => p.documents.some(d => d.id === doc.id));
+            if (project) projectName = project.name;
+
+            const docToSync = { ...doc, type: type };
+            await docsAgentService.automateLocalSave(docToSync, projectName);
+
+            setLocalSyncStatus('success');
+            setTimeout(() => setLocalSyncStatus(null), 6000);
+        } catch (e) {
+            console.error("Workspace Sync failed:", e);
+            setLocalSyncStatus('error');
+            setTimeout(() => setLocalSyncStatus(null), 4000);
+        }
     };
 
-    const handleExportWord = () => {
-        if (activeDoc) exportToWord(activeDoc.name, activeDoc.content || "");
-    };
-
-    const handleExportPPT = () => {
-        if (activeDoc) exportToPPT(activeDoc.name, activeDoc.content || "");
-    };
+    const handleExportXLSX = (doc = activeDoc) => handleLocalSync(doc, 'excel');
+    const handleExportWord = (doc = activeDoc) => handleLocalSync(doc, 'word');
+    const handleExportPPT = (doc = activeDoc) => handleLocalSync(doc, 'ppt');
 
     const handleCopyToClipboard = () => {
         if (activeDoc?.content) {
@@ -75,57 +96,89 @@ const ProjectsDocs = ({ projects, standaloneDocs, onOpenDoc, isSyncing, activeDo
 
             {/* Projects List */}
             <div className={`projects-list ${isSyncing ? 'panel-pulsing' : ''}`}>
-                {projects.map((project) => (
-                    <div key={project.id} className="project-item">
-                        <div
-                            className="project-header"
-                            onClick={() => toggleProject(project.id)}
-                        >
-                            <div className="project-info">
-                                {expandedProjects.includes(project.id) ? (
-                                    <ChevronDown size={16} />
-                                ) : (
-                                    <ChevronRight size={16} />
-                                )}
-                                <span className="project-name">{project.name}</span>
-                            </div>
-                            <span className={`project-status ${project.status.toLowerCase()}`}>
-                                {project.status}
-                            </span>
-                        </div>
+                {projects.map((project) => {
+                    const isWorkingProject = project.documents.some(d => String(d.id) === String(activeDocId)) || String(project.id) === String(activeProjectId);
+                    const isSelected = String(project.id) === String(activeProjectId);
 
-                        <div className="project-meta">
-                            <span className="doc-count">{project.docCount} docs</span>
-                            <span className="last-modified">{project.lastModified}</span>
-                        </div>
-
-                        {project.summary && (
-                            <p className="project-summary-text">{project.summary}</p>
-                        )}
-
-                        {/* Documents Tree */}
-                        {expandedProjects.includes(project.id) && (
-                            <div className="documents-tree">
-                                {project.documents.map((doc) => (
+                    return (
+                        <div key={project.id} className={`project-item ${isWorkingProject ? 'working-glow' : ''} ${isSelected ? 'selected-context' : ''}`}>
+                            <div
+                                className="project-header"
+                                onClick={() => {
+                                    if (onOpenProject) onOpenProject(project);
+                                }}
+                            >
+                                <div className="project-info">
                                     <div
-                                        key={doc.id}
-                                        className={`document-item ${activeDocId === doc.id ? 'active' : ''} ${activeDocId === doc.id && isSyncing ? 'syncing-doc' : ''}`}
+                                        className="project-toggle"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (onOpenDoc) onOpenDoc(doc);
+                                            toggleProject(project.id);
                                         }}
+                                        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                                     >
-                                        <span className="doc-icon">{getFileIcon(doc.type)}</span>
-                                        <span className="doc-name">{doc.name}</span>
-                                        {activeDocId === doc.id && isSyncing && (
-                                            <RefreshCw size={10} className="animate-spin doc-sync-icon" />
+                                        {expandedProjects.includes(project.id) ? (
+                                            <ChevronDown size={16} />
+                                        ) : (
+                                            <ChevronRight size={16} />
                                         )}
                                     </div>
-                                ))}
+                                    <span className="project-name">{project.name}</span>
+                                </div>
+                                <span className={`project-status ${project.status.toLowerCase()}`}>
+                                    {project.status}
+                                </span>
                             </div>
-                        )}
-                    </div>
-                ))}
+
+                            <div className="project-meta">
+                                <span className="doc-count">{project.docCount} docs</span>
+                                <span className="last-modified">{project.lastModified}</span>
+                            </div>
+
+                            {project.summary && (
+                                <p className="project-summary-text">{project.summary}</p>
+                            )}
+
+                            {/* Documents Tree */}
+                            {expandedProjects.includes(project.id) && (
+                                <div className="documents-tree">
+                                    {project.documents.map((doc) => (
+                                        <div
+                                            key={doc.id}
+                                            className={`document-item ${activeDocId === doc.id ? 'active' : ''} ${activeDocId === doc.id && isSyncing ? 'syncing-doc' : ''}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (onOpenDoc) onOpenDoc(doc);
+                                            }}
+                                        >
+                                            <div className="doc-main-info">
+                                                <span className="doc-icon">{getFileIcon(doc.type)}</span>
+                                                <span className="doc-name">{doc.name}</span>
+                                            </div>
+                                            <div className="doc-actions">
+                                                <button
+                                                    className="doc-mini-action"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (doc.type === 'excel') handleExportXLSX(doc);
+                                                        else if (doc.type === 'word') handleExportWord(doc);
+                                                        else if (doc.type === 'ppt') handleExportPPT(doc);
+                                                    }}
+                                                    title="Quick Export"
+                                                >
+                                                    <Download size={12} />
+                                                </button>
+                                                {activeDocId === doc.id && isSyncing && (
+                                                    <RefreshCw size={10} className="animate-spin doc-sync-icon" />
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
 
                 {/* Standalone Documents */}
                 {standaloneDocs && standaloneDocs.length > 0 && (
@@ -139,13 +192,29 @@ const ProjectsDocs = ({ projects, standaloneDocs, onOpenDoc, isSyncing, activeDo
                                     if (onOpenDoc) onOpenDoc(doc);
                                 }}
                             >
-                                <span className="doc-icon">📄</span>
-                                <span className="doc-name">{doc.name}</span>
-                                <span className="doc-time">
-                                    {activeDocId === doc.id && isSyncing ? (
-                                        <RefreshCw size={10} className="animate-spin doc-sync-icon" />
-                                    ) : doc.lastModified}
-                                </span>
+                                <div className="doc-main-info">
+                                    <span className="doc-icon">📄</span>
+                                    <span className="doc-name">{doc.name}</span>
+                                </div>
+                                <div className="doc-actions">
+                                    <button
+                                        className="doc-mini-action"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (doc.type === 'excel') handleExportXLSX(doc);
+                                            else if (doc.type === 'word') handleExportWord(doc);
+                                            else if (doc.type === 'ppt') handleExportPPT(doc);
+                                        }}
+                                        title="Export Logic"
+                                    >
+                                        <Download size={12} />
+                                    </button>
+                                    <span className="doc-time">
+                                        {activeDocId === doc.id && isSyncing ? (
+                                            <RefreshCw size={10} className="animate-spin doc-sync-icon" />
+                                        ) : doc.lastModified}
+                                    </span>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -191,6 +260,32 @@ const ProjectsDocs = ({ projects, standaloneDocs, onOpenDoc, isSyncing, activeDo
                         </button>
                     </div>
                 </div>
+
+                {/* Workspace Sync Notification */}
+                {localSyncStatus && (
+                    <div className={`sync-notification sidebar-sync ${localSyncStatus}`}>
+                        {localSyncStatus === 'syncing' ? (
+                            <><RefreshCw size={12} className="animate-spin" /> Syncing...</>
+                        ) : localSyncStatus === 'success' ? (
+                            <span>Saved to <strong
+                                className="clickable-path"
+                                onClick={() => {
+                                    const activeDoc = allDocs.find(d => String(d.id) === String(activeDocId));
+                                    let projectName = "";
+                                    if (activeDoc) {
+                                        const project = projects.find(p => p.documents.some(d => String(d.id) === String(activeDoc.id)));
+                                        if (project) projectName = project.name;
+                                    }
+                                    console.log("[DocsAgent] Requesting sidebar folder open for project:", projectName || "Standalone");
+                                    docsAgentService.openWorkspace(projectName);
+                                }}
+                                title="Click to open folder"
+                            >nurotra workplace</strong></span>
+                        ) : (
+                            <span>Sync failed</span>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
