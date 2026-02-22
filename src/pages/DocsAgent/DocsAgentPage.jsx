@@ -16,6 +16,7 @@ const DocsAgentPage = () => {
     const [projects, setProjects] = useState([]);
     const [standaloneDocs, setStandaloneDocs] = useState([]);
     const [currentDoc, setCurrentDoc] = useState(null); // Active document in editor
+    const [currentProject, setCurrentProject] = useState(null); // Active project context
 
     const fetchInitialData = async () => {
         try {
@@ -71,13 +72,15 @@ const DocsAgentPage = () => {
         const handleMouseMove = (e) => {
             if (isResizingLeft.current) {
                 const newWidth = e.clientX;
-                if (newWidth > 250 && newWidth < window.innerWidth / 2) {
+                const maxAllowedWidth = window.innerWidth - rightWidth - 350; // Leave 350px for center
+                if (newWidth > 200 && newWidth < maxAllowedWidth) {
                     setLeftWidth(newWidth);
                 }
             }
             if (isResizingRight.current) {
                 const newWidth = window.innerWidth - e.clientX;
-                if (newWidth > 250 && newWidth < window.innerWidth / 2) {
+                const maxAllowedWidth = window.innerWidth - leftWidth - 350; // Leave 350px for center
+                if (newWidth > 200 && newWidth < maxAllowedWidth) {
                     setRightWidth(newWidth);
                 }
             }
@@ -142,8 +145,13 @@ const DocsAgentPage = () => {
             let md = `# ${data.fileName}\n\n`;
             data.sheets?.forEach(sheet => {
                 md += `### Sheet: ${sheet.name}\n`;
+                if (sheet.headers) {
+                    md += `| ${sheet.headers.join(' | ')} |\n`;
+                    md += `| ${sheet.headers.map(() => '---').join(' | ')} |\n`;
+                }
                 sheet.rows?.forEach(row => {
-                    md += `| ${row.join(' | ')} |\n`;
+                    const values = row.cells.map(c => c.value);
+                    md += `| ${values.join(' | ')} |\n`;
                 });
                 md += '\n';
             });
@@ -174,18 +182,25 @@ const DocsAgentPage = () => {
         }));
 
         try {
+            // Detect if this is a MODIFY operation (active doc exists)
+            const isModify = !!currentDoc && currentDoc.id;
+
             // Step 1: Logic Mapping
-            addLiveUpdate('Mapping logic to expert standards...');
+            addLiveUpdate(isModify ? 'Looking at your current document...' : 'Getting your request ready...');
             await new Promise(r => setTimeout(r, 600));
             setExecutionState(prev => ({ ...prev, currentStep: 2 }));
 
             // Step 2: Querying the Engine
-            addLiveUpdate('Querying cognitive engine for implementation data...');
+            addLiveUpdate(isModify ? 'Figuring out the changes you want...' : 'Thinking about what to build...');
             let response = intentData.payload;
 
-            // If we don't have a payload or it's not a CREATE intent
-            if (!response || response.intent !== 'CREATE') {
-                response = await docsAgentService.generateResponse(intentData.description, 'CREATE');
+            // If we don't have a payload, generate one — pass currentDoc for MODIFY context
+            if (!response || (isModify ? response.intent !== 'MODIFY' : response.intent !== 'CREATE')) {
+                response = await docsAgentService.generateResponse(
+                    intentData.description,
+                    isModify ? 'MODIFY' : 'CREATE',
+                    { currentDoc: isModify ? currentDoc : null }
+                );
 
                 // Explicitly check for rate limit/fallback messages or system alerts
                 if (response.intent === 'QUERY' && (response.text.includes('alert') || response.text.includes('unstable'))) {
@@ -198,57 +213,82 @@ const DocsAgentPage = () => {
                 intentData.metadata = { ...intentData.metadata, ...response.metadata };
             }
 
-            addLiveUpdate('Synthesis progress: Constructing internal knowledge graph...');
+            addLiveUpdate('Putting the pieces together...');
             setExecutionState(prev => ({ ...prev, currentStep: 3 }));
             await new Promise(r => setTimeout(r, 500));
 
             // Step 3: Handle Generation Payload
             if (response && response.generation && response.generation.type) {
                 const { type, data } = response.generation;
-                addLiveUpdate(`Executing synthesis for ${type.toUpperCase()} object...`);
+                addLiveUpdate(isModify ? `Updating your ${type.toUpperCase()} document...` : `Creating your ${type.toUpperCase()} file...`);
                 setExecutionState(prev => ({ ...prev, currentStep: 4 }));
 
                 // Convert to preview content
                 const content = convertToMarkdown(response.generation);
 
-                // Step 4: Physical Document Generation
-                addLiveUpdate(`Generating binary stream: ${data.fileName}`);
-                if (type === 'word') await generateWordDoc(data);
-                else if (type === 'excel') await generateExcelSheet(data);
-                else if (type === 'ppt') await generatePresentation(data);
+                // Step 4: Logic Implementation
+                addLiveUpdate(isModify ? `Applying changes to: ${currentDoc.name}` : `Designing document: ${data.fileName}`);
+                setExecutionState(prev => ({ ...prev, currentStep: 4 }));
 
-                // Step 5: Final Persistance
-                addLiveUpdate('Finalizing storage and syncing context boundary...');
+                // Step 5: Final Persistence
+                addLiveUpdate('Saving your work and finishing up...');
                 setExecutionState(prev => ({ ...prev, currentStep: 5 }));
 
-                // FINAL: Persist to Backend
                 const metadata = intentData.metadata || {};
-                const newDoc = await docsAgentService.createDocument({
-                    name: data.fileName,
-                    type: type,
-                    content: content,
-                    projectId: intentData.projectId,
-                    metadata: {
-                        purpose: metadata.purpose || 'Generated Document',
-                        category: metadata.category || 'General',
-                        entities: metadata.entities || [],
-                        confidenceScore: metadata.confidenceScore || 0.9
-                    }
-                });
+                let savedDoc;
 
-                // Update UI state
-                if (intentData.projectId) {
-                    await fetchInitialData(); // Refresh to get populated list
+                if (isModify) {
+                    // *** IN-PLACE UPDATE ***
+                    savedDoc = await docsAgentService.updateDocument(currentDoc.id, {
+                        content: content,
+                        rawStructure: data,
+                        metadata: {
+                            ...currentDoc.metadata,
+                            purpose: metadata.purpose || currentDoc.metadata?.purpose || 'Updated Document',
+                            category: metadata.category || currentDoc.metadata?.category || 'General',
+                            confidenceScore: metadata.confidenceScore || 0.9
+                        }
+                    });
+
+                    // Refresh sidebar data to reflect updates
+                    await fetchInitialData();
                 } else {
-                    setStandaloneDocs(prev => [newDoc, ...prev]);
+                    // *** CREATE NEW ***
+                    savedDoc = await docsAgentService.createDocument({
+                        name: data.fileName,
+                        type: type,
+                        content: content,
+                        rawStructure: data,
+                        projectId: intentData.projectId,
+                        metadata: {
+                            purpose: metadata.purpose || 'Generated Document',
+                            category: metadata.category || 'General',
+                            entities: metadata.entities || [],
+                            confidenceScore: metadata.confidenceScore || 0.9
+                        }
+                    });
+
+                    // Update UI state
+                    if (intentData.projectId) {
+                        await fetchInitialData();
+                    } else {
+                        setStandaloneDocs(prev => [savedDoc, ...prev]);
+                    }
                 }
 
-                setCurrentDoc(newDoc);
-                addLiveUpdate('✅ Implementation successful. Document is ready.');
+                setCurrentDoc(savedDoc);
+
+                // Re-sync to workspace (overwrite the same file)
+                const projectForSync = currentProject || projects.find(p => p.documents?.some(d => String(d.id) === String(savedDoc.id)));
+                if (projectForSync) {
+                    docsAgentService.automateLocalSave(savedDoc, projectForSync.name).catch(() => { });
+                }
+
+                addLiveUpdate(isModify ? '✅ Changes applied! Your document is updated.' : '✅ Done! Your document is ready for you.');
                 setAgentStatus('Success!');
             } else {
                 // Return to idle but keep the text response visible in chat
-                addLiveUpdate('⚠️ Cognitive engine provided insights but no implementation plan.');
+                addLiveUpdate("⚠️ I found some information, but I couldn't create the file yet.");
                 addLiveUpdate(`Response: "${response.text.substring(0, 40)}..."`);
                 setAgentStatus('Ready');
             }
@@ -304,7 +344,7 @@ const DocsAgentPage = () => {
         setExecutionState(prev => ({
             ...prev,
             status: executionState.mode === 'fast' ? 'executing' : 'planning',
-            liveUpdates: ['Establishing cognitive connection...', 'Analyzing user intent...']
+            liveUpdates: ['Getting everything ready for you...', 'Understanding your request...']
         }));
 
         try {
@@ -314,25 +354,31 @@ const DocsAgentPage = () => {
                 if (executionState.mode === 'fast') {
                     const meta = await docsAgentService.extractMetadata(intentData.description);
                     intentData.metadata = meta;
-                    addLiveUpdate(`Analysis complete: Targetting ${meta.category} framework.`);
+                    addLiveUpdate(`Analysis complete: Preparing ${meta.category} style.`);
                 } else {
-                    addLiveUpdate(`Standby: Initializing structural analysis...`);
+                    addLiveUpdate(`Just a moment: Designing the structure...`);
                 }
             }
 
             // 3. Delegation logic
+            const isModifyIntent = !!currentDoc && currentDoc.id;
             if (executionState.mode === 'guided') {
                 setExecutionState(prev => ({
                     ...prev,
                     status: 'planning',
                     activeObject: intentData.object || prev.activeObject,
                     plan: {
-                        goal: `Execute: ${intentData.description}`,
-                        steps: [
-                            { label: 'Analyze context and data points', status: 'pending' },
-                            { label: 'Architect document structure', status: 'pending' },
-                            { label: 'Populate granular data (cell/row level)', status: 'pending' },
-                            { label: 'Verify Expert Standards sync', status: 'pending' }
+                        goal: isModifyIntent ? `Edit: ${currentDoc.name}` : `Execute: ${intentData.description}`,
+                        steps: isModifyIntent ? [
+                            { label: 'Review your current document', status: 'pending' },
+                            { label: 'Figure out what changes are needed', status: 'pending' },
+                            { label: 'Apply the requested changes', status: 'pending' },
+                            { label: 'Double-check everything looks right', status: 'pending' }
+                        ] : [
+                            { label: 'Understand your needs and gather information', status: 'pending' },
+                            { label: 'Design the document layout', status: 'pending' },
+                            { label: 'Add all the specific details', status: 'pending' },
+                            { label: 'Make sure it matches our high standards', status: 'pending' }
                         ],
                         data: intentData
                     }
@@ -386,6 +432,7 @@ const DocsAgentPage = () => {
             });
             setStandaloneDocs(prev => [newDoc, ...prev]);
             setCurrentDoc(newDoc);
+
             setChatTrigger({
                 id: Date.now(),
                 text: `create the document with the details like-`,
@@ -401,10 +448,21 @@ const DocsAgentPage = () => {
 
     const openDocument = (doc) => {
         setCurrentDoc(doc);
-        // Switch to editor view if we were idle
-        if (executionState.status === 'idle') {
-            setAgentStatus('Viewing');
+        setAgentStatus('Viewing');
+        setExecutionState(prev => ({ ...prev, status: 'idle' }));
+
+        // Find project for context if applicable
+        const project = projects.find(p => p.documents.some(d => String(d.id) === String(doc.id)));
+        if (project) {
+            setCurrentProject(project);
         }
+    };
+
+    const openProject = (project) => {
+        setCurrentProject(project);
+        setCurrentDoc(null); // Clear active doc to show project overview/entry
+        setAgentStatus('Viewing Project');
+        setExecutionState(prev => ({ ...prev, status: 'idle' }));
     };
 
     const startResizingLeft = () => {
@@ -462,14 +520,16 @@ const DocsAgentPage = () => {
             {/* Left Panel: Projects & Docs */}
             <div
                 className={`docs-panel left-panel ${activeMobileScreen === 'projects' ? 'active-mobile' : ''}`}
-                style={{ width: window.innerWidth > 768 ? `${leftWidth}px` : '100%' }}
+                style={{ flexBasis: window.innerWidth > 768 ? `${leftWidth}px` : '100%' }}
             >
                 <ProjectsDocs
                     projects={projects}
                     standaloneDocs={standaloneDocs}
                     onOpenDoc={openDocument}
+                    onOpenProject={openProject}
                     isSyncing={isSidebarSyncing}
                     activeDocId={currentDoc?.id}
+                    activeProjectId={currentProject?.id}
                 />
             </div>
 
@@ -480,6 +540,7 @@ const DocsAgentPage = () => {
                 className={`docs-panel center-panel ${activeMobileScreen === 'execution' ? 'active-mobile' : ''}`}
             >
                 <LiveExecution
+                    projects={projects}
                     executionState={executionState}
                     currentDoc={currentDoc}
                     liveUpdates={executionState.liveUpdates}
@@ -499,7 +560,7 @@ const DocsAgentPage = () => {
             {/* Right Panel: Nurotra Docs Chat */}
             <div
                 className={`docs-panel right-panel ${activeMobileScreen === 'chat' ? 'active-mobile' : ''}`}
-                style={{ width: window.innerWidth > 768 ? `${rightWidth}px` : '100%' }}
+                style={{ flexBasis: window.innerWidth > 768 ? `${rightWidth}px` : '100%' }}
             >
                 <DocsChat
                     initialTrigger={chatTrigger}
@@ -520,6 +581,8 @@ const DocsAgentPage = () => {
                     onRollback={handleRollback}
                     pastConversations={pastConversations}
                     onSelectHistory={handleSelectHistory}
+                    currentDoc={currentDoc}
+                    currentProject={currentProject} // Pass project context
                 />
             </div>
         </div>

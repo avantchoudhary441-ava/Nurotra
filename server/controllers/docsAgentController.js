@@ -2,13 +2,14 @@ const Project = require("../models/Project");
 const Document = require("../models/Document");
 const aiService = require("../services/aiService");
 const intentEngine = require("../services/intentEngine");
+const localExportService = require("../services/localExportService");
 
 /**
  * Process Docs Agent Query
  * Route: POST /api/docs-agent/query
  */
 const processQuery = async (req, res) => {
-    const { prompt, history } = req.body;
+    const { prompt, history, currentDoc } = req.body;
 
     if (!prompt) {
         return res.status(400).json({ message: "Prompt is required" });
@@ -43,7 +44,8 @@ const processQuery = async (req, res) => {
         const response = await aiService.processDocsAgentQuery(prompt, userContext, history, {
             intent: intentInfo.intent,
             risk,
-            metadata
+            metadata,
+            currentDoc // Pass the current document for iterative editing
         });
         res.json(response);
     } catch (error) {
@@ -128,6 +130,7 @@ const createDocument = async (req, res) => {
             name,
             type,
             content,
+            rawStructure: req.body.rawStructure,
             projectId,
             metadata,
             userId: req.user._id
@@ -137,6 +140,35 @@ const createDocument = async (req, res) => {
     } catch (error) {
         console.error("Create Document Error:", error);
         res.status(500).json({ message: "Failed to create document" });
+    }
+};
+
+/**
+ * Update an existing document (in-place editing)
+ * Route: PUT /api/docs-agent/documents/:id
+ */
+const updateDocument = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, content, rawStructure, metadata } = req.body;
+
+        const document = await Document.findOne({ _id: id, userId: req.user._id });
+        if (!document) {
+            return res.status(404).json({ message: "Document not found" });
+        }
+
+        // Update only the fields that are provided
+        if (name) document.name = name;
+        if (content !== undefined) document.content = content;
+        if (rawStructure) document.rawStructure = rawStructure;
+        if (metadata) document.metadata = { ...document.metadata, ...metadata };
+        document.updatedAt = new Date();
+
+        await document.save();
+        res.json({ ...document._doc, id: document._id });
+    } catch (error) {
+        console.error("Update Document Error:", error);
+        res.status(500).json({ message: "Failed to update document" });
     }
 };
 
@@ -183,12 +215,49 @@ const structureVoicePrompt = async (req, res) => {
     }
 };
 
+/**
+ * Automatically save document to local workspace
+ * Route: POST /api/docs-agent/automate-save
+ */
+const automateLocalSave = async (req, res) => {
+    try {
+        const { document, projectName } = req.body;
+        if (!document) {
+            return res.status(400).json({ message: "Document data required" });
+        }
+
+        const result = await localExportService.automateLocalSave(document, projectName);
+        res.json({ message: "Synced to workspace successfully", path: result.path });
+    } catch (error) {
+        console.error("Automated Save Error:", error);
+        res.status(500).json({ message: "Failed to sync to workspace" });
+    }
+};
+
+/**
+ * Open local workspace folder in explorer
+ * Route: POST /api/docs-agent/open-workspace
+ */
+const openWorkspace = async (req, res) => {
+    try {
+        const { projectName } = req.body;
+        await localExportService.openWorkspace(projectName);
+        res.json({ message: "Workspace opened in explorer" });
+    } catch (error) {
+        console.error("Open Workspace Error:", error);
+        res.status(500).json({ message: "Failed to open workspace folder" });
+    }
+};
+
 module.exports = {
     processQuery,
     getProjects,
     createProject,
     getDocuments,
     createDocument,
+    updateDocument,
     extractMetadata,
-    structureVoicePrompt
+    structureVoicePrompt,
+    automateLocalSave,
+    openWorkspace
 };

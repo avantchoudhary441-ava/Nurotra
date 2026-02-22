@@ -5,7 +5,7 @@
 
 const INTENT_WEIGHTS = {
     CREATE: { keywords: ['create', 'make', 'generate', 'build', 'new', 'start'], weight: 1.0 },
-    MODIFY: { keywords: ['edit', 'change', 'update', 'fix', 'refine', 'revise', 'modify'], weight: 0.9 },
+    MODIFY: { keywords: ['edit', 'change', 'update', 'fix', 'refine', 'revise', 'modify', 'calculate', 'sum', 'average', 'addition', 'math', 'total', 'arithmetic'], weight: 0.9 },
     QUERY: { keywords: ['what', 'how', 'who', 'analyze', 'explain', 'search', 'tell me'], weight: 0.8 },
     DATA_OP: { keywords: ['merge', 'sort', 'filter', 'calculate', 'clean', 'duplicate', 'sum', 'average'], weight: 1.0 },
     CONVERT: { keywords: ['turn into', 'convert', 'summarize to', 'transform', 'translate'], weight: 1.0 },

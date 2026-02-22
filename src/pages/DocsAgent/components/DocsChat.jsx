@@ -25,7 +25,8 @@ const DocsChat = ({
     onUndo,
     onRollback,
     pastConversations,
-    onSelectHistory
+    onSelectHistory,
+    currentDoc
 }) => {
     const [prompt, setPrompt] = useState('');
     const [isListening, setIsListening] = useState(false);
@@ -117,7 +118,10 @@ const DocsChat = ({
                 .slice(-5)
                 .map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.text }));
 
-            const response = await docsAgentService.generateResponse(userPrompt, intent, { history: historyContext });
+            const response = await docsAgentService.generateResponse(userPrompt, intent, {
+                history: historyContext,
+                currentDoc: currentDoc
+            });
 
             setIsThinking(false);
 
@@ -309,7 +313,10 @@ const DocsChat = ({
                 .slice(-5)
                 .map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.text }));
 
-            const response = await docsAgentService.generateResponse(finalPrompt, intent, { history: historyContext });
+            const response = await docsAgentService.generateResponse(finalPrompt, intent, {
+                history: historyContext,
+                currentDoc: currentDoc
+            });
             setIsThinking(false);
 
             const agentMsg = {

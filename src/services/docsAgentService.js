@@ -31,7 +31,8 @@ export const docsAgentService = {
         try {
             const response = await api.post('/docs-agent/query', {
                 prompt,
-                history: context.history || []
+                history: context.history || [],
+                currentDoc: context.currentDoc || null
             });
 
             // The backend returns { intent, text, clarification, steps? }
@@ -102,6 +103,19 @@ export const docsAgentService = {
     },
 
     /**
+     * Update an existing document in-place
+     */
+    updateDocument: async (docId, updateData) => {
+        try {
+            const response = await api.put(`/docs-agent/documents/${docId}`, updateData);
+            return response.data;
+        } catch (error) {
+            console.error("Failed to update document:", error);
+            throw error;
+        }
+    },
+
+    /**
      * Semantic Metadata Extraction
      * Parsed by LLM to establish document execution context
      */
@@ -144,6 +158,33 @@ export const docsAgentService = {
         } catch (error) {
             console.error("Failed to structure voice prompt:", error);
             throw error;
+        }
+    },
+
+    /**
+     * Manually trigger an automated save to local workspace
+     */
+    automateLocalSave: async (document, projectName) => {
+        try {
+            const response = await api.post('/docs-agent/automate-save', { document, projectName });
+            return response.data;
+        } catch (error) {
+            console.error("Automated save failed:", error);
+            // Silent failure for automated save (not to interrupt user flow)
+            return null;
+        }
+    },
+
+    /**
+     * Open local workspace folder in File Explorer
+     */
+    openWorkspace: async (projectName) => {
+        try {
+            const response = await api.post('/docs-agent/open-workspace', { projectName });
+            return response.data;
+        } catch (error) {
+            console.error("Failed to open workspace:", error);
+            return null;
         }
     }
 };
