@@ -40,7 +40,7 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
         throw new Error("No GEMINI_API_KEY found in environment");
     }
 
-    const geminiModels = ["gemini-flash-latest", "gemini-pro-latest", "gemini-2.0-flash-lite", "gemini-pro"];
+    const geminiModels = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-pro"];
     let lastError = null;
 
     // Outer Loop: API Keys (The Reservoir)
@@ -62,7 +62,7 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
                         contents: [{
                             parts: [{ text: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }]
                         }],
-                        generationConfig: { responseMimeType: "application/json" }
+                        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 8192 }
                     });
 
                     if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
@@ -368,53 +368,265 @@ const extractIntentWithLLM = async (prompt) => {
  * Handles complex intent parsing and structured response generation.
  * Stripped of persona to avoid refusal and "shielding" errors.
  */
+/**
+ * Robustly repairs malformed or truncated JSON strings from AI
+ */
+const repairJson = (jsonStr) => {
+    let str = jsonStr.trim();
+
+    // 1. Remove Any trailing markdown junk
+    str = str.replace(/```json/gi, "").replace(/```/g, "").trim();
+
+    // 2. Extract first valid looking block if no clear start
+    if (!str.startsWith('{') && !str.startsWith('[')) {
+        const start = str.search(/[{[]/);
+        if (start !== -1) str = str.substring(start);
+    }
+
+    // 3. Fix missing closing brackets/braces (Basic Stack-based repair)
+    const stack = [];
+    let inString = false;
+    let escape = false;
+    let lastValidIndex = -1;
+
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i];
+        if (escape) { escape = false; continue; }
+        if (char === '\\') { escape = true; continue; }
+        if (char === '"') { inString = !inString; continue; }
+        if (inString) continue;
+
+        if (char === '{' || char === '[') {
+            stack.push(char === '{' ? '}' : ']');
+        } else if (char === '}' || char === ']') {
+            if (stack.length > 0 && stack[stack.length - 1] === char) {
+                stack.pop();
+                if (stack.length === 0) lastValidIndex = i;
+            }
+        }
+    }
+
+    // Truncate at last valid full object if it's a mess, otherwise just close what's open
+    if (inString) str += '"';
+    while (stack.length > 0) {
+        str += stack.pop();
+    }
+
+    // 4. Remove trailing commas before closing chars
+    str = str.replace(/,\s*([}\]])/g, '$1');
+
+    return str;
+};
+
 const processDocsAgentQuery = async (prompt, userContext, history = [], preParsed = null) => {
     try {
         const intent = preParsed?.intent || "QUERY";
         const metadata = preParsed?.metadata || {};
         const risk = preParsed?.risk || { isHighRisk: false };
         const currentDoc = preParsed?.currentDoc || null;
+        const docType = metadata.name?.endsWith('.pptx') ? 'ppt' : (metadata.name?.endsWith('.xlsx') ? 'excel' : 'word');
 
-        const systemPrompt = `You are the Nurotra Document Content Architect.
-        MISSION:
-        - Generate high-quality, professional content for a ${intent} action.
-        - User Niche: ${userContext?.niche}. User Role: ${userContext?.role}.
-        - Metadata Context: ${JSON.stringify(metadata)}.
-        - Risk Level: ${risk.isHighRisk ? 'HIGH' : 'Standard'}.
-        ${currentDoc ? `- CURRENT DOCUMENT STATE: """${currentDoc.content}""" (Refine or update this instead of starting from scratch)` : ''}
+        // Build format-specific instructions
+        let formatInstructions = '';
+        if (docType === 'word') {
+            formatInstructions = `
+        WORD DOCUMENT CONTENT RULES (MOST IMPORTANT):
+        You are generating a REAL, PROFESSIONAL document. Follow these rules strictly:
 
-        PERSONALITY RULES:
-        - Always provide a confident, intelligent summary of the execution.
-        - Act as a high-level consultant.
-        - Explain "why" you structured the document this way (storytelling).
+        1. WRITE ACTUAL CONTENT. Every section MUST have real, meaningful paragraphs.
+           - DO NOT just write headings and leave them empty.
+           - DO NOT just list field labels like "Name: [Your Name]" without context.
+           - WRITE sentences and paragraphs that explain, describe, and provide value.
+           - Example: Instead of just "Name: [Your Name]", write: "My name is {{Your Full Name}}. I am a student currently enrolled at {{Your College Name}}, pursuing {{Your Course/Degree}}."
 
-        OUTPUT SCHEMA (Strict JSON):
+        2. PLACEHOLDER SYNTAX for unknown/personal data:
+           - Use double curly braces: {{Your Name}}, {{Your College}}, {{Enter Date Here}}
+           - These will be auto-highlighted in yellow in the final Word document.
+           - ONLY use placeholders for data you genuinely don't know (user's name, specific dates, personal details).
+           - For generic content (descriptions, explanations), WRITE the actual text yourself.
+
+        3. COLLABORATIVE PLACEHOLDERS — Make the user part of the process:
+           - Beyond personal data, include 2-3 placeholders PER DOCUMENT that invite user INPUT and DECISIONS.
+           - Examples of collaborative placeholders:
+             * {{Your thoughts on this approach}}
+             * {{Add any additional requirements here}}
+             * {{Your preferred timeline for this project}}
+             * {{Describe your specific goals for this section}}
+             * {{Your key priorities — list what matters most to you}}
+           - Place these at natural decision points in the document so the user personalizes their output.
+           - This makes every document feel like a COLLABORATION, not just a generation.
+
+        4. INTELLIGENT FORMATTING — choose the EXACT right block type for each content need:
+           - "paragraph": For explanatory text, descriptions, introductions. Include a "style" object for bold/italic/underline.
+           - "bullet": For unordered lists (features, items, hobbies, skills).
+           - "numbered": For ordered sequences (steps, rankings, procedures).
+           - "subheading": For sub-sections within a main heading (level 2 or 3).
+           - "table": For field-value pairs, simple comparisons. Use "headers" and "rows".
+           - "formula_table": For data with totals/averages/min/max. Provide raw numbers; totals will be auto-computed.
+           - "image": When user asks to insert a logo, chart, photo, or diagram.
+           - "cover_page": For the very first page of formal reports, proposals, or projects.
+           - "page_break": Between major sections to start on a fresh page.
+           - "watermark": When document needs "Confidential", "Draft", or similar background text.
+
+        5. ABSOLUTE BAN ON PIPE CHARACTERS:
+           - NEVER use "|" (pipe) characters to separate data. This is CRITICAL.
+           - If data has 2+ columns, you MUST use { "type": "table" } or { "type": "formula_table" }.
+           - If data is a simple list, use "bullet" or "numbered" blocks.
+           - NEVER write lines like "Name | Value | Description" — that is UNACCEPTABLE.
+
+        6. STYLE within paragraphs:
+           - "bold": array of exact substrings to bold, e.g. ["important term", "key phrase"]
+           - "italic": array of substrings to italicize
+           - "underline": array of substrings to underline
+           - "align": "left" | "center" | "right" (default: "left")
+           - "fontSize": number in half-points (default 24 = 12pt). Use 28 for emphasis, 20 for fine print.
+
+        7. DOCUMENT-LEVEL FEATURES (top-level in "data", alongside "sections"):
+           - "header": string — text shown at top of every page (e.g., project title)
+           - "footer": string — text shown at bottom; use "{{page_number}}" and "{{file_name}}" as dynamic tokens
+           - "watermark": string — diagonal background text (e.g., "Confidential", "Draft")
+           - "protection": { "readOnly": true, "allowFormFields": true } — restrict editing
+
+        8. TITLE FORMATTING:
+           - "titleStyle" in data object: { "bold": true, "underline": true, "align": "center", "fontSize": 32 }
+           - Always apply formatting that the user requests for the title.
+
+        9. MINIMUM CONTENT RULE: Each section MUST have at least 2-3 blocks of content. A section with only a heading is UNACCEPTABLE.
+
+        10. ALWAYS BUILD, NEVER META-DESCRIBE:
+            - NEVER create a single table that DESCRIBES what sections/chapters "would" contain.
+            - If a user asks for chapters, sections, or parts — CREATE EACH ONE as its own section object
+              with a heading, level, and blocks containing real written content.
+            - A table summarizing section names is NOT a document. Build each section fully.
+            - This applies regardless of document length — whether 2 sections or 20.
+            - Think of yourself as an AUTHOR, not an outliner.
+
+        11. SCALE-AWARE DOCUMENT ARCHITECTURE:
+            - Match the DEPTH and LENGTH of your output to the complexity of the user's prompt.
+            - Short/casual prompt (e.g., "make a leave application") → 2-4 sections, concise content.
+            - Detailed/structured prompt (e.g., "create a thesis with chapters, TOC, bibliography")
+              → Create EVERY requested section fully, use cover_page, page_break between major parts.
+            - If the user asks for specific parts (declaration, acknowledgment, abstract, chapters, bibliography),
+              create ALL of them as separate sections — do not collapse them into a table.
+            - For a "Table of Contents" or "summary": create a TABLE block that lists section names
+              with brief summaries — placed BEFORE the main content, not AS the entire document.
+            - For "Bibliography" or "References": use a NUMBERED block with formatted citation entries.
+            - Adapt naturally. No two prompts are the same — read the intent and scale accordingly.
+
+        12. FILLABLE / FORM TABLES:
+            - When user says "leave blank", "for employees to fill", "keep response empty", or similar:
+            - Use a TABLE block with empty string "" in cells meant for human input.
+            - This is DIFFERENT from {{placeholders}} — empty cells are for writing in Word later.
+            - Example: headers ["Topic", "Summary", "Employee Response"],
+              rows [["Quality", "87% satisfaction", ""], ["Delivery", "Avg 3.2 days", ""]]
+
+        FULL WORD SCHEMA WITH ALL FEATURES:
         {
           "intent": "${intent}",
-          "text": "The Execution Summary (Narrative Personality).",
+          "text": "Brief action summary.",
           "generation": {
-            "type": "${metadata.name?.endsWith('.pptx') ? 'ppt' : (metadata.name?.endsWith('.xlsx') ? 'excel' : 'word')}",
-            "data": { 
-              "fileName": "${metadata.name}",
-              "title": "Document Title", 
-              "sections": [{ "heading": "Heading", "content": "Detailed content..." }],
-              "sheets": [
-                { 
-                  "name": "Sheet1", 
-                  "headers": ["Header A", "Header B"], 
-                  "rows": [
-                    { "cells": [{ "value": "100", "formula": "" }, { "value": "200", "formula": "=A1*2" }] }
-                  ] 
+            "type": "word",
+            "data": {
+              "fileName": "Descriptive_Name.docx",
+              "title": "Document Title",
+              "titleStyle": { "bold": true, "underline": false, "align": "center", "fontSize": 32 },
+              "header": "Annual Sales Performance Analysis — Confidential",
+              "footer": "Page {{page_number}} | {{file_name}}",
+              "watermark": "Confidential",
+              "protection": { "readOnly": false, "allowFormFields": true },
+              "sections": [
+                {
+                  "heading": "",
+                  "level": 1,
+                  "blocks": [
+                    { "type": "cover_page", "title": "Annual Sales Performance Analysis", "subtitle": "Q4 FY2024 Report", "company": "{{Your Company Name}}", "date": "{{Report Date}}", "logo_url": "" }
+                  ]
+                },
+                {
+                  "heading": "Executive Summary",
+                  "level": 1,
+                  "blocks": [
+                    { "type": "page_break" },
+                    { "type": "paragraph", "text": "This report presents a comprehensive analysis of annual sales performance...", "style": { "bold": ["comprehensive analysis"], "italic": [], "underline": [], "align": "left" } },
+                    { "type": "bullet", "items": ["Total Revenue: $4.2M", "YoY Growth: 18%", "Top Region: {{Your Top Region}}"] },
+                    { "type": "paragraph", "text": "{{Your key observations and strategic priorities for next year}}", "style": {} }
+                  ]
+                },
+                {
+                  "heading": "Sales Data",
+                  "level": 1,
+                  "blocks": [
+                    { "type": "formula_table", "headers": ["Region", "Q1", "Q2", "Q3", "Q4"], "rows": [["North", 120000, 135000, 148000, 162000], ["South", 98000, 105000, 112000, 119000]], "formulas": [{"column": "Total", "operation": "SUM"}, {"column": "Average", "operation": "AVERAGE"}], "conditionalShading": {"highlightMax": "C6EFCE", "highlightMin": "FFC7CE"} },
+                    { "type": "paragraph", "text": "{{Your analysis of the sales data above}}", "style": {} }
+                  ]
+                },
+                {
+                  "heading": "Visual Reference",
+                  "level": 1,
+                  "blocks": [
+                    { "type": "image", "url": "", "caption": "Company Logo", "width": 150, "height": 80 },
+                    { "type": "paragraph", "text": "The logo above represents our brand identity...", "style": {} }
+                  ]
                 }
               ]
             }
           }
+        }`;
+        } else if (docType === 'excel') {
+            formatInstructions = `
+        EXCEL RULES:
+        - NEVER use Markdown tables. ALWAYS use the "sheets" array with "rows" and "cells".
+        - EXCEL FORMULAS: Use formulas for ANY calculated data (e.g., "=C2+D2", "=SUM(B2:B10)").
+        - EXCEL FORMATTING: Add "conditionalFormatting" for visual alerts (Data Bars, Color Scales, Highlighting).
+        - EXCEL VALIDATION: Add "dataValidation" to cells to prevent invalid entries.
+
+        EXCEL SCHEMA:
+        {
+          "intent": "${intent}",
+          "text": "Brief summary.",
+          "generation": {
+            "type": "excel",
+            "data": {
+              "fileName": "Name.xlsx",
+              "sheets": [{
+                "name": "Sheet1",
+                "headers": ["ColA", "ColB"],
+                "rows": [{ "cells": [{ "value": "100", "formula": "", "dataValidation": {} }] }],
+                "conditionalFormatting": [
+                  { "ref": "A2:A10", "rules": [{ "type": "colorScale", "cfvo": [{"type":"min"},{"type":"max"}], "color": [{"argb":"FFFFAAAA"},{"argb":"FFAAFF88"}] }] }
+                ]
+              }]
+            }
+          }
+        }`;
+        } else {
+            formatInstructions = `
+        POWERPOINT SCHEMA:
+        {
+          "intent": "${intent}",
+          "text": "Brief summary.",
+          "generation": {
+            "type": "ppt",
+            "data": {
+              "fileName": "Name.pptx",
+              "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2"] }]
+            }
+          }
+        }`;
         }
+
+        const systemPrompt = `You are the Nurotra Content Architect.
+        MISSION: Generate structured JSON for a ${intent} action on a ${docType.toUpperCase()} document.
         
-        CRITICAL EXCEL RULES:
-        - For EVERY cell that contains a calculation or derived value, you MUST provide the "formula" string (starting with =) and the calculated "value".
-        - Ensure formulas use standard Excel syntax (e.g., =SUM(A1:A10), =B2*0.15).
-        - If no formula is applicable, leave the "formula" field as an empty string.`;
+        CRITICAL RULES:
+        - Output ONLY valid JSON. No markdown, no commentary.
+        - FILENAME: Propose a semantic, descriptive name (e.g., "Marketing_Growth_Plan", "Quarterly_Budget_Analysis"). No spaces.
+        ${currentDoc ? '- ITERATIVE EDIT: You are modifying an existing document. PRESERVE all existing data/sections unless explicitly asked to change or delete them.' : ''}
+        
+        ${currentDoc ? `EXISTING DOCUMENT CONTEXT (JSON):
+        ${JSON.stringify(currentDoc.rawStructure || { content: currentDoc.content }, null, 2)}` : ''}
+
+        ${formatInstructions}`;
 
         const userPrompt = `Request: "${prompt}"`;
         let rawResponse = await generateWithFallback(userPrompt, systemPrompt);
@@ -427,17 +639,47 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
             .replace(/[^\]}]*$/, "")
             .trim();
 
+        let parsed;
         try {
-            const parsed = JSON.parse(cleanJson);
-            return parsed;
+            parsed = JSON.parse(cleanJson);
         } catch (jsonError) {
-            console.warn("JSON Parse Error, manual recovery...", jsonError.message);
-            // If it's not JSON, it might be a text refusal from the AI
-            if (rawResponse.toLowerCase().includes("interference") || rawResponse.toLowerCase().includes("cannot")) {
-                throw new Error("AI engine refusal detected. System is recalibrating safety parameters.");
+            console.warn("JSON Parse Error, attempting repair...", jsonError.message);
+            try {
+                const repaired = repairJson(cleanJson);
+                parsed = JSON.parse(repaired);
+            } catch (repairError) {
+                console.error("Repair failed:", repairError.message);
+                if (rawResponse.toLowerCase().includes("interference") || rawResponse.toLowerCase().includes("cannot")) {
+                    throw new Error("AI engine refusal detected. System is recalibrating safety parameters.");
+                }
+                throw jsonError;
             }
-            throw jsonError;
         }
+
+        // Post-processing: ensure Word sections are never empty
+        if (parsed?.generation?.type === 'word' && parsed.generation.data?.sections) {
+            parsed.generation.data.sections = parsed.generation.data.sections.map(sec => {
+                // If the section has blocks, ensure they're not empty
+                if (sec.blocks && Array.isArray(sec.blocks) && sec.blocks.length > 0) {
+                    return sec;
+                }
+                // If section uses old flat content format, convert to blocks
+                if (sec.content && typeof sec.content === 'string' && sec.content.trim()) {
+                    const paragraphs = sec.content.split('\n').filter(p => p.trim());
+                    return {
+                        ...sec,
+                        blocks: paragraphs.map(p => ({ type: 'paragraph', text: p, style: {} }))
+                    };
+                }
+                // If section is empty, inject a safety paragraph
+                return {
+                    ...sec,
+                    blocks: [{ type: 'paragraph', text: `This section covers ${sec.heading || 'additional details'}. Please add your content here.`, style: { italic: [`Please add your content here.`] } }]
+                };
+            });
+        }
+
+        return parsed;
     } catch (error) {
         console.error("Docs Agent Execution Error:", error.message);
         return {

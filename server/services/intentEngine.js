@@ -111,7 +111,6 @@ const detectRisk = (prompt) => {
  */
 const generateMetadata = (prompt, overrideIntent = null, overrideCategory = null) => {
     const lowerPrompt = prompt.toLowerCase();
-    const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).replace(' ', '');
 
     const { intent: baseIntent, confidence } = classifyIntent(prompt);
     const intent = overrideIntent || baseIntent;
@@ -128,22 +127,37 @@ const generateMetadata = (prompt, overrideIntent = null, overrideCategory = null
         }
     }
 
-    // Smart Naming
-    let nameHint = category !== 'General' ? category : "Nuro";
-    const words = prompt.split(' ').filter(w => w.length > 3);
+    // Smart Naming — extract multiple significant words for meaningful names
+    const allIntentKeywords = Object.values(INTENT_WEIGHTS).flatMap(d => d.keywords);
+    const docTypeKeywords = ['excel', 'sheet', 'spreadsheet', 'csv', 'word', 'doc', 'report', 'ppt', 'presentation', 'slide', 'powerpoint', 'table', 'data', 'document', 'file'];
+    const stopWords = [...FILLER_WORDS, 'the', 'a', 'an', 'for', 'and', 'with', 'about', 'this', 'that', 'from', 'into', 'on', 'in', 'of', 'to', 'my', 'our', 'me', 'we', 'it'];
+    const allFilterWords = new Set([...allIntentKeywords, ...docTypeKeywords, ...stopWords]);
+
+    const words = prompt.split(/[\s,]+/)
+        .map(w => w.replace(/[^a-zA-Z0-9]/g, ''))
+        .filter(w => w.length > 2 && !allFilterWords.has(w.toLowerCase()));
+
+    // Take up to 3 significant words for the name
+    let nameParts = [];
     if (words.length > 0) {
-        // Find a significant word that isn't a keyword
-        const allKeywords = Object.values(INTENT_WEIGHTS).flatMap(d => d.keywords);
-        const significant = words.find(w => !allKeywords.includes(w.toLowerCase()));
-        if (significant) {
-            nameHint = significant.charAt(0).toUpperCase() + significant.slice(1).toLowerCase();
-        }
+        nameParts = words.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
     }
+
+    // Fallback to category if no significant words found
+    if (nameParts.length === 0) {
+        nameParts = [category !== 'General' ? category : 'Document'];
+    }
+
+    // Add date stamp for uniqueness
+    const now = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dateStamp = `${months[now.getMonth()]}${now.getDate()}`;
+    nameParts.push(dateStamp);
 
     const ext = type === 'ppt' ? '.pptx' : (type === 'excel' ? '.xlsx' : '.docx');
 
     return {
-        name: `${nameHint}_${dateStr}${ext}`,
+        name: `${nameParts.join('_')}${ext}`,
         category,
         purpose: `Hybrid ${category} execution`,
         entities: [],

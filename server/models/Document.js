@@ -16,6 +16,14 @@ const DocumentSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
+    description: {
+        type: String,
+        default: ''
+    },
+    keywords: [{
+        type: String,
+        trim: true
+    }],
     type: {
         type: String,
         default: 'generic'

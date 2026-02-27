@@ -116,6 +116,36 @@ export const docsAgentService = {
     },
 
     /**
+     * Update document metadata (name, description, keywords)
+     */
+    updateDocumentMetadata: async (docId, { name, description, keywords }) => {
+        try {
+            const response = await api.put(`/docs-agent/documents/${docId}`, {
+                name,
+                description,
+                keywords
+            });
+            return response.data;
+        } catch (error) {
+            console.error("Failed to update document metadata:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Search documents and projects by keyword, name, or description
+     */
+    searchDocuments: async (query) => {
+        try {
+            const response = await api.get(`/docs-agent/documents/search?q=${encodeURIComponent(query)}`);
+            return response.data;
+        } catch (error) {
+            console.error("Failed to search documents:", error);
+            return { documents: [], projects: [] };
+        }
+    },
+
+    /**
      * Semantic Metadata Extraction
      * Parsed by LLM to establish document execution context
      */
@@ -164,9 +194,9 @@ export const docsAgentService = {
     /**
      * Manually trigger an automated save to local workspace
      */
-    automateLocalSave: async (document, projectName) => {
+    automateLocalSave: async (document, projectName, format) => {
         try {
-            const response = await api.post('/docs-agent/automate-save', { document, projectName });
+            const response = await api.post('/docs-agent/automate-save', { document, projectName, format });
             return response.data;
         } catch (error) {
             console.error("Automated save failed:", error);
@@ -185,6 +215,45 @@ export const docsAgentService = {
         } catch (error) {
             console.error("Failed to open workspace:", error);
             return null;
+        }
+    },
+
+    /**
+     * Trigger native folder picker on backend
+     */
+    pickWorkspace: async () => {
+        try {
+            const response = await api.post('/docs-agent/workspaces/pick');
+            return response.data; // { path, cancelled }
+        } catch (error) {
+            console.error("Failed to pick workspace:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get real-time file tree from a custom path
+     */
+    getWorkspaceTree: async (path) => {
+        try {
+            const response = await api.get(`/docs-agent/workspaces/tree?path=${encodeURIComponent(path)}`);
+            return response.data;
+        } catch (error) {
+            console.error("Failed to fetch workspace tree:", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get recent files from a custom path
+     */
+    getRecentWorkspaceFiles: async (path) => {
+        try {
+            const response = await api.get(`/docs-agent/workspaces/recent?path=${encodeURIComponent(path)}`);
+            return response.data;
+        } catch (error) {
+            console.error("Failed to fetch recent files:", error);
+            throw error;
         }
     }
 };

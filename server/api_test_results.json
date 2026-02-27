@@ -1,0 +1,18 @@
+{
+  "Gemini": {
+    "status": "Failed",
+    "detail": "models/gemini-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods."
+  },
+  "OpenAI": {
+    "status": "Quota/Billing Issue",
+    "detail": "You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors."
+  },
+  "xAI": {
+    "status": "Missing",
+    "error": null
+  },
+  "Anthropic": {
+    "status": "Missing",
+    "error": null
+  }
+}

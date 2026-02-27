@@ -60,7 +60,6 @@ export default function CollabConclusionPage() {
                 backdropFilter: 'blur(10px)',
                 padding: '40px',
                 borderRadius: '20px',
-                borderRadius: '20px',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
                 boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
                 position: 'relative'

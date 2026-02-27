@@ -7,7 +7,7 @@ import { useNuroCore } from './NuroCoreContext';
 const SocketContext = createContext();
 
 // Use environment variable or fallback for socket URL
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 export const SocketProvider = ({ children }) => {
     const { user, token } = useAuth();

@@ -1,0 +1,9 @@
+{
+    "ignore": [
+        "api_test_results.json",
+        "debug_output.txt",
+        "diagnostic_results.json",
+        "*.log",
+        "tmp/*"
+    ]
+}

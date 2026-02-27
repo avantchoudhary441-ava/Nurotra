@@ -125,9 +125,11 @@ const getDocuments = async (req, res) => {
  */
 const createDocument = async (req, res) => {
     try {
-        const { name, type, content, projectId, metadata } = req.body;
+        const { name, type, content, projectId, metadata, description, keywords } = req.body;
         const document = new Document({
             name,
+            description: description || '',
+            keywords: Array.isArray(keywords) ? keywords.map(k => k.trim()).filter(Boolean) : [],
             type,
             content,
             rawStructure: req.body.rawStructure,
@@ -150,7 +152,7 @@ const createDocument = async (req, res) => {
 const updateDocument = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, content, rawStructure, metadata } = req.body;
+        const { name, content, rawStructure, metadata, description, keywords } = req.body;
 
         const document = await Document.findOne({ _id: id, userId: req.user._id });
         if (!document) {
@@ -159,6 +161,8 @@ const updateDocument = async (req, res) => {
 
         // Update only the fields that are provided
         if (name) document.name = name;
+        if (description !== undefined) document.description = description;
+        if (keywords !== undefined) document.keywords = Array.isArray(keywords) ? keywords.map(k => k.trim()).filter(Boolean) : [];
         if (content !== undefined) document.content = content;
         if (rawStructure) document.rawStructure = rawStructure;
         if (metadata) document.metadata = { ...document.metadata, ...metadata };
@@ -221,12 +225,12 @@ const structureVoicePrompt = async (req, res) => {
  */
 const automateLocalSave = async (req, res) => {
     try {
-        const { document, projectName } = req.body;
+        const { document, projectName, format } = req.body;
         if (!document) {
             return res.status(400).json({ message: "Document data required" });
         }
 
-        const result = await localExportService.automateLocalSave(document, projectName);
+        const result = await localExportService.automateLocalSave(document, projectName, req.user.name, format);
         res.json({ message: "Synced to workspace successfully", path: result.path });
     } catch (error) {
         console.error("Automated Save Error:", error);
@@ -241,11 +245,106 @@ const automateLocalSave = async (req, res) => {
 const openWorkspace = async (req, res) => {
     try {
         const { projectName } = req.body;
-        await localExportService.openWorkspace(projectName);
+        await localExportService.openWorkspace(projectName, req.user.name);
         res.json({ message: "Workspace opened in explorer" });
     } catch (error) {
         console.error("Open Workspace Error:", error);
         res.status(500).json({ message: "Failed to open workspace folder" });
+    }
+};
+
+/**
+ * Search documents and projects by keyword, name, or description
+ * Route: GET /api/docs-agent/documents/search?q=<query>
+ */
+const searchDocuments = async (req, res) => {
+    try {
+        const { q } = req.query;
+        if (!q || q.trim().length < 2) {
+            return res.json({ documents: [], projects: [] });
+        }
+
+        const searchTerm = q.trim();
+        const searchRegex = new RegExp(searchTerm, 'i');
+
+        // Search documents by name, description, or keywords
+        const documents = await Document.find({
+            userId: req.user._id,
+            $or: [
+                { name: searchRegex },
+                { description: searchRegex },
+                { keywords: searchRegex }
+            ]
+        }).sort({ updatedAt: -1 }).limit(10);
+
+        // Search projects by name, motive, or keywords
+        const projects = await Project.find({
+            userId: req.user._id,
+            $or: [
+                { name: searchRegex },
+                { motive: searchRegex },
+                { keywords: searchRegex }
+            ]
+        }).sort({ updatedAt: -1 }).limit(10);
+
+        res.json({
+            documents: documents.map(d => ({ ...d._doc, id: d._id, matchType: 'document' })),
+            projects: projects.map(p => ({ ...p._doc, id: p._id, matchType: 'project' }))
+        });
+    } catch (error) {
+        console.error("Search Documents Error:", error);
+        res.status(500).json({ message: "Failed to search documents" });
+    }
+};
+
+/**
+ * Trigger Folder Picker and Register Workspace
+ * Route: POST /api/docs-agent/workspaces/pick
+ */
+const pickAndRegisterWorkspace = async (req, res) => {
+    try {
+        const path = await localExportService.pickFolder();
+        if (!path) {
+            return res.json({ cancelled: true });
+        }
+        res.json({ path });
+    } catch (error) {
+        console.error("Pick Workspace Error:", error);
+        res.status(500).json({ message: "Failed to open folder picker" });
+    }
+};
+
+/**
+ * Get Workspace File Tree
+ * Route: GET /api/docs-agent/workspaces/tree?path=<path>
+ */
+const getWorkspaceTree = async (req, res) => {
+    try {
+        const { path } = req.query;
+        if (!path) return res.status(400).json({ message: "Path is required" });
+
+        const tree = localExportService.scanDirectory(path);
+        res.json(tree);
+    } catch (error) {
+        console.error("Get Tree Error:", error);
+        res.status(500).json({ message: "Failed to scan directory" });
+    }
+};
+
+/**
+ * Get Recent Workspace Files
+ * Route: GET /api/docs-agent/workspaces/recent?path=<path>
+ */
+const getRecentWorkspaceFiles = async (req, res) => {
+    try {
+        const { path } = req.query;
+        if (!path) return res.status(400).json({ message: "Path is required" });
+
+        const recent = localExportService.getRecentFiles(path);
+        res.json(recent);
+    } catch (error) {
+        console.error("Get Recent Error:", error);
+        res.status(500).json({ message: "Failed to fetch recent files" });
     }
 };
 
@@ -256,8 +355,12 @@ module.exports = {
     getDocuments,
     createDocument,
     updateDocument,
+    searchDocuments,
     extractMetadata,
     structureVoicePrompt,
     automateLocalSave,
-    openWorkspace
+    openWorkspace,
+    pickAndRegisterWorkspace,
+    getWorkspaceTree,
+    getRecentWorkspaceFiles
 };

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Paperclip,
     Mic,
@@ -8,7 +8,10 @@ import {
     Play,
     X,
     RotateCcw,
-    Undo
+    Undo,
+    Search,
+    FileText,
+    FolderOpen
 } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
@@ -26,7 +29,10 @@ const DocsChat = ({
     onRollback,
     pastConversations,
     onSelectHistory,
-    currentDoc
+    currentDoc,
+    allDocs,
+    onOpenDoc,
+    onOpenProject
 }) => {
     const [prompt, setPrompt] = useState('');
     const [isListening, setIsListening] = useState(false);
@@ -50,6 +56,59 @@ const DocsChat = ({
     const textareaRef = useRef(null);
     const fileInputRef = useRef(null);
     const messagesEndRef = useRef(null);
+    const searchTimerRef = useRef(null);
+
+    // Keyword search suggestions state
+    const [searchSuggestions, setSearchSuggestions] = useState({ documents: [], projects: [] });
+    const [showSuggestions, setShowSuggestions] = useState(false);
+
+    // Debounced search — client-side matching against allDocs + server fallback
+    const performSearch = useCallback((query) => {
+        if (!query || query.trim().length < 2) {
+            setSearchSuggestions({ documents: [], projects: [] });
+            setShowSuggestions(false);
+            return;
+        }
+
+        const q = query.trim().toLowerCase();
+
+        // Client-side matching first (instant)
+        if (allDocs && allDocs.length > 0) {
+            const matchedDocs = allDocs.filter(doc => {
+                const nameMatch = doc.name?.toLowerCase().includes(q);
+                const descMatch = doc.description?.toLowerCase().includes(q);
+                const kwMatch = Array.isArray(doc.keywords) && doc.keywords.some(kw => kw.toLowerCase().includes(q));
+                return nameMatch || descMatch || kwMatch;
+            }).slice(0, 8);
+
+            if (matchedDocs.length > 0) {
+                setSearchSuggestions({ documents: matchedDocs, projects: [] });
+                setShowSuggestions(true);
+                return;
+            }
+        }
+
+        // Server-side fallback for deeper search (projects + docs)
+        docsAgentService.searchDocuments(query.trim()).then(results => {
+            if (results.documents.length > 0 || results.projects.length > 0) {
+                setSearchSuggestions(results);
+                setShowSuggestions(true);
+            } else {
+                setShowSuggestions(false);
+            }
+        });
+    }, [allDocs]);
+
+    // Watch prompt changes for search
+    useEffect(() => {
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = setTimeout(() => {
+            performSearch(prompt);
+        }, 300);
+        return () => {
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
+    }, [prompt, performSearch]);
 
     useEffect(() => {
         if (initialTrigger) {
@@ -99,6 +158,7 @@ const DocsChat = ({
         if (!prompt.trim()) return;
         const userPrompt = prompt.trim();
         setPrompt('');
+        setShowSuggestions(false);
 
         const userMsg = {
             id: Date.now(),
@@ -489,6 +549,54 @@ const DocsChat = ({
             </div>
 
             <div className="input-section">
+                {/* Keyword Search Suggestions */}
+                {showSuggestions && (searchSuggestions.documents.length > 0 || searchSuggestions.projects.length > 0) && (
+                    <div className="doc-search-suggestions">
+                        <div className="suggestions-header">
+                            <Search size={12} />
+                            <span>Matching docs & projects</span>
+                            <button className="suggestions-close" onClick={() => setShowSuggestions(false)}>
+                                <X size={12} />
+                            </button>
+                        </div>
+                        <div className="suggestions-list">
+                            {searchSuggestions.documents.map((doc) => (
+                                <button
+                                    key={`doc-${doc.id || doc._id}`}
+                                    className="suggestion-chip doc-chip"
+                                    onClick={() => {
+                                        if (onOpenDoc) onOpenDoc(doc);
+                                        setShowSuggestions(false);
+                                        setPrompt('');
+                                    }}
+                                    title={doc.description || doc.name}
+                                >
+                                    <FileText size={12} />
+                                    <span className="chip-name">{doc.name}</span>
+                                    {doc.keywords && doc.keywords.length > 0 && (
+                                        <span className="chip-keywords">{doc.keywords.slice(0, 2).join(', ')}</span>
+                                    )}
+                                </button>
+                            ))}
+                            {searchSuggestions.projects.map((project) => (
+                                <button
+                                    key={`proj-${project.id || project._id}`}
+                                    className="suggestion-chip project-chip"
+                                    onClick={() => {
+                                        if (onOpenProject) onOpenProject(project);
+                                        setShowSuggestions(false);
+                                        setPrompt('');
+                                    }}
+                                    title={project.motive || project.name}
+                                >
+                                    <FolderOpen size={12} />
+                                    <span className="chip-name">{project.name}</span>
+                                    <span className="chip-type">Project</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 <div className="prompt-box">
                     <textarea
                         ref={textareaRef}

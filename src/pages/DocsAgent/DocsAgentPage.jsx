@@ -17,6 +17,8 @@ const DocsAgentPage = () => {
     const [standaloneDocs, setStandaloneDocs] = useState([]);
     const [currentDoc, setCurrentDoc] = useState(null); // Active document in editor
     const [currentProject, setCurrentProject] = useState(null); // Active project context
+    const [currentWorkspace, setCurrentWorkspace] = useState(localStorage.getItem('docs_agent_workspace') || null);
+    const [centerView, setCenterView] = useState('entry'); // entry, dashboard, execution
 
     const fetchInitialData = async () => {
         try {
@@ -135,9 +137,112 @@ const DocsAgentPage = () => {
     const convertToMarkdown = (generation) => {
         const { type, data } = generation;
         if (type === 'word') {
-            let md = `# ${data.title || 'Untitled Document'}\n\n`;
+            let md = '';
+
+            // Document-level banner
+            if (data.watermark) md += `> ⚠️ **Watermark:** "${data.watermark}"\n\n`;
+            if (data.header) md += `> 📄 **Header:** ${data.header}\n`;
+            if (data.footer) md += `> 📎 **Footer:** ${data.footer}\n`;
+            if (data.watermark || data.header || data.footer) md += '\n---\n\n';
+            if (data.protection?.readOnly) md += `> 🔒 **Document Protection:** Read-only (form fields only)\n\n`;
+
+            md += `# ${data.title || 'Untitled Document'}\n\n`;
+
+            const renderText = (t) => (t || '').replace(/{{([^}]+)}}/g, '**[$1]**');
+
+            const calcPreview = (values, operation) => {
+                const nums = values.map(v => parseFloat(v)).filter(n => !isNaN(n));
+                if (nums.length === 0) return '-';
+                switch ((operation || '').toUpperCase()) {
+                    case 'SUM': return nums.reduce((a, b) => a + b, 0).toLocaleString();
+                    case 'AVERAGE': return (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2);
+                    case 'MIN': return Math.min(...nums).toLocaleString();
+                    case 'MAX': return Math.max(...nums).toLocaleString();
+                    default: return nums.reduce((a, b) => a + b, 0).toLocaleString();
+                }
+            };
+
             data.sections?.forEach(sec => {
-                md += `## ${sec.heading}\n${sec.content}\n\n`;
+                const level = sec.level || 1;
+                const headingPrefix = '#'.repeat(level + 1);
+                if (sec.heading && sec.heading.trim()) md += `${headingPrefix} ${sec.heading}\n\n`;
+
+                if (sec.blocks && Array.isArray(sec.blocks)) {
+                    sec.blocks.forEach(block => {
+                        switch (block.type) {
+                            case 'cover_page':
+                                md += `---\n`;
+                                md += `\n<div align="center">\n\n`;
+                                md += `# ${renderText(block.title || data.title || 'Report Title')}\n\n`;
+                                if (block.subtitle) md += `*${renderText(block.subtitle)}*\n\n`;
+                                if (block.company) md += `**${renderText(block.company)}**\n\n`;
+                                if (block.date) md += `${renderText(block.date)}\n\n`;
+                                if (block.logo_url) md += `![Logo](${block.logo_url})\n\n`;
+                                md += `</div>\n\n---\n\n`;
+                                break;
+                            case 'paragraph':
+                                md += `${renderText(block.text)}\n\n`;
+                                break;
+                            case 'bullet':
+                                (block.items || []).forEach(item => { md += `• ${renderText(item)}\n`; });
+                                md += '\n';
+                                break;
+                            case 'numbered':
+                                (block.items || []).forEach((item, i) => { md += `${i + 1}. ${renderText(item)}\n`; });
+                                md += '\n';
+                                break;
+                            case 'subheading':
+                                md += `${'#'.repeat((block.level || 2) + 1)} ${block.text}\n\n`;
+                                break;
+                            case 'table':
+                                if (block.headers) {
+                                    md += `| ${block.headers.join(' | ')} |\n`;
+                                    md += `| ${block.headers.map(() => '---').join(' | ')} |\n`;
+                                    (block.rows || []).forEach(row => {
+                                        const cells = Array.isArray(row) ? row : Object.values(row);
+                                        md += `| ${cells.map(c => renderText(String(c || ''))).join(' | ')} |\n`;
+                                    });
+                                    md += '\n';
+                                }
+                                break;
+                            case 'formula_table': {
+                                const hasFormulas = block.formulas && block.formulas.length > 0;
+                                const allHeaders = hasFormulas ? [...block.headers, ...block.formulas.map(f => `**${f.column}**`)] : block.headers;
+                                md += `| ${allHeaders.join(' | ')} |\n`;
+                                md += `| ${allHeaders.map(() => '---').join(' | ')} |\n`;
+                                (block.rows || []).forEach(row => {
+                                    const cells = Array.isArray(row) ? row : Object.values(row);
+                                    const formulaCells = hasFormulas ? block.formulas.map(f => calcPreview(cells.slice(1), f.operation)) : [];
+                                    md += `| ${[...cells, ...formulaCells].map(c => renderText(String(c ?? ''))).join(' | ')} |\n`;
+                                });
+                                if (hasFormulas) {
+                                    const allRows = (block.rows || []).map(r => Array.isArray(r) ? r : Object.values(r));
+                                    const totalCells = block.formulas.map(f => `**${calcPreview(allRows.map(r => r.slice(1)).flat(), f.operation)}**`);
+                                    md += `| **TOTAL/AVG** | ${block.headers.slice(1).map(() => '').join(' | ')} | ${totalCells.join(' | ')} |\n`;
+                                }
+                                md += '\n';
+                                break;
+                            }
+                            case 'page_break':
+                                md += `\n---\n*— Page Break —*\n---\n\n`;
+                                break;
+                            case 'image':
+                                if (block.url) {
+                                    md += `![${block.caption || 'Image'}](${block.url})\n`;
+                                } else {
+                                    md += `> 🖼️ **[Image Placeholder: ${block.caption || 'Insert image here'}]** *(${block.width || 400}×${block.height || 250}px)*\n\n`;
+                                }
+                                break;
+                            case 'watermark':
+                                md += `> ⚠️ **Watermark:** "${block.text}"\n\n`;
+                                break;
+                            default:
+                                if (block.text) md += `${renderText(block.text)}\n\n`;
+                        }
+                    });
+                } else if (sec.content) {
+                    md += `${sec.content}\n\n`;
+                }
             });
             return md;
         }
@@ -168,6 +273,7 @@ const DocsAgentPage = () => {
         }
         return 'Empty Content';
     };
+
 
     const runDetailedExecution = async (intentData) => {
         setIsSidebarSyncing(true);
@@ -405,6 +511,11 @@ const DocsAgentPage = () => {
         try {
             const newProject = await docsAgentService.createProject(project);
             setProjects(prev => [newProject, ...prev]);
+            setCurrentProject(newProject);
+            setExecutionState(prev => ({
+                ...prev,
+                status: 'awaiting_input'
+            }));
             setChatTrigger({
                 id: Date.now(),
                 text: `create the document under the ${project.name} with the details like-`,
@@ -419,31 +530,41 @@ const DocsAgentPage = () => {
         }
     };
 
-    const handleDocCreated = async (doc) => {
-        // For fast creation, we might want to extract metadata first
-        setIsSidebarSyncing(true);
-        try {
-            const meta = await docsAgentService.extractMetadata(doc.name || 'document creation');
-            const newDoc = await docsAgentService.createDocument({
-                name: doc.name || meta.name,
-                type: doc.type || 'word',
-                content: doc.content || '# New Document\nStart typing here...',
-                metadata: meta
-            });
-            setStandaloneDocs(prev => [newDoc, ...prev]);
-            setCurrentDoc(newDoc);
-
-            setChatTrigger({
-                id: Date.now(),
-                text: `create the document with the details like-`,
-                type: 'single'
-            });
-            setActiveMobileScreen('chat');
-        } catch (error) {
-            console.error("Failed to create document:", error);
-        } finally {
-            setIsSidebarSyncing(false);
+    const handleDocCreated = async () => {
+        // If no workspace, ask to pick one first
+        if (!currentWorkspace) {
+            const result = await docsAgentService.pickWorkspace();
+            if (result && result.path) {
+                setCurrentWorkspace(result.path);
+                localStorage.setItem('docs_agent_workspace', result.path);
+                setCenterView('dashboard');
+            }
+            return;
         }
+
+        // If workspace exists, go to dashboard
+        setCenterView('dashboard');
+    };
+
+    const handlePickWorkspace = async () => {
+        const result = await docsAgentService.pickWorkspace();
+        if (result && result.path) {
+            setCurrentWorkspace(result.path);
+            localStorage.setItem('docs_agent_workspace', result.path);
+            setCenterView('dashboard');
+        }
+    };
+
+    const handleOpenFile = (file) => {
+        // In a real IDE, we'd read the content here
+        // For now, we mock it or use the backend 'read' if implemented
+        openDocument({
+            id: file.path,
+            name: file.name,
+            type: file.type,
+            content: `# ${file.name}\n\n[Content loaded from ${file.path}]`
+        });
+        setCenterView('execution');
     };
 
     const openDocument = (doc) => {
@@ -463,6 +584,33 @@ const DocsAgentPage = () => {
         setCurrentDoc(null); // Clear active doc to show project overview/entry
         setAgentStatus('Viewing Project');
         setExecutionState(prev => ({ ...prev, status: 'idle' }));
+    };
+
+    // Compute allDocs for search (standalone + project docs)
+    const allDocs = [
+        ...standaloneDocs,
+        ...projects.flatMap(p => (p.documents || []).map(d => ({ ...d, projectName: p.name })))
+    ];
+
+    // Handle doc metadata update from edit modal
+    const handleUpdateDoc = (updatedDoc) => {
+        // Update standalone docs
+        setStandaloneDocs(prev =>
+            prev.map(d => (String(d.id || d._id) === String(updatedDoc.id || updatedDoc._id) ? { ...d, ...updatedDoc } : d))
+        );
+        // Update project docs
+        setProjects(prev =>
+            prev.map(p => ({
+                ...p,
+                documents: (p.documents || []).map(d =>
+                    String(d.id || d._id) === String(updatedDoc.id || updatedDoc._id) ? { ...d, ...updatedDoc } : d
+                )
+            }))
+        );
+        // Update current doc if it's the one being edited
+        if (currentDoc && String(currentDoc.id || currentDoc._id) === String(updatedDoc.id || updatedDoc._id)) {
+            setCurrentDoc(prev => ({ ...prev, ...updatedDoc }));
+        }
     };
 
     const startResizingLeft = () => {
@@ -527,9 +675,12 @@ const DocsAgentPage = () => {
                     standaloneDocs={standaloneDocs}
                     onOpenDoc={openDocument}
                     onOpenProject={openProject}
+                    onUpdateDoc={handleUpdateDoc}
                     isSyncing={isSidebarSyncing}
                     activeDocId={currentDoc?.id}
                     activeProjectId={currentProject?.id}
+                    currentWorkspace={currentWorkspace}
+                    onPickWorkspace={handlePickWorkspace}
                 />
             </div>
 
@@ -544,13 +695,18 @@ const DocsAgentPage = () => {
                     executionState={executionState}
                     currentDoc={currentDoc}
                     liveUpdates={executionState.liveUpdates}
+                    centerView={centerView}
+                    currentWorkspace={currentWorkspace}
                     onProjectCreated={handleProjectCreated}
                     onDocCreated={handleDocCreated}
                     onApprovePlan={approvePlan}
                     onUpdateContent={(content) => setCurrentDoc(prev => ({ ...prev, content }))}
+                    onOpenFile={handleOpenFile}
+                    onPickWorkspace={handlePickWorkspace}
                     onCancelExecution={() => {
                         setExecutionState(prev => ({ ...prev, status: 'idle', plan: null }));
                         setAgentStatus('Ready');
+                        setCenterView('dashboard');
                     }}
                 />
             </div>
@@ -582,7 +738,10 @@ const DocsAgentPage = () => {
                     pastConversations={pastConversations}
                     onSelectHistory={handleSelectHistory}
                     currentDoc={currentDoc}
-                    currentProject={currentProject} // Pass project context
+                    currentProject={currentProject}
+                    allDocs={allDocs}
+                    onOpenDoc={openDocument}
+                    onOpenProject={openProject}
                 />
             </div>
         </div>
