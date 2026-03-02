@@ -1,5 +1,17 @@
 import api from './apiService';
 
+// Helper: trigger a browser file download from a blob response
+const triggerBlobDownload = (blob, fileName) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+};
+
 /**
  * Service for Docs Agent Cognitive Logic
  * Interfaces with the backend Gemini-powered LLM engine.
@@ -209,6 +221,39 @@ export const docsAgentService = {
         } catch (error) {
             console.error("Failed to open workspace:", error);
             return null;
+        }
+    },
+    /**
+     * Download a file from the cloud workspace by document ID.
+     * Triggers a real browser download.
+     */
+    downloadFile: async (documentId, fileName) => {
+        try {
+            const response = await api.get(`/workspace/download/${documentId}`, {
+                responseType: 'blob'
+            });
+            // Use Content-Disposition filename if available, else fall back
+            const contentDisposition = response.headers?.['content-disposition'] || '';
+            const match = contentDisposition.match(/filename="?([^"]+)"?/);
+            const finalName = match ? match[1] : (fileName || 'document');
+            triggerBlobDownload(response.data, finalName);
+            return { success: true };
+        } catch (error) {
+            console.error('Failed to download file:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * List all files in the cloud workspace for the current user.
+     */
+    listWorkspace: async () => {
+        try {
+            const response = await api.get('/workspace/list');
+            return response.data;
+        } catch (error) {
+            console.error('Failed to list workspace:', error);
+            return [];
         }
     }
 };

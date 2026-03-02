@@ -2,7 +2,7 @@ const Project = require("../models/Project");
 const Document = require("../models/Document");
 const aiService = require("../services/aiService");
 const intentEngine = require("../services/intentEngine");
-const localExportService = require("../services/localExportService");
+const { saveToCloud } = require("./workspaceController");
 
 /**
  * Process Docs Agent Query
@@ -227,7 +227,7 @@ const structureVoicePrompt = async (req, res) => {
 };
 
 /**
- * Automatically save document to local workspace
+ * Save document to cloud workspace (MongoDB)
  * Route: POST /api/docs-agent/automate-save
  */
 const automateLocalSave = async (req, res) => {
@@ -237,34 +237,33 @@ const automateLocalSave = async (req, res) => {
             return res.status(400).json({ message: "Document data required" });
         }
 
-        const result = await localExportService.automateLocalSave(document, projectName, req.user.name, format);
-        res.json({ message: "Synced to workspace successfully", path: result.path });
+        // Resolve documentId — support both id and _id fields
+        const documentId = document.id || document._id;
+        if (!documentId) {
+            return res.status(400).json({ message: "Document must have an id to be saved to cloud workspace" });
+        }
+
+        // Find projectId from name if provided
+        let projectId = null;
+        if (projectName) {
+            const project = await Project.findOne({ name: projectName, userId: req.user._id });
+            if (project) projectId = project._id;
+        }
+
+        const result = await saveToCloud(document, req.user._id, documentId, projectId, format);
+        res.json({ message: "Saved to cloud workspace", fileName: result.fileName });
     } catch (error) {
-        console.error("Automated Save Error:", error);
-        if (error.stack) console.error(error.stack);
-        console.error("Data that caused error:", JSON.stringify({
-            documentName: req.body.document?.name,
-            documentType: req.body.document?.type,
-            projectName: req.body.projectName,
-            format: req.body.format
-        }, null, 2));
-        res.status(500).json({ message: "Failed to sync to workspace", error: error.message });
+        console.error("Cloud Save Error:", error);
+        res.status(500).json({ message: "Failed to save to cloud workspace", error: error.message });
     }
 };
 
 /**
- * Open local workspace folder in explorer
+ * Open workspace — now returns cloud file list (filesystem no longer used)
  * Route: POST /api/docs-agent/open-workspace
  */
 const openWorkspace = async (req, res) => {
-    try {
-        const { projectName } = req.body;
-        await localExportService.openWorkspace(projectName, req.user.name);
-        res.json({ message: "Workspace opened in explorer" });
-    } catch (error) {
-        console.error("Open Workspace Error:", error);
-        res.status(500).json({ message: "Failed to open workspace folder" });
-    }
+    res.json({ message: "Files are stored in your cloud workspace. Use /api/workspace/list to browse them." });
 };
 
 /**

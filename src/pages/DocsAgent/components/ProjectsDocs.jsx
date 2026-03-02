@@ -14,39 +14,36 @@ const ProjectsDocs = ({
     activeProjectId // New prop
 }) => {
     const [expandedProjects, setExpandedProjects] = useState([1]);
-    const [syncing, setSyncing] = useState(false);
-    const [localSyncStatus, setLocalSyncStatus] = useState(null);
+    const [downloading, setDownloading] = useState(null); // docId currently downloading
+    const [downloadStatus, setDownloadStatus] = useState(null); // 'success' | 'error' | null
     const [editingDoc, setEditingDoc] = useState(null);
 
     // Find the active document object
     const allDocs = [...standaloneDocs, ...projects.flatMap(p => p.documents)];
     const activeDoc = allDocs.find(d => String(d.id) === String(activeDocId));
 
-    const handleLocalSync = async (doc, type) => {
+    // ─── Cloud download handler ─────────────────────────────────────────────
+    const handleDownload = async (doc) => {
         if (!doc) return;
-        setLocalSyncStatus('syncing');
-
+        const docId = doc.id || doc._id;
+        setDownloading(docId);
+        setDownloadStatus(null);
         try {
-            // Find project name for folder nesting
-            let projectName = "";
-            const project = projects.find(p => p.documents.some(d => d.id === doc.id));
-            if (project) projectName = project.name;
-
-            const docToSync = { ...doc, type: type };
-            await docsAgentService.automateLocalSave(docToSync, projectName);
-
-            setLocalSyncStatus('success');
-            setTimeout(() => setLocalSyncStatus(null), 6000);
+            await docsAgentService.downloadFile(docId, doc.name);
+            setDownloadStatus('success');
         } catch (e) {
-            console.error("Workspace Sync failed:", e);
-            setLocalSyncStatus('error');
-            setTimeout(() => setLocalSyncStatus(null), 4000);
+            console.error('Download failed:', e);
+            setDownloadStatus('error');
+        } finally {
+            setDownloading(null);
+            setTimeout(() => setDownloadStatus(null), 4000);
         }
     };
 
-    const handleExportXLSX = (doc = activeDoc) => handleLocalSync(doc, 'excel');
-    const handleExportWord = (doc = activeDoc) => handleLocalSync(doc, 'word');
-    const handleExportPPT = (doc = activeDoc) => handleLocalSync(doc, 'ppt');
+    // Legacy alias for format chips — always downloads the active doc
+    const handleExportWord = () => handleDownload(activeDoc);
+    const handleExportXLSX = () => handleDownload(activeDoc);
+    const handleExportPPT = () => handleDownload(activeDoc);
 
     const handleCopyToClipboard = () => {
         if (activeDoc?.content) {
@@ -55,9 +52,9 @@ const ProjectsDocs = ({
         }
     };
 
-    const handleSync = () => {
-        setSyncing(true);
-        setTimeout(() => setSyncing(false), 2000);
+    const handleSync = async () => {
+        // Refresh is handled automatically — just give visual feedback
+        setDownloadStatus(null);
     };
 
     const toggleProject = (projectId) => {
@@ -85,11 +82,11 @@ const ProjectsDocs = ({
                 <h2>Projects & Docs</h2>
                 <div className="header-controls">
                     <button
-                        className={`new-project-btn ${syncing ? 'spinning' : ''}`}
+                        className="new-project-btn"
                         onClick={handleSync}
                         title="Sync with cloud"
                     >
-                        <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                        <RefreshCw size={14} />
                     </button>
                     <button className="new-project-btn">
                         <FolderOpen size={14} />
@@ -174,13 +171,14 @@ const ProjectsDocs = ({
                                                     className="doc-mini-action"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        if (doc.type === 'excel') handleExportXLSX(doc);
-                                                        else if (doc.type === 'word') handleExportWord(doc);
-                                                        else if (doc.type === 'ppt') handleExportPPT(doc);
+                                                        handleDownload(doc);
                                                     }}
-                                                    title="Quick Export"
+                                                    title="Download from Cloud"
+                                                    disabled={downloading === (doc.id || doc._id)}
                                                 >
-                                                    <Download size={12} />
+                                                    {downloading === (doc.id || doc._id)
+                                                        ? <RefreshCw size={12} className="animate-spin" />
+                                                        : <Download size={12} />}
                                                 </button>
                                                 {activeDocId === doc.id && isSyncing && (
                                                     <RefreshCw size={10} className="animate-spin doc-sync-icon" />
@@ -226,13 +224,14 @@ const ProjectsDocs = ({
                                         className="doc-mini-action"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (doc.type === 'excel') handleExportXLSX(doc);
-                                            else if (doc.type === 'word') handleExportWord(doc);
-                                            else if (doc.type === 'ppt') handleExportPPT(doc);
+                                            handleDownload(doc);
                                         }}
-                                        title="Export"
+                                        title="Download from Cloud"
+                                        disabled={downloading === (doc.id || doc._id)}
                                     >
-                                        <Download size={12} />
+                                        {downloading === (doc.id || doc._id)
+                                            ? <RefreshCw size={12} className="animate-spin" />
+                                            : <Download size={12} />}
                                     </button>
                                     {activeDocId === doc.id && isSyncing && (
                                         <RefreshCw size={10} className="animate-spin doc-sync-icon" />
@@ -284,28 +283,13 @@ const ProjectsDocs = ({
                     </div>
                 </div>
 
-                {/* Workspace Sync Notification */}
-                {localSyncStatus && (
-                    <div className={`sync-notification sidebar-sync ${localSyncStatus}`}>
-                        {localSyncStatus === 'syncing' ? (
-                            <><RefreshCw size={12} className="animate-spin" /> Syncing...</>
-                        ) : localSyncStatus === 'success' ? (
-                            <span>Saved to <strong
-                                className="clickable-path"
-                                onClick={() => {
-                                    const activeDoc = allDocs.find(d => String(d.id) === String(activeDocId));
-                                    let projectName = "";
-                                    if (activeDoc) {
-                                        const project = projects.find(p => p.documents.some(d => String(d.id) === String(activeDoc.id)));
-                                        if (project) projectName = project.name;
-                                    }
-                                    console.log("[DocsAgent] Requesting sidebar folder open for project:", projectName || "Standalone");
-                                    docsAgentService.openWorkspace(projectName);
-                                }}
-                                title="Click to open folder"
-                            >nurotra workplace</strong></span>
+                {/* Cloud Download Notification */}
+                {downloadStatus && (
+                    <div className={`sync-notification sidebar-sync ${downloadStatus}`}>
+                        {downloadStatus === 'success' ? (
+                            <span>☁️ Downloaded from <strong>cloud workspace</strong></span>
                         ) : (
-                            <span>Sync failed</span>
+                            <span>❌ Download failed — try again</span>
                         )}
                     </div>
                 )}

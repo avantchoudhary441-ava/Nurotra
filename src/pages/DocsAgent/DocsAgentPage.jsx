@@ -204,6 +204,7 @@ const DocsAgentPage = () => {
                                 }
                                 break;
                             case 'formula_table': {
+                                if (!block.headers || !Array.isArray(block.headers)) break;
                                 const hasFormulas = block.formulas && block.formulas.length > 0;
                                 const allHeaders = hasFormulas ? [...block.headers, ...block.formulas.map(f => `**${f.column}**`)] : block.headers;
                                 md += `| ${allHeaders.join(' | ')} |\n`;
@@ -221,6 +222,7 @@ const DocsAgentPage = () => {
                                 md += '\n';
                                 break;
                             }
+
                             case 'styled_paragraph': {
                                 const style = block.style_name || 'Normal';
                                 const prefix = style.startsWith('Heading') ? '#'.repeat(parseInt(style.split(' ')[1]) + 1) + ' ' : '';

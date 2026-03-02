@@ -89,7 +89,9 @@ const DocsChat = ({
         }
 
         // Server-side fallback for deeper search (projects + docs)
-        docsAgentService.searchDocuments(query.trim()).then(results => {
+        // Cap query to 100 chars to prevent 500 when full doc content is in the prompt
+        const serverQuery = query.trim().substring(0, 100);
+        docsAgentService.searchDocuments(serverQuery).then(results => {
             if (results.documents.length > 0 || results.projects.length > 0) {
                 setSearchSuggestions(results);
                 setShowSuggestions(true);
