@@ -241,7 +241,14 @@ const automateLocalSave = async (req, res) => {
         res.json({ message: "Synced to workspace successfully", path: result.path });
     } catch (error) {
         console.error("Automated Save Error:", error);
-        res.status(500).json({ message: "Failed to sync to workspace" });
+        if (error.stack) console.error(error.stack);
+        console.error("Data that caused error:", JSON.stringify({
+            documentName: req.body.document?.name,
+            documentType: req.body.document?.type,
+            projectName: req.body.projectName,
+            format: req.body.format
+        }, null, 2));
+        res.status(500).json({ message: "Failed to sync to workspace", error: error.message });
     }
 };
 

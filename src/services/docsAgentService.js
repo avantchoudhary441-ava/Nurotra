@@ -15,8 +15,8 @@ export const docsAgentService = {
         const p = prompt.toLowerCase();
         if (p.includes('undo') || p.includes('rollback') || p.includes('pause') || p.includes('stop')) return 'CONTROL';
         if (p.includes('open') || p.includes('show') || p.includes('go to')) return 'NAVIGATE';
-        if (p.includes('change') || p.includes('rewrite') || p.includes('add') || p.includes('insert')) return 'MODIFY';
-        if (p.includes('create') || p.includes('make') || p.includes('generate')) return 'CREATE';
+        if (p.includes('change') || p.includes('rewrite') || p.includes('add') || p.includes('insert') || p.includes('update') || p.includes('modify') || p.includes('fix')) return 'MODIFY';
+        if (p.includes('create') || p.includes('make') || p.includes('generate') || p.includes('prepare') || p.includes('draft') || p.includes('write') || p.includes('compose')) return 'CREATE';
         return 'QUERY';
     },
 

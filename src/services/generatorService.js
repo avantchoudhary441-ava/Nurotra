@@ -324,6 +324,55 @@ export const generateWordDoc = async (data) => {
                 if (sec.blocks && Array.isArray(sec.blocks)) {
                     for (const block of sec.blocks) {
                         switch (block.type) {
+                            case 'styled_paragraph': {
+                                const s = block.style || {};
+                                const styleName = block.style_name || "Normal";
+                                const runs = parseTextWithPlaceholders(block.text, s);
+                                docChildren.push(new Paragraph({
+                                    children: runs,
+                                    style: styleName,
+                                    alignment: getAlignment(s.align),
+                                    spacing: { after: 120 }
+                                }));
+                                break;
+                            }
+                            case 'author_section': {
+                                docChildren.push(new Paragraph({
+                                    children: [
+                                        new TextRun({ text: block.author || "Contributor", bold: true, color: "2F4F8F", size: 24 }),
+                                        ...(block.role ? [new TextRun({ text: ` (${block.role})`, italics: true, size: 20 })] : [])
+                                    ],
+                                    spacing: { before: 200, after: 100 }
+                                }));
+                                // Recursively process internal blocks if any
+                                if (block.blocks && Array.isArray(block.blocks)) {
+                                    // Note: Simplified for now, just append as direct children
+                                    for (const subBlock of block.blocks) {
+                                        // Handle basic paragraph for subblocks
+                                        if (subBlock.type === 'paragraph') {
+                                            docChildren.push(new Paragraph({
+                                                children: parseTextWithPlaceholders(subBlock.text, subBlock.style || {}),
+                                                spacing: { after: 100 }
+                                            }));
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                            case 'toc': {
+                                docChildren.push(new Paragraph({
+                                    text: block.title || "Table of Contents",
+                                    heading: HeadingLevel.HEADING_1,
+                                    spacing: { after: 200 }
+                                }));
+                                // For now, we'll render a placeholder paragraph as docx library 
+                                // TOC generation requires complex field codes or post-processing.
+                                docChildren.push(new Paragraph({
+                                    children: [new TextRun({ text: "[Table of Contents will be generated automatically in MS Word]", italics: true, color: "888888" })],
+                                    spacing: { after: 200 }
+                                }));
+                                break;
+                            }
                             case 'paragraph': {
                                 const style = block.style || {};
                                 const runs = parseTextWithPlaceholders(block.text, style);
