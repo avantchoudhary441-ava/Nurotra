@@ -424,250 +424,86 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         const metadata = preParsed?.metadata || {};
         const risk = preParsed?.risk || { isHighRisk: false };
         const currentDoc = preParsed?.currentDoc || null;
-        const advancedOps = preParsed?.advancedOps || []; // NEW: Advanced operation codes
-        // Determine document type from user prompt (via intent engine) — NOT from AI-generated filename,
-        // because that creates a self-fulfilling loop where a wrong filename locks in the wrong template.
-        const { detectDocType } = require('./intentEngine');
+        const advancedOps = preParsed?.advancedOps || [];
+
+        const { detectDocType, detectLength } = require('./intentEngine');
         const { type: docType } = detectDocType(prompt);
+        const lengthPref = detectLength(prompt);
 
         // =====================================================================
         // ADVANCED WORD OPERATIONS: Buildable Prompt Blocks
-        // Only injected when the intent engine has detected they are needed.
-        // This keeps simple prompts fast and clean.
         // =====================================================================
         const buildAdvancedWordFeatures = (ops) => {
             if (!ops || ops.length === 0) return '';
-
-            let block = `\n        ADVANCED WORD FEATURES — ACTIVE FOR THIS REQUEST:\n        You have detected advanced operations in the user's prompt. You MUST use the following special block types where appropriate:\n`;
-
+            let block = `\n        ADVANCED WORD FEATURES — ACTIVE FOR THIS REQUEST:\n`;
             if (ops.includes('MULTI_AUTHOR_MERGE')) {
                 block += `
         --- MULTI-AUTHOR & COLLABORATION ---
         Use "author_section" blocks to attribute each section to its contributor.
-        Use "revision_log" to show change history at the end of the document.
-        Use "protection" with mode "tracked_changes" to simulate track-changes mode.
-
-        BLOCK SCHEMAS:
-        { "type": "author_section", "author": "Dr. Ananya Rao", "institution": "IIT Delhi", "role": "Lead Contributor", "heading": "Section Title", "blocks": [ ...normal content blocks... ] }
-        — Use this instead of a plain heading when a section belongs to a specific contributor.
-        — The "blocks" array inside can contain any normal block type (paragraph, bullet, table, etc.).
-
-        { "type": "revision_log", "title": "Revision History", "entries": [
-            { "version": "v1.0", "author": "Author Name", "date": "YYYY-MM-DD", "change": "Brief description of what was changed" }
-        ]}
-        — Place this as the LAST section of the document.
-        — Include at least 3 realistic revision entries with different authors/dates.
-
-        { "type": "protection", "mode": "tracked_changes" }
-        — Add this as a standalone block in the document-level metadata area.
+        { "type": "author_section", "author": "Author Name", "blocks": [ ... ] }
 `;
             }
-
             if (ops.includes('NAVIGATION_STRUCTURE')) {
                 block += `
         --- NAVIGATION PANE & TABLE OF CONTENTS ---
-        Add a "toc" block immediately after the cover page (if any) or as the first content section.
-        Add "bookmark" blocks before each major chapter heading — this enables Word's Navigation Pane.
-
-        BLOCK SCHEMAS:
+        Add a "toc" block after the cover page.
         { "type": "toc", "title": "Table of Contents", "depth": 3 }
-        — Place this early in the document. It will render as a structured heading list.
-        — "depth" controls how many heading levels (1=major, 2=chapter, 3=sub-chapter).
-
-        { "type": "bookmark", "id": "chapter_1_global_overview", "label": "Chapter 1: Global Overview" }
-        — Place a bookmark BEFORE each major section heading block.
-        — Use snake_case IDs. These become Navigation Pane anchors in Word.
-        — Every "level 1" heading section MUST have a bookmark.
 `;
             }
-
-            if (ops.includes('METADATA_INSPECTION')) {
-                block += `
-        --- METADATA INSPECTION & SANITIZATION ---
-        Add a "metadata_clean" block at the top level of the document data. This will be processed by the export engine to strip hidden properties before saving.
-
-        BLOCK SCHEMA:
-        { "type": "metadata_clean", "strip": ["creator", "lastModifiedBy", "revision", "description", "subject", "keywords"], "replacement": { "creator": "Nurotra Docs Agent", "lastModifiedBy": "" } }
-        — "strip" lists which docProps fields to clear.
-        — "replacement" optional: sets a sanitized value (e.g., replace author with "Nurotra Docs Agent").
-        — Place this as a block in the FIRST section of the document.
-`;
-            }
-
             if (ops.includes('STYLE_MANAGEMENT')) {
                 block += `
         --- STYLE MANAGEMENT ---
-        Use "styled_paragraph" blocks instead of plain paragraphs for content where named Word styles would be appropriate.
-
-        BLOCK SCHEMA:
-        { "type": "styled_paragraph", "style_name": "Heading 1|Heading 2|Heading 3|Normal|Quote|Caption|Body Text|Intense Quote", "text": "...", "style": {} }
-        — "style_name" must be one of the exact values above.
-        — This ensures proper Word style application for formatting consistency.
-        — Use "Heading 1", "Heading 2", "Heading 3" for section titles (NOT plain headings in sections).
-        — Use "Quote" or "Intense Quote" for testimonials, references, pull-quotes.
-        — Use "Caption" for figure/table labels.
-        — Use "Body Text" for the main prose content.
-        — Mix "styled_paragraph" with normal "paragraph" as needed.
+        Use "styled_paragraph" for named Word styles: "Heading 1", "Heading 2", "Normal", "Quote".
+        { "type": "styled_paragraph", "style_name": "Heading 1", "text": "..." }
 `;
             }
-
-            if (ops.includes('DOCUMENT_PROTECTION')) {
-                block += `
-        --- DOCUMENT PROTECTION ---
-        { "type": "protection", "mode": "read_only" }   — Full read-only, no editing permitted.
-        { "type": "protection", "mode": "form_fields" }  — Only form fields (fillable tables) can be edited.
-        { "type": "protection", "mode": "tracked_changes" } — All edits are tracked as revisions.
-        — Choose the mode that best matches the user's request.
-        — Only ONE protection block per document.
-`;
-            }
-
-            block += `\n        ALWAYS use these advanced blocks in addition to regular blocks. Do NOT ignore them just because they are new — they are required for this prompt.\n`;
             return block;
         };
-
-
 
         // Build format-specific instructions
         let formatInstructions = '';
         if (docType === 'word') {
             formatInstructions = `
-        WORD DOCUMENT CONTENT RULES (MOST IMPORTANT):
-        You are generating a REAL, PROFESSIONAL document. Follow these rules strictly:
+        WORD DOCUMENT CONTENT RULES (MAXIMUM PROFESSIONALISM):
+        You are Nurotra's lead Content Strategist. Your goal is to produce "Ready-to-Share" professional documents.
 
-        1. WRITE ACTUAL CONTENT. Every section MUST have real, meaningful paragraphs.
-           - DO NOT just write headings and leave them empty.
-           - DO NOT just list field labels like "Name: [Your Name]" without context.
-           - WRITE sentences and paragraphs that explain, describe, and provide value.
-           - Example: Instead of just "Name: [Your Name]", write: "My name is {{Your Full Name}}. I am a student currently enrolled at {{Your College Name}}, pursuing {{Your Course/Degree}}."
+        1. HIGH-VALUE SYNTHESIZED CONTENT:
+           - DO NOT just provide outlines or generic placeholders.
+           - SYNTHESIZE real, professional prose based on the prompt. If the user asks for an "Annual Report", write a realistic "Management Message", "Yearly Performance Summary", and "Mission Statement".
+           - Use professional terminology appropriate for the category (e.g., Marketing, Financial, Legal).
+           - CONTENT DEPTH: This request is for a ${lengthPref} document.
+             * SHORT: 2-3 concise sections, focused on key highlights.
+             * MEDIUM: 4-6 balanced sections, moderate detail in each.
+             * DETAILED: 7+ comprehensive sections, in-depth analysis and extensive prose.
 
-        2. PLACEHOLDER SYNTAX for unknown/personal data:
-           - Use double curly braces: {{Your Name}}, {{Your College}}, {{Enter Date Here}}
-           - These will be auto-highlighted in yellow in the final Word document.
-           - ONLY use placeholders for data you genuinely don't know (user's name, specific dates, personal details).
-           - For generic content (descriptions, explanations), WRITE the actual text yourself.
+        2. STRUCTURAL EXCELLENCE:
+           - Every section MUST have at least 2-3 substantive blocks. 
+           - Use "cover_page" for formal reports.
+           - Use "page_break" between major thematic divisions.
+           - Ensure "header" and "footer" (including "{{page_number}}") are configured.
 
-        3. COLLABORATIVE PLACEHOLDERS — Make the user part of the process:
-           - Beyond personal data, include 2-3 placeholders PER DOCUMENT that invite user INPUT and DECISIONS.
-           - Examples of collaborative placeholders:
-             * {{Your thoughts on this approach}}
-             * {{Add any additional requirements here}}
-             * {{Your preferred timeline for this project}}
-             * {{Describe your specific goals for this section}}
-             * {{Your key priorities — list what matters most to you}}
-           - Place these at natural decision points in the document so the user personalizes their output.
-           - This makes every document feel like a COLLABORATION, not just a generation.
+        3. MS OFFICE FEATURE UTILIZATION:
+           - If numerical data is implied (e.g., "financial highlights"), use "formula_table" with SUM/AVERAGE formulas.
+           - Use "styled_paragraph" for clear visual hierarchy.
+           - Use "bold" in style objects to highlight key professional terms.
 
-        4. INTELLIGENT FORMATTING — choose the EXACT right block type for each content need:
-           - "paragraph": For explanatory text, descriptions, introductions. Include a "style" object for bold/italic/underline.
-           - "bullet": For unordered lists (features, items, hobbies, skills).
-           - "numbered": For ordered sequences (steps, rankings, procedures).
-           - "subheading": For sub-sections within a main heading (level 2 or 3).
-           - "table": For field-value pairs, simple comparisons. Use "headers" and "rows".
-           - "formula_table": For data with totals/averages/min/max. Provide raw numbers; totals will be auto-computed.
-           - "image": When user asks to insert a logo, chart, photo, or diagram.
-           - "cover_page": For the very first page of formal reports, proposals, or projects.
-           - "page_break": Between major sections to start on a fresh page.
-           - "watermark": When document needs "Confidential", "Draft", or similar background text.
-
-        5. ABSOLUTE BAN ON PIPE CHARACTERS:
-           - NEVER use "|" (pipe) characters to separate data. This is CRITICAL.
-           - If data has 2+ columns, you MUST use { "type": "table" } or { "type": "formula_table" }.
-           - If data is a simple list, use "bullet" or "numbered" blocks.
-           - NEVER write lines like "Name | Value | Description" — that is UNACCEPTABLE.
-
-        6. STYLE within paragraphs:
-           - "bold": array of exact substrings to bold, e.g. ["important term", "key phrase"]
-           - "italic": array of substrings to italicize
-           - "underline": array of substrings to underline
-           - "align": "left" | "center" | "right" (default: "left")
-           - "fontSize": number in half-points (default 24 = 12pt). Use 28 for emphasis, 20 for fine print.
-
-        7. DOCUMENT-LEVEL FEATURES (top-level in "data", alongside "sections"):
-           - "header": string — text shown at top of every page (e.g., project title)
-           - "footer": string — text shown at bottom; use "{{page_number}}" and "{{file_name}}" as dynamic tokens
-           - "watermark": string — diagonal background text (e.g., "Confidential", "Draft")
-           - "protection": { "readOnly": true, "allowFormFields": true } — restrict editing
-
-        8. TITLE FORMATTING:
-           - "titleStyle" in data object: { "bold": true, "underline": true, "align": "center", "fontSize": 32 }
-           - Always apply formatting that the user requests for the title.
-
-        9. MINIMUM CONTENT RULE: Each section MUST have at least 2-3 blocks of content. A section with only a heading is UNACCEPTABLE.
-
-        10. ALWAYS BUILD, NEVER META-DESCRIBE:
-            - NEVER create a single table that DESCRIBES what sections/chapters "would" contain.
-            - If a user asks for chapters, sections, or parts — CREATE EACH ONE as its own section object
-              with a heading, level, and blocks containing real written content.
-            - A table summarizing section names is NOT a document. Build each section fully.
-            - This applies regardless of document length — whether 2 sections or 20.
-            - Think of yourself as an AUTHOR, not an outliner.
-
-        11. SCALE-AWARE DOCUMENT ARCHITECTURE:
-            - Match the DEPTH and LENGTH of your output to the complexity of the user's prompt.
-            - Short/casual prompt (e.g., "make a leave application") → 2-4 sections, concise content.
-            - Detailed/structured prompt (e.g., "create a thesis with chapters, TOC, bibliography")
-              → Create EVERY requested section fully, use cover_page, page_break between major parts.
-            - If the user asks for specific parts (declaration, acknowledgment, abstract, chapters, bibliography),
-              create ALL of them as separate sections — do not collapse them into a table.
-            - For a "Table of Contents" or "summary": create a TABLE block that lists section names
-              with brief summaries — placed BEFORE the main content, not AS the entire document.
-            - For "Bibliography" or "References": use a NUMBERED block with formatted citation entries.
-            - Adapt naturally. No two prompts are the same — read the intent and scale accordingly.
-
-        12. FILLABLE / FORM TABLES:
-            - When user says "leave blank", "for employees to fill", "keep response empty", or similar:
-            - Use a TABLE block with empty string "" in cells meant for human input.
-            - This is DIFFERENT from {{placeholders}} — empty cells are for writing in Word later.
-            - Example: headers ["Topic", "Summary", "Employee Response"],
-              rows [["Quality", "87% satisfaction", ""], ["Delivery", "Avg 3.2 days", ""]]
-
-        FULL WORD SCHEMA WITH ALL FEATURES:
+        FULL WORD SCHEMA:
         {
           "intent": "${intent}",
-          "text": "Brief action summary.",
+          "text": "Generated a professional ${lengthPref} document.",
           "generation": {
             "type": "word",
             "data": {
-              "fileName": "Descriptive_Name.docx",
+              "fileName": "Project_Report.docx",
               "title": "Document Title",
-              "titleStyle": { "bold": true, "underline": false, "align": "center", "fontSize": 32 },
-              "header": "Annual Sales Performance Analysis — Confidential",
-              "footer": "Page {{page_number}} | {{file_name}}",
-              "watermark": "Confidential",
-              "protection": { "readOnly": false, "allowFormFields": true },
+              "header": "Confidential Report | {{current_date}}",
+              "footer": "Page {{page_number}} | Nurotra Intelligence",
               "sections": [
-                {
-                  "heading": "",
-                  "level": 1,
-                  "blocks": [
-                    { "type": "cover_page", "title": "Annual Sales Performance Analysis", "subtitle": "Q4 FY2024 Report", "company": "{{Your Company Name}}", "date": "{{Report Date}}", "logo_url": "" }
-                  ]
-                },
                 {
                   "heading": "Executive Summary",
                   "level": 1,
                   "blocks": [
-                    { "type": "page_break" },
-                    { "type": "paragraph", "text": "This report presents a comprehensive analysis of annual sales performance...", "style": { "bold": ["comprehensive analysis"], "italic": [], "underline": [], "align": "left" } },
-                    { "type": "bullet", "items": ["Total Revenue: $4.2M", "YoY Growth: 18%", "Top Region: {{Your Top Region}}"] },
-                    { "type": "paragraph", "text": "{{Your key observations and strategic priorities for next year}}", "style": {} }
-                  ]
-                },
-                {
-                  "heading": "Sales Data",
-                  "level": 1,
-                  "blocks": [
-                    { "type": "formula_table", "headers": ["Region", "Q1", "Q2", "Q3", "Q4"], "rows": [["North", 120000, 135000, 148000, 162000], ["South", 98000, 105000, 112000, 119000]], "formulas": [{"column": "Total", "operation": "SUM"}, {"column": "Average", "operation": "AVERAGE"}], "conditionalShading": {"highlightMax": "C6EFCE", "highlightMin": "FFC7CE"} },
-                    { "type": "paragraph", "text": "{{Your analysis of the sales data above}}", "style": {} }
-                  ]
-                },
-                {
-                  "heading": "Visual Reference",
-                  "level": 1,
-                  "blocks": [
-                    { "type": "image", "url": "", "caption": "Company Logo", "width": 150, "height": 80 },
-                    { "type": "paragraph", "text": "The logo above represents our brand identity...", "style": {} }
+                    { "type": "paragraph", "text": "Start with powerful, synthesized content here...", "style": { "bold": ["powerful", "content"] } }
                   ]
                 }
               ]
@@ -677,130 +513,58 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         } else if (docType === 'excel') {
             formatInstructions = `
         EXCEL RULES:
-        - NEVER use Markdown tables. ALWAYS use the "sheets" array with "rows" and "cells".
-        - EXCEL FORMULAS: Use formulas for ANY calculated data (e.g., "=C2+D2", "=SUM(B2:B10)").
-        - EXCEL FORMATTING: Add "conditionalFormatting" for visual alerts (Data Bars, Color Scales, Highlighting).
-        - EXCEL VALIDATION: Add "dataValidation" to cells to prevent invalid entries.
-
-        EXCEL SCHEMA:
-        {
-          "intent": "${intent}",
-          "text": "Brief summary.",
-          "generation": {
-            "type": "excel",
-            "data": {
-              "fileName": "Name.xlsx",
-              "sheets": [{
-                "name": "Sheet1",
-                "headers": ["ColA", "ColB"],
-                "rows": [{ "cells": [{ "value": "100", "formula": "", "dataValidation": {} }] }],
-                "conditionalFormatting": [
-                  { "ref": "A2:A10", "rules": [{ "type": "colorScale", "cfvo": [{"type":"min"},{"type":"max"}], "color": [{"argb":"FFFFAAAA"},{"argb":"FFAAFF88"}] }] }
-                ]
-              }]
-            }
-          }
-        }`;
+        - Use "sheets" with "rows" and "cells".
+        - ALWAYS use formulas for calculations (e.g., "=SUM(B2:B10)").
+        - Add "conditionalFormatting" for high-impact data visualization.
+`;
         } else {
             formatInstructions = `
         POWERPOINT SCHEMA:
-        {
-          "intent": "${intent}",
-          "text": "Brief summary.",
-          "generation": {
-            "type": "ppt",
-            "data": {
-              "fileName": "Name.pptx",
-              "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2"] }]
-            }
-          }
-        }`;
+        { "type": "ppt", "data": { "slides": [{ "title": "Slide Title", "bullets": ["Point 1"] }] } }
+`;
         }
 
-        // Append advanced features block for Word documents (empty string for Excel/PPT)
         if (docType === 'word' && advancedOps.length > 0) {
             formatInstructions += buildAdvancedWordFeatures(advancedOps);
         }
 
         const systemPrompt = `You are the Nurotra Content Architect.
-        MISSION: Generate structured JSON for a ${intent} action on a ${docType.toUpperCase()} document.
-        CRITICAL: The output document type MUST be "${docType}". Do NOT change it to excel, word, or ppt unless the user explicitly asked for a different format.
+        MISSION: Generate structured JSON for a ${intent} action.
+        DOCUMENT TYPE: ${docType.toUpperCase()}.
+        DETAIL LEVEL: ${lengthPref}.
         
         CRITICAL RULES:
-        - Output ONLY valid JSON. No markdown, no commentary.
-        - The "type" field in "generation" MUST be "${docType}". Do NOT deviate from this.
-        - FILENAME: Propose a semantic, descriptive name with the correct extension (${docType === 'ppt' ? '.pptx' : docType === 'excel' ? '.xlsx' : '.docx'}). No spaces.
-        ${currentDoc ? '- ITERATIVE EDIT: You are modifying an existing document. PRESERVE all existing data/sections unless explicitly asked to change or delete them.' : ''}
-        
-        ${currentDoc ? `EXISTING DOCUMENT CONTEXT (JSON):
-        ${JSON.stringify(currentDoc.rawStructure || { content: currentDoc.content }, null, 2)}` : ''}
+        - Output ONLY valid JSON.
+        - GENERATE COMPLETE, PROFESSIONAL CONTENT. Avoid saying "[Insert content here]".
+        - If a section is requested, write the full content for it.
+        ${currentDoc ? `ITERATIVE EDIT: Preserve existing structure: ${JSON.stringify(currentDoc.rawStructure)}` : ''}
 
         ${formatInstructions}`;
 
         const userPrompt = `Request: "${prompt}"`;
         let rawResponse = await generateWithFallback(userPrompt, systemPrompt);
 
-        // Aggressive JSON Cleaning
-        let cleanJson = rawResponse
-            .replace(/```json/gi, "")
-            .replace(/```/g, "")
-            .replace(/^[^[{]*/, "")
-            .replace(/[^\]}]*$/, "")
-            .trim();
-
+        let cleanJson = rawResponse.replace(/```json/gi, "").replace(/```/g, "").replace(/^[^[{]*/, "").replace(/[^\]}]*$/, "").trim();
         let parsed;
         try {
             parsed = JSON.parse(cleanJson);
         } catch (jsonError) {
-            console.warn("JSON Parse Error, attempting repair...", jsonError.message);
-            try {
-                const repaired = repairJson(cleanJson);
-                parsed = JSON.parse(repaired);
-            } catch (repairError) {
-                console.error("Repair failed:", repairError.message);
-                if (rawResponse.toLowerCase().includes("interference") || rawResponse.toLowerCase().includes("cannot")) {
-                    throw new Error("AI engine refusal detected. System is recalibrating safety parameters.");
-                }
-                throw jsonError;
-            }
+            parsed = JSON.parse(repairJson(cleanJson));
         }
 
-        // Post-processing: ensure Word sections are never empty
+        // Post-processing to ensure no empty sections
         if (parsed?.generation?.type === 'word' && parsed.generation.data?.sections) {
-            parsed.generation.data.sections = parsed.generation.data.sections.map(sec => {
-                // If the section has blocks, ensure they're not empty
-                if (sec.blocks && Array.isArray(sec.blocks) && sec.blocks.length > 0) {
-                    return sec;
+            parsed.generation.data.sections.forEach(sec => {
+                if (!sec.blocks || sec.blocks.length === 0) {
+                    sec.blocks = [{ type: 'paragraph', text: `Detailed analysis of ${sec.heading} will follow standard professional guidelines.`, style: { italic: true } }];
                 }
-                // If section uses old flat content format, convert to blocks
-                if (sec.content && typeof sec.content === 'string' && sec.content.trim()) {
-                    const paragraphs = sec.content.split('\n').filter(p => p.trim());
-                    return {
-                        ...sec,
-                        blocks: paragraphs.map(p => ({ type: 'paragraph', text: p, style: {} }))
-                    };
-                }
-                // If section is empty, inject a safety paragraph
-                return {
-                    ...sec,
-                    blocks: [{ type: 'paragraph', text: `This section covers ${sec.heading || 'additional details'}. Please add your content here.`, style: { italic: [`Please add your content here.`] } }]
-                };
             });
         }
 
         return parsed;
     } catch (error) {
         console.error("Docs Agent Execution Error:", error.message);
-        return {
-            intent: "QUERY",
-            text: `System alert: ${error.message}. The cognitive engine is momentarily unstable. 🔭`,
-            clarification: {
-                options: [
-                    { label: "Retry Generation", action: "RETRY" },
-                    { label: "View Support Docs", action: "HELP" }
-                ]
-            }
-        };
+        return { intent: "QUERY", text: `Recalibrating engine... ${error.message}` };
     }
 };
 

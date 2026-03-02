@@ -221,6 +221,32 @@ const DocsAgentPage = () => {
                                 md += '\n';
                                 break;
                             }
+                            case 'styled_paragraph': {
+                                const style = block.style_name || 'Normal';
+                                const prefix = style.startsWith('Heading') ? '#'.repeat(parseInt(style.split(' ')[1]) + 1) + ' ' : '';
+                                md += `${prefix}${renderText(block.text)}\n\n`;
+                                break;
+                            }
+                            case 'author_section': {
+                                md += `> **Author:** ${block.author || 'Anonymous'}${block.role ? ` (${block.role})` : ''}\n`;
+                                if (block.blocks) {
+                                    block.blocks.forEach(sub => {
+                                        if (sub.type === 'paragraph') md += `> ${renderText(sub.text)}\n`;
+                                    });
+                                }
+                                md += '\n';
+                                break;
+                            }
+                            case 'toc': {
+                                md += `## ${block.title || 'Table of Contents'}\n\n`;
+                                if (data.sections) {
+                                    data.sections.forEach((sec, idx) => {
+                                        if (sec.heading) md += `${idx + 1}. ${sec.heading}\n`;
+                                    });
+                                }
+                                md += '\n---\n\n';
+                                break;
+                            }
                             case 'page_break':
                                 md += `\n---\n*— Page Break —*\n---\n\n`;
                                 break;
