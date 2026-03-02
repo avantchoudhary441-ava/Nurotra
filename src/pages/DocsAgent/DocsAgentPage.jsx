@@ -17,8 +17,6 @@ const DocsAgentPage = () => {
     const [standaloneDocs, setStandaloneDocs] = useState([]);
     const [currentDoc, setCurrentDoc] = useState(null); // Active document in editor
     const [currentProject, setCurrentProject] = useState(null); // Active project context
-    const [currentWorkspace, setCurrentWorkspace] = useState(localStorage.getItem('docs_agent_workspace') || null);
-    const [centerView, setCenterView] = useState('entry'); // entry, dashboard, execution
 
     const fetchInitialData = async () => {
         try {
@@ -384,11 +382,9 @@ const DocsAgentPage = () => {
 
                 setCurrentDoc(savedDoc);
 
-                // Re-sync to workspace (overwrite the same file)
+                // Re-sync to workspace (overwrite the same file, for both project & standalone docs)
                 const projectForSync = currentProject || projects.find(p => p.documents?.some(d => String(d.id) === String(savedDoc.id)));
-                if (projectForSync) {
-                    docsAgentService.automateLocalSave(savedDoc, projectForSync.name).catch(() => { });
-                }
+                docsAgentService.automateLocalSave(savedDoc, projectForSync ? projectForSync.name : "").catch(() => { });
 
                 addLiveUpdate(isModify ? '✅ Changes applied! Your document is updated.' : '✅ Done! Your document is ready for you.');
                 setAgentStatus('Success!');
@@ -531,40 +527,19 @@ const DocsAgentPage = () => {
     };
 
     const handleDocCreated = async () => {
-        // If no workspace, ask to pick one first
-        if (!currentWorkspace) {
-            const result = await docsAgentService.pickWorkspace();
-            if (result && result.path) {
-                setCurrentWorkspace(result.path);
-                localStorage.setItem('docs_agent_workspace', result.path);
-                setCenterView('dashboard');
-            }
-            return;
-        }
-
-        // If workspace exists, go to dashboard
-        setCenterView('dashboard');
-    };
-
-    const handlePickWorkspace = async () => {
-        const result = await docsAgentService.pickWorkspace();
-        if (result && result.path) {
-            setCurrentWorkspace(result.path);
-            localStorage.setItem('docs_agent_workspace', result.path);
-            setCenterView('dashboard');
-        }
-    };
-
-    const handleOpenFile = (file) => {
-        // In a real IDE, we'd read the content here
-        // For now, we mock it or use the backend 'read' if implemented
-        openDocument({
-            id: file.path,
-            name: file.name,
-            type: file.type,
-            content: `# ${file.name}\n\n[Content loaded from ${file.path}]`
+        // DON'T create a document yet — just open the chat so the user
+        // can describe what they want. The actual document (with its
+        // AI-generated name) gets created in runDetailedExecution.
+        setExecutionState(prev => ({
+            ...prev,
+            status: 'awaiting_input'
+        }));
+        setChatTrigger({
+            id: Date.now(),
+            text: ``,
+            type: 'single'
         });
-        setCenterView('execution');
+        setActiveMobileScreen('chat');
     };
 
     const openDocument = (doc) => {
@@ -679,8 +654,6 @@ const DocsAgentPage = () => {
                     isSyncing={isSidebarSyncing}
                     activeDocId={currentDoc?.id}
                     activeProjectId={currentProject?.id}
-                    currentWorkspace={currentWorkspace}
-                    onPickWorkspace={handlePickWorkspace}
                 />
             </div>
 
@@ -695,18 +668,13 @@ const DocsAgentPage = () => {
                     executionState={executionState}
                     currentDoc={currentDoc}
                     liveUpdates={executionState.liveUpdates}
-                    centerView={centerView}
-                    currentWorkspace={currentWorkspace}
                     onProjectCreated={handleProjectCreated}
                     onDocCreated={handleDocCreated}
                     onApprovePlan={approvePlan}
                     onUpdateContent={(content) => setCurrentDoc(prev => ({ ...prev, content }))}
-                    onOpenFile={handleOpenFile}
-                    onPickWorkspace={handlePickWorkspace}
                     onCancelExecution={() => {
                         setExecutionState(prev => ({ ...prev, status: 'idle', plan: null }));
                         setAgentStatus('Ready');
-                        setCenterView('dashboard');
                     }}
                 />
             </div>

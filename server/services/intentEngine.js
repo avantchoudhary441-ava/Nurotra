@@ -24,6 +24,40 @@ const RISK_KEYWORDS = ['delete', 'overwrite', 'remove', 'replace', 'wipe', 'rese
 const FILLER_WORDS = ['um', 'uh', 'like', 'actually', 'basically', 'sort of', 'you know', 'mean', 'just', 'highly', 'really'];
 
 /**
+ * Advanced Word Operations Map
+ * Maps operation codes to trigger keywords found in user prompts.
+ */
+const ADVANCED_OPS_MAP = {
+    MULTI_AUTHOR_MERGE: [
+        'multi-author', 'multi author', 'collaborative', 'contributor', 'contributors',
+        'merge', 'combine', 'compare and combine', 'multiple authors', 'multiple versions',
+        'revision history', 'track changes', 'tracked changes', 'accept changes',
+        'resolve conflict', 'resolve conflicts', 'merge sections', 'master document'
+    ],
+    STYLE_MANAGEMENT: [
+        'style', 'heading style', 'paragraph style', 'formatting consistency',
+        'body text', 'apply style', 'consistent formatting', 'style management',
+        'named style', 'document style', 'uniform format'
+    ],
+    NAVIGATION_STRUCTURE: [
+        'navigation pane', 'navigation', 'navigate', 'chapter', 'chapters',
+        'table of contents', 'toc', 'bookmarks', 'bookmark', 'page navigation',
+        'jump to section', 'document outline', 'outline view', 'easy movement',
+        'movement between chapters', 'movement between sections'
+    ],
+    METADATA_INSPECTION: [
+        'metadata', 'hidden data', 'hidden metadata', 'document inspection',
+        'inspect document', 'remove personal info', 'remove author', 'sanitize',
+        'clean metadata', 'strip metadata', 'before sharing', 'remove hidden',
+        'document properties', 'personal information'
+    ],
+    DOCUMENT_PROTECTION: [
+        'protect', 'protection', 'read only', 'read-only', 'restrict editing',
+        'restrict', 'lock', 'password protect', 'form fields only', 'no editing'
+    ],
+};
+
+/**
  * Classify intent with confidence scoring
  */
 const classifyIntent = (prompt) => {
@@ -67,28 +101,59 @@ const classifyIntent = (prompt) => {
 };
 
 /**
- * Detect document type with confidence
+ * Detect document type with confidence.
+ * Uses priority scoring — Word-specific structural terms are checked before
+ * ambiguous terms. Removed 'table'/'data' from Excel since they appear
+ * in Word docs too (e.g. "table of contents", "data analysis report").
  */
 const detectDocType = (prompt) => {
     const lowerPrompt = prompt.toLowerCase();
-    let type = 'word'; // Default to word
-    let confidence = 0.5;
 
-    const map = {
-        ppt: ['ppt', 'presentation', 'slide', 'powerpoint', 'deck'],
-        excel: ['excel', 'sheet', 'spreadsheet', 'csv', 'table', 'data'],
-        word: ['word', 'doc', 'report', 'letter', 'essay', 'draft']
+    // 1. Explicit file-type signals — highest priority (unambiguous)
+    const explicitMap = {
+        ppt: ['powerpoint', 'presentation', 'slide deck', 'pptx', ' ppt '],
+        excel: ['excel', 'spreadsheet', 'xlsx', 'csv file', 'workbook'],
+        word: ['word document', 'word file', 'docx', '.doc', 'word doc'],
     };
-
-    for (const [t, keywords] of Object.entries(map)) {
+    for (const [t, keywords] of Object.entries(explicitMap)) {
         if (keywords.some(kw => lowerPrompt.includes(kw))) {
-            type = t;
-            confidence = 1.0;
-            break;
+            return { type: t, confidence: 1.0 };
         }
     }
 
-    return { type, confidence };
+    // 2. Word-specific structural keywords — common Word doc features
+    const wordKeywords = [
+        'heading', 'paragraph', 'cover page', 'table of contents', 'toc',
+        'page number', 'page numbering', 'roman numeral', 'arabic numeral',
+        'header', 'footer', 'chapter', 'report', 'letter', 'essay',
+        'proposal', 'memo', 'thesis', 'dissertation', 'summary', 'brief',
+        'policy', 'notice', 'draft', 'profile', 'resume', 'cv',
+        'subheading', 'formatted', 'structured heading', 'news', 'article',
+        'research', 'project report', 'case study', 'documentation'
+    ];
+    if (wordKeywords.some(kw => lowerPrompt.includes(kw))) {
+        return { type: 'word', confidence: 0.95 };
+    }
+
+    // 3. PPT keywords
+    const pptKeywords = ['slide', 'deck', 'bullet point', 'keynote', 'present'];
+    if (pptKeywords.some(kw => lowerPrompt.includes(kw))) {
+        return { type: 'ppt', confidence: 0.9 };
+    }
+
+    // 4. Excel keywords — ONLY unambiguous data-centric terms
+    const excelKeywords = [
+        'rows and columns', 'formula', 'chart', 'graph', 'pivot table',
+        'budget tracker', 'expense tracker', 'financial model',
+        'dataset', 'analytics sheet', 'metrics sheet', 'data entry form',
+        'inventory sheet', 'timesheet', 'scorecard'
+    ];
+    if (excelKeywords.some(kw => lowerPrompt.includes(kw))) {
+        return { type: 'excel', confidence: 0.9 };
+    }
+
+    // 5. Default to Word — safest fallback for text-heavy requests
+    return { type: 'word', confidence: 0.5 };
 };
 
 /**
@@ -196,10 +261,29 @@ const cleanVoiceTranscript = (transcript) => {
     return cleaned;
 };
 
+/**
+ * Detect advanced Word-specific operations required by the prompt.
+ * Returns an array of operation codes (e.g. ['MULTI_AUTHOR_MERGE', 'NAVIGATION_STRUCTURE']).
+ * Returns an empty array for simple prompts — zero cost to standard flows.
+ */
+const detectAdvancedOps = (prompt) => {
+    const lowerPrompt = prompt.toLowerCase();
+    const detectedOps = [];
+
+    for (const [opCode, keywords] of Object.entries(ADVANCED_OPS_MAP)) {
+        if (keywords.some(kw => lowerPrompt.includes(kw))) {
+            detectedOps.push(opCode);
+        }
+    }
+
+    return detectedOps; // e.g. ['MULTI_AUTHOR_MERGE', 'NAVIGATION_STRUCTURE']
+};
+
 module.exports = {
     classifyIntent,
     detectDocType,
     detectRisk,
     generateMetadata,
-    cleanVoiceTranscript
+    cleanVoiceTranscript,
+    detectAdvancedOps
 };

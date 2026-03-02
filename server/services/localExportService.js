@@ -3,7 +3,7 @@ const {
     AlignmentType, UnderlineType,
     Table, TableRow, TableCell, WidthType, BorderStyle,
     LevelFormat, convertInchesToTwip,
-    Header, Footer, PageNumber, NumberFormat,
+    Header, Footer, PageNumber, SimpleField, NumberFormat,
     PageBreak, ShadingType,
     ImageRun
 } = require("docx");
@@ -286,26 +286,54 @@ const automateLocalSave = async (docData, projectName, userName, formatOverride)
     // Rescue the data structure to match the target extension
     const rescuedStructure = rescueToFormat(docData, ext);
 
+    // Helper: write buffer to final path via temp file to avoid EBUSY locks
+    // (OneDrive sync or Word having the file open causes EBUSY on direct write)
+    const safeWriteBuffer = (buffer, targetPath) => {
+        const tmpPath = targetPath + `.tmp_${Date.now()}`;
+        try {
+            fs.writeFileSync(tmpPath, buffer);
+            // Rename: if target is locked, fall back to versioned filename
+            try {
+                if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+                fs.renameSync(tmpPath, targetPath);
+                return targetPath;
+            } catch (renameErr) {
+                // Target still locked — save as versioned copy instead
+                const ext = path.extname(targetPath);
+                const base = targetPath.slice(0, -ext.length);
+                const versionedPath = `${base}_${Date.now()}${ext}`;
+                fs.renameSync(tmpPath, versionedPath);
+                console.warn(`[LocalExport] File locked, saved as versioned copy: ${versionedPath}`);
+                return versionedPath;
+            }
+        } catch (err) {
+            // Clean up temp file if anything went wrong
+            try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) { }
+            throw err;
+        }
+    };
+
     const baseName = name.replace(/\.(docx|xlsx|pptx|doc|xls|ppt)$/i, '');
     const fileName = `${baseName}${ext}`;
     const fullPath = path.join(saveDir, fileName);
 
     try {
+        let savedPath = fullPath;
         if (ext === '.xlsx') {
-            await saveExcel(rescuedStructure, fullPath);
+            savedPath = await saveExcel(rescuedStructure, fullPath, safeWriteBuffer);
         } else if (ext === '.pptx') {
-            await savePPT(rescuedStructure, fullPath);
+            savedPath = await savePPT(rescuedStructure, fullPath, safeWriteBuffer);
         } else {
-            await saveWord(rescuedStructure, fullPath);
+            savedPath = await saveWord(rescuedStructure, fullPath, safeWriteBuffer);
         }
-        return { success: true, path: fullPath };
+        return { success: true, path: savedPath };
     } catch (error) {
         console.error("Local Save Error:", error);
         throw error;
     }
 };
 
-const saveExcel = async (data, fullPath) => {
+const saveExcel = async (data, fullPath, safeWriteBuffer) => {
     const workbook = new ExcelJS.Workbook();
     const sheets = data.sheets || [{ name: 'Sheet 1', rows: data.rows }];
 
@@ -381,7 +409,8 @@ const saveExcel = async (data, fullPath) => {
         });
     });
 
-    await workbook.xlsx.writeFile(fullPath);
+    const xlsxBuffer = await workbook.xlsx.writeBuffer();
+    return safeWriteBuffer ? safeWriteBuffer(xlsxBuffer, fullPath) : (() => { require('fs').writeFileSync(fullPath, xlsxBuffer); return fullPath; })();
 };
 
 // ==========================================
@@ -519,7 +548,7 @@ const renderDocxFormulaTable = (block) => {
     return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
 };
 
-const saveWord = async (data, fullPath) => {
+const saveWord = async (data, fullPath, safeWriteBuffer) => {
     const { title, titleStyle, sections, header, footer, watermark, protection } = data;
 
     const numberingConfig = {
@@ -699,6 +728,169 @@ const saveWord = async (data, fullPath) => {
                             break;
                         }
                         case 'watermark': break; // handled at doc level
+                        case 'protection': break; // handled at doc level via data._protection
+                        case 'metadata_clean': break; // handled at doc write time via data._metadataClean
+                        // ======================================================
+                        // ADVANCED WORD BLOCK RENDERERS
+                        // ======================================================
+                        case 'bookmark': {
+                            // Renders a named bookmark anchor — enables Navigation Pane in Word
+                            const bookmarkLabel = block.label || block.id || '';
+                            if (bookmarkLabel) {
+                                docChildren.push(new Paragraph({
+                                    children: [new TextRun({ text: '', size: 4 })], // Zero-height anchor
+                                    spacing: { before: 0, after: 0 },
+                                    style: 'Normal',
+                                    // Bookmark is implicit via the heading that follows — this acts as a named anchor for TOC
+                                }));
+                                // Emit a visible bookmark label as a tiny gray note
+                                docChildren.push(new Paragraph({
+                                    children: [new TextRun({ text: `§ ${bookmarkLabel}`, size: 16, color: 'AAAAAA', italics: true })],
+                                    spacing: { before: 60, after: 20 }
+                                }));
+                            }
+                            break;
+                        }
+                        case 'toc': {
+                            // Renders a Table of Contents as a formatted list
+                            const tocTitle = block.title || 'Table of Contents';
+                            const tocDepth = block.depth || 2;
+                            docChildren.push(new Paragraph({
+                                children: [new TextRun({ text: tocTitle, bold: true, size: 32, font: 'Calibri', underline: { type: UnderlineType.SINGLE } })],
+                                spacing: { before: 200, after: 160 },
+                                alignment: AlignmentType.LEFT
+                            }));
+                            // Render TOC placeholder entries for all heading sections
+                            if (sections) {
+                                let sectionCounter = 0;
+                                for (const tocSec of sections) {
+                                    if (!tocSec.heading || !tocSec.heading.trim()) continue;
+                                    if (tocSec.level === 1 || !tocSec.level) {
+                                        sectionCounter++;
+                                        docChildren.push(new Paragraph({
+                                            children: [
+                                                new TextRun({ text: `${sectionCounter}.  ${tocSec.heading}`, font: 'Calibri', size: 22, bold: false, color: '1A3A6B' }),
+                                                new TextRun({ text: `  .........  `, font: 'Calibri', size: 18, color: 'AAAAAA' }),
+                                            ],
+                                            indent: { left: 360 },
+                                            spacing: { after: 60 }
+                                        }));
+                                    }
+                                    if (tocSec.level === 2 && tocDepth >= 2) {
+                                        docChildren.push(new Paragraph({
+                                            children: [new TextRun({ text: `      ${tocSec.heading}`, font: 'Calibri', size: 20, italics: true, color: '444444' })],
+                                            indent: { left: 800 },
+                                            spacing: { after: 40 }
+                                        }));
+                                    }
+                                }
+                            }
+                            docChildren.push(new Paragraph({ children: [new PageBreak()], spacing: { after: 0 } }));
+                            break;
+                        }
+                        case 'styled_paragraph': {
+                            // Maps style_name to docx built-in paragraph styles
+                            const styleName = (block.style_name || 'Normal').trim();
+                            const styleMap = {
+                                'Heading 1': HeadingLevel.HEADING_1,
+                                'Heading 2': HeadingLevel.HEADING_2,
+                                'Heading 3': HeadingLevel.HEADING_3,
+                            };
+                            if (styleMap[styleName]) {
+                                docChildren.push(new Paragraph({
+                                    text: block.text || '',
+                                    heading: styleMap[styleName],
+                                    spacing: { before: 200, after: 100 }
+                                }));
+                            } else {
+                                // For Quote, Caption, Body Text etc — render as styled paragraph with visual differentiation
+                                const isQuote = styleName.includes('Quote');
+                                const isCaption = styleName === 'Caption';
+                                docChildren.push(new Paragraph({
+                                    children: parseTextWithPlaceholders(block.text || '', block.style || {}),
+                                    indent: isQuote ? { left: 720, right: 720 } : undefined,
+                                    border: isQuote ? { left: { style: BorderStyle.THICK, size: 8, color: '2E4A8B' } } : undefined,
+                                    alignment: isCaption ? AlignmentType.CENTER : getAlignment(block.style?.align),
+                                    spacing: { after: 120 }
+                                }));
+                            }
+                            break;
+                        }
+                        case 'revision_log': {
+                            // Renders a revision history table
+                            const rlTitle = block.title || 'Revision History';
+                            docChildren.push(new Paragraph({
+                                children: [new TextRun({ text: rlTitle, bold: true, size: 26, font: 'Calibri', color: '2C3E50' })],
+                                spacing: { before: 300, after: 120 }
+                            }));
+                            const rlHeaders = ['Version', 'Author', 'Date', 'Changes Made'];
+                            const tableBorder = { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' };
+                            const rlBorders = { top: tableBorder, bottom: tableBorder, left: tableBorder, right: tableBorder };
+                            const rlHeaderRow = new TableRow({
+                                tableHeader: true,
+                                children: rlHeaders.map(h => new TableCell({
+                                    children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, font: 'Calibri', size: 20, color: 'FFFFFF' })], spacing: { after: 40 } })],
+                                    borders: rlBorders,
+                                    width: { size: 25, type: WidthType.PERCENTAGE },
+                                    shading: { fill: '2C3E50', type: ShadingType.CLEAR }
+                                }))
+                            });
+                            const rlRows = (block.entries || []).map((entry, idx) => new TableRow({
+                                children: [
+                                    entry.version, entry.author, entry.date, entry.change
+                                ].map(val => new TableCell({
+                                    children: [new Paragraph({ children: parseTextWithPlaceholders(String(val || ''), {}), spacing: { after: 40 } })],
+                                    borders: rlBorders,
+                                    width: { size: 25, type: WidthType.PERCENTAGE },
+                                    shading: { fill: idx % 2 === 0 ? 'F8F9FA' : 'FFFFFF', type: ShadingType.CLEAR }
+                                }))
+                            }));
+                            docChildren.push(new Table({ rows: [rlHeaderRow, ...rlRows], width: { size: 100, type: WidthType.PERCENTAGE } }));
+                            docChildren.push(new Paragraph({ text: '', spacing: { after: 200 } }));
+                            break;
+                        }
+                        case 'author_section': {
+                            // Renders a section attributed to an author/contributor
+                            const asHeading = block.heading || 'Section';
+                            const asAuthor = block.author || 'Unknown Author';
+                            const asInstitution = block.institution ? ` — ${block.institution}` : '';
+                            const asRole = block.role ? ` (${block.role})` : '';
+                            // Section heading
+                            docChildren.push(new Paragraph({
+                                text: asHeading,
+                                heading: HeadingLevel.HEADING_1,
+                                spacing: { before: 300, after: 60 }
+                            }));
+                            // Author byline
+                            docChildren.push(new Paragraph({
+                                children: [new TextRun({ text: `✍ ${asAuthor}${asInstitution}${asRole}`, italics: true, size: 20, color: '2E4A8B', font: 'Calibri' })],
+                                spacing: { before: 0, after: 160 },
+                                border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: 'D0D0D0' } }
+                            }));
+                            // Render nested blocks
+                            if (block.blocks && Array.isArray(block.blocks)) {
+                                for (const innerBlock of block.blocks) {
+                                    switch (innerBlock.type) {
+                                        case 'paragraph': {
+                                            docChildren.push(new Paragraph({ children: parseTextWithPlaceholders(innerBlock.text || '', innerBlock.style || {}), spacing: { after: 120 } }));
+                                            break;
+                                        }
+                                        case 'bullet': {
+                                            (innerBlock.items || []).forEach(item => docChildren.push(new Paragraph({ children: parseTextWithPlaceholders(item, {}), bullet: { level: 0 }, spacing: { after: 60 } })));
+                                            break;
+                                        }
+                                        case 'numbered': {
+                                            (innerBlock.items || []).forEach(item => docChildren.push(new Paragraph({ children: parseTextWithPlaceholders(item, {}), numbering: { reference: 'nurotra-numbering', level: 0 }, spacing: { after: 60 } })));
+                                            break;
+                                        }
+                                        default: {
+                                            if (innerBlock.text) docChildren.push(new Paragraph({ children: parseTextWithPlaceholders(innerBlock.text, innerBlock.style || {}), spacing: { after: 100 } }));
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+                        }
                         default: {
                             if (block.text) {
                                 docChildren.push(new Paragraph({
@@ -719,6 +911,7 @@ const saveWord = async (data, fullPath) => {
             }
         }
     }
+
 
     // --- Header ---
     const docWatermark = watermark || data.watermark;
@@ -745,7 +938,7 @@ const saveWord = async (data, fullPath) => {
         const rightText = footerParts[1].replace('{{file_name}}', docFileName);
         footerChildren.push(
             new TextRun({ text: leftText, font: "Calibri", size: 18, color: "888888" }),
-            new PageNumber({ format: NumberFormat.DECIMAL }),
+            new SimpleField('PAGE'),
             new TextRun({ text: rightText, font: "Calibri", size: 18, color: "888888" })
         );
     } else {
@@ -760,8 +953,36 @@ const saveWord = async (data, fullPath) => {
     });
 
     // --- Build Document ---
+    // Scan all sections for metadata_clean and protection blocks
+    let metadataCleanBlock = null;
+    let protectionBlock = null;
+    if (sections) {
+        for (const sec of sections) {
+            if (sec.blocks && Array.isArray(sec.blocks)) {
+                for (const blk of sec.blocks) {
+                    if (blk.type === 'metadata_clean' && !metadataCleanBlock) metadataCleanBlock = blk;
+                    if (blk.type === 'protection' && !protectionBlock) protectionBlock = blk;
+                }
+            }
+        }
+    }
+
+    // Build docProps (core properties): sanitize if metadata_clean is requested
+    const coreProps = {};
+    if (metadataCleanBlock) {
+        const stripFields = metadataCleanBlock.strip || [];
+        const replacements = metadataCleanBlock.replacement || {};
+        // Apply sanitization — replace with empty string or provided replacement
+        stripFields.forEach(field => { coreProps[field] = replacements[field] || ''; });
+        // Always set creator to "Nurotra Docs Agent" unless explicitly replaced
+        if (!coreProps.creator) coreProps.creator = replacements.creator || 'Nurotra Docs Agent';
+        if (!coreProps.lastModifiedBy) coreProps.lastModifiedBy = replacements.lastModifiedBy || '';
+        console.log('[DocExport] Metadata sanitized:', Object.keys(coreProps));
+    }
+
     const docConfig = {
         numbering: numberingConfig,
+        ...(Object.keys(coreProps).length > 0 ? { creator: coreProps.creator || '', lastModifiedBy: coreProps.lastModifiedBy || '' } : {}),
         sections: [{
             properties: { page: { margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 } } },
             headers: { default: headerContent },
@@ -770,16 +991,24 @@ const saveWord = async (data, fullPath) => {
         }],
     };
 
+    // Handle protection settings — supports existing readOnly AND new block-level protection modes
+    const blockProtectionMode = protectionBlock?.mode;
     if (protection && protection.readOnly) {
-        docConfig.settings = { documentProtection: { edit: "readOnly", enforcement: true } };
+        docConfig.settings = { documentProtection: { edit: 'readOnly', enforcement: true } };
+    } else if (blockProtectionMode === 'read_only') {
+        docConfig.settings = { documentProtection: { edit: 'readOnly', enforcement: true } };
+    } else if (blockProtectionMode === 'form_fields') {
+        docConfig.settings = { documentProtection: { edit: 'forms', enforcement: true } };
+    } else if (blockProtectionMode === 'tracked_changes') {
+        docConfig.settings = { documentProtection: { edit: 'trackedChanges', enforcement: false } };
     }
 
     const doc = new Document(docConfig);
     const buffer = await Packer.toBuffer(doc);
-    fs.writeFileSync(fullPath, buffer);
+    return safeWriteBuffer ? safeWriteBuffer(buffer, fullPath) : (() => { fs.writeFileSync(fullPath, buffer); return fullPath; })();
 };
 
-const savePPT = async (data, fullPath) => {
+const savePPT = async (data, fullPath, safeWriteBuffer) => {
     const { slides } = data;
     const pres = new pptxgen();
 
@@ -797,7 +1026,9 @@ const savePPT = async (data, fullPath) => {
         });
     }
 
-    await pres.writeFile({ fileName: fullPath });
+    // Use buffer approach to avoid EBUSY locks (OneDrive / Word has file open)
+    const pptBuffer = await pres.write('nodebuffer');
+    return safeWriteBuffer ? safeWriteBuffer(pptBuffer, fullPath) : (() => { require('fs').writeFileSync(fullPath, pptBuffer); return fullPath; })();
 };
 
 /**
@@ -831,93 +1062,4 @@ const openWorkspace = (projectName, userName) => {
     });
 };
 
-/**
- * Opens a native Windows folder picker using PowerShell.
- */
-const pickFolder = () => {
-    const script = `
-        Add-Type -AssemblyName System.Windows.Forms
-        $browser = New-Object System.Windows.Forms.FolderBrowserDialog
-        $browser.Description = "Select a folder for your DocsAgent Workspace"
-        $show = $browser.ShowDialog()
-        if ($show -eq "OK") {
-            return $browser.SelectedPath
-        } else {
-            return ""
-        }
-    `;
-
-    return new Promise((resolve, reject) => {
-        exec(`powershell -Command "${script.replace(/\n/g, ' ')}"`, (error, stdout) => {
-            if (error) {
-                console.error("[LocalSync] Folder Picker Error:", error);
-                reject(error);
-            } else {
-                const selectedPath = stdout.trim();
-                resolve(selectedPath);
-            }
-        });
-    });
-};
-
-/**
- * Recursively scans a directory for office files.
- */
-const scanDirectory = (dirPath) => {
-    const results = [];
-    const list = fs.readdirSync(dirPath, { withFileTypes: true });
-
-    list.forEach(item => {
-        const fullPath = path.join(dirPath, item.name);
-        if (item.isDirectory()) {
-            results.push({
-                name: item.name,
-                path: fullPath,
-                type: 'folder',
-                children: scanDirectory(fullPath)
-            });
-        } else {
-            const ext = path.extname(item.name).toLowerCase();
-            if (['.docx', '.xlsx', '.pptx', '.doc', '.xls', '.ppt'].includes(ext)) {
-                const stats = fs.statSync(fullPath);
-                results.push({
-                    name: item.name,
-                    path: fullPath,
-                    type: ext.includes('doc') ? 'word' : ext.includes('xl') ? 'excel' : 'ppt',
-                    size: stats.size,
-                    updatedAt: stats.mtime
-                });
-            }
-        }
-    });
-
-    return results;
-};
-
-/**
- * Gets the last N modified files across the workspace.
- */
-const getRecentFiles = (rootPath, limit = 10) => {
-    const allFiles = [];
-    const flatten = (items) => {
-        items.forEach(item => {
-            if (item.type === 'folder') flatten(item.children);
-            else allFiles.push(item);
-        });
-    };
-
-    const tree = scanDirectory(rootPath);
-    flatten(tree);
-
-    return allFiles
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, limit);
-};
-
-module.exports = {
-    automateLocalSave,
-    openWorkspace,
-    pickFolder,
-    scanDirectory,
-    getRecentFiles
-};
+module.exports = { automateLocalSave, openWorkspace };

@@ -26,10 +26,6 @@ const ProjectSchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'archived', 'completed'],
         default: 'active'
-    },
-    workspacePath: {
-        type: String,
-        default: null
     }
 }, { timestamps: true });
 

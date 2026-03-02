@@ -37,14 +37,21 @@ const processQuery = async (req, res) => {
 
         const risk = intentEngine.detectRisk(prompt);
 
-        // 2. Metadata Generation (Hybrid)
+        // 2. Advanced Operations Detection (e.g. multi-author merge, navigation pane, metadata inspection)
+        const advancedOps = intentEngine.detectAdvancedOps(prompt);
+        if (advancedOps.length > 0) {
+            console.log(`Debug: Advanced Word ops detected: ${advancedOps.join(', ')}`);
+        }
+
+        // 3. Metadata Generation (Hybrid)
         const metadata = intentEngine.generateMetadata(prompt, intentInfo.intent, categoryOverride);
 
-        // 3. Narrative Execution (AI Personality)
+        // 4. Narrative Execution (AI Personality + Advanced Ops injection)
         const response = await aiService.processDocsAgentQuery(prompt, userContext, history, {
             intent: intentInfo.intent,
             risk,
             metadata,
+            advancedOps, // Injected into AI prompt for dynamic feature generation
             currentDoc // Pass the current document for iterative editing
         });
         res.json(response);
@@ -297,57 +304,6 @@ const searchDocuments = async (req, res) => {
     }
 };
 
-/**
- * Trigger Folder Picker and Register Workspace
- * Route: POST /api/docs-agent/workspaces/pick
- */
-const pickAndRegisterWorkspace = async (req, res) => {
-    try {
-        const path = await localExportService.pickFolder();
-        if (!path) {
-            return res.json({ cancelled: true });
-        }
-        res.json({ path });
-    } catch (error) {
-        console.error("Pick Workspace Error:", error);
-        res.status(500).json({ message: "Failed to open folder picker" });
-    }
-};
-
-/**
- * Get Workspace File Tree
- * Route: GET /api/docs-agent/workspaces/tree?path=<path>
- */
-const getWorkspaceTree = async (req, res) => {
-    try {
-        const { path } = req.query;
-        if (!path) return res.status(400).json({ message: "Path is required" });
-
-        const tree = localExportService.scanDirectory(path);
-        res.json(tree);
-    } catch (error) {
-        console.error("Get Tree Error:", error);
-        res.status(500).json({ message: "Failed to scan directory" });
-    }
-};
-
-/**
- * Get Recent Workspace Files
- * Route: GET /api/docs-agent/workspaces/recent?path=<path>
- */
-const getRecentWorkspaceFiles = async (req, res) => {
-    try {
-        const { path } = req.query;
-        if (!path) return res.status(400).json({ message: "Path is required" });
-
-        const recent = localExportService.getRecentFiles(path);
-        res.json(recent);
-    } catch (error) {
-        console.error("Get Recent Error:", error);
-        res.status(500).json({ message: "Failed to fetch recent files" });
-    }
-};
-
 module.exports = {
     processQuery,
     getProjects,
@@ -359,8 +315,5 @@ module.exports = {
     extractMetadata,
     structureVoicePrompt,
     automateLocalSave,
-    openWorkspace,
-    pickAndRegisterWorkspace,
-    getWorkspaceTree,
-    getRecentWorkspaceFiles
+    openWorkspace
 };

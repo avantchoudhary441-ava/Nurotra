@@ -424,7 +424,109 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         const metadata = preParsed?.metadata || {};
         const risk = preParsed?.risk || { isHighRisk: false };
         const currentDoc = preParsed?.currentDoc || null;
-        const docType = metadata.name?.endsWith('.pptx') ? 'ppt' : (metadata.name?.endsWith('.xlsx') ? 'excel' : 'word');
+        const advancedOps = preParsed?.advancedOps || []; // NEW: Advanced operation codes
+        // Determine document type from user prompt (via intent engine) — NOT from AI-generated filename,
+        // because that creates a self-fulfilling loop where a wrong filename locks in the wrong template.
+        const { detectDocType } = require('./intentEngine');
+        const { type: docType } = detectDocType(prompt);
+
+        // =====================================================================
+        // ADVANCED WORD OPERATIONS: Buildable Prompt Blocks
+        // Only injected when the intent engine has detected they are needed.
+        // This keeps simple prompts fast and clean.
+        // =====================================================================
+        const buildAdvancedWordFeatures = (ops) => {
+            if (!ops || ops.length === 0) return '';
+
+            let block = `\n        ADVANCED WORD FEATURES — ACTIVE FOR THIS REQUEST:\n        You have detected advanced operations in the user's prompt. You MUST use the following special block types where appropriate:\n`;
+
+            if (ops.includes('MULTI_AUTHOR_MERGE')) {
+                block += `
+        --- MULTI-AUTHOR & COLLABORATION ---
+        Use "author_section" blocks to attribute each section to its contributor.
+        Use "revision_log" to show change history at the end of the document.
+        Use "protection" with mode "tracked_changes" to simulate track-changes mode.
+
+        BLOCK SCHEMAS:
+        { "type": "author_section", "author": "Dr. Ananya Rao", "institution": "IIT Delhi", "role": "Lead Contributor", "heading": "Section Title", "blocks": [ ...normal content blocks... ] }
+        — Use this instead of a plain heading when a section belongs to a specific contributor.
+        — The "blocks" array inside can contain any normal block type (paragraph, bullet, table, etc.).
+
+        { "type": "revision_log", "title": "Revision History", "entries": [
+            { "version": "v1.0", "author": "Author Name", "date": "YYYY-MM-DD", "change": "Brief description of what was changed" }
+        ]}
+        — Place this as the LAST section of the document.
+        — Include at least 3 realistic revision entries with different authors/dates.
+
+        { "type": "protection", "mode": "tracked_changes" }
+        — Add this as a standalone block in the document-level metadata area.
+`;
+            }
+
+            if (ops.includes('NAVIGATION_STRUCTURE')) {
+                block += `
+        --- NAVIGATION PANE & TABLE OF CONTENTS ---
+        Add a "toc" block immediately after the cover page (if any) or as the first content section.
+        Add "bookmark" blocks before each major chapter heading — this enables Word's Navigation Pane.
+
+        BLOCK SCHEMAS:
+        { "type": "toc", "title": "Table of Contents", "depth": 3 }
+        — Place this early in the document. It will render as a structured heading list.
+        — "depth" controls how many heading levels (1=major, 2=chapter, 3=sub-chapter).
+
+        { "type": "bookmark", "id": "chapter_1_global_overview", "label": "Chapter 1: Global Overview" }
+        — Place a bookmark BEFORE each major section heading block.
+        — Use snake_case IDs. These become Navigation Pane anchors in Word.
+        — Every "level 1" heading section MUST have a bookmark.
+`;
+            }
+
+            if (ops.includes('METADATA_INSPECTION')) {
+                block += `
+        --- METADATA INSPECTION & SANITIZATION ---
+        Add a "metadata_clean" block at the top level of the document data. This will be processed by the export engine to strip hidden properties before saving.
+
+        BLOCK SCHEMA:
+        { "type": "metadata_clean", "strip": ["creator", "lastModifiedBy", "revision", "description", "subject", "keywords"], "replacement": { "creator": "Nurotra Docs Agent", "lastModifiedBy": "" } }
+        — "strip" lists which docProps fields to clear.
+        — "replacement" optional: sets a sanitized value (e.g., replace author with "Nurotra Docs Agent").
+        — Place this as a block in the FIRST section of the document.
+`;
+            }
+
+            if (ops.includes('STYLE_MANAGEMENT')) {
+                block += `
+        --- STYLE MANAGEMENT ---
+        Use "styled_paragraph" blocks instead of plain paragraphs for content where named Word styles would be appropriate.
+
+        BLOCK SCHEMA:
+        { "type": "styled_paragraph", "style_name": "Heading 1|Heading 2|Heading 3|Normal|Quote|Caption|Body Text|Intense Quote", "text": "...", "style": {} }
+        — "style_name" must be one of the exact values above.
+        — This ensures proper Word style application for formatting consistency.
+        — Use "Heading 1", "Heading 2", "Heading 3" for section titles (NOT plain headings in sections).
+        — Use "Quote" or "Intense Quote" for testimonials, references, pull-quotes.
+        — Use "Caption" for figure/table labels.
+        — Use "Body Text" for the main prose content.
+        — Mix "styled_paragraph" with normal "paragraph" as needed.
+`;
+            }
+
+            if (ops.includes('DOCUMENT_PROTECTION')) {
+                block += `
+        --- DOCUMENT PROTECTION ---
+        { "type": "protection", "mode": "read_only" }   — Full read-only, no editing permitted.
+        { "type": "protection", "mode": "form_fields" }  — Only form fields (fillable tables) can be edited.
+        { "type": "protection", "mode": "tracked_changes" } — All edits are tracked as revisions.
+        — Choose the mode that best matches the user's request.
+        — Only ONE protection block per document.
+`;
+            }
+
+            block += `\n        ALWAYS use these advanced blocks in addition to regular blocks. Do NOT ignore them just because they are new — they are required for this prompt.\n`;
+            return block;
+        };
+
+
 
         // Build format-specific instructions
         let formatInstructions = '';
@@ -615,12 +717,19 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         }`;
         }
 
+        // Append advanced features block for Word documents (empty string for Excel/PPT)
+        if (docType === 'word' && advancedOps.length > 0) {
+            formatInstructions += buildAdvancedWordFeatures(advancedOps);
+        }
+
         const systemPrompt = `You are the Nurotra Content Architect.
         MISSION: Generate structured JSON for a ${intent} action on a ${docType.toUpperCase()} document.
+        CRITICAL: The output document type MUST be "${docType}". Do NOT change it to excel, word, or ppt unless the user explicitly asked for a different format.
         
         CRITICAL RULES:
         - Output ONLY valid JSON. No markdown, no commentary.
-        - FILENAME: Propose a semantic, descriptive name (e.g., "Marketing_Growth_Plan", "Quarterly_Budget_Analysis"). No spaces.
+        - The "type" field in "generation" MUST be "${docType}". Do NOT deviate from this.
+        - FILENAME: Propose a semantic, descriptive name with the correct extension (${docType === 'ppt' ? '.pptx' : docType === 'excel' ? '.xlsx' : '.docx'}). No spaces.
         ${currentDoc ? '- ITERATIVE EDIT: You are modifying an existing document. PRESERVE all existing data/sections unless explicitly asked to change or delete them.' : ''}
         
         ${currentDoc ? `EXISTING DOCUMENT CONTEXT (JSON):

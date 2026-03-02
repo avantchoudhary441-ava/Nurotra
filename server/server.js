@@ -9,10 +9,7 @@ const rateLimit = require("express-rate-limit");
 const path = require("path");
 
 const app = express();
-console.log("[DEBUG] Server file loading. PID:", process.pid);
 app.set("trust proxy", 1);
-app.get("/", (req, res) => res.send("Nurotra API Server is Running"));
-app.get("/api/health", (req, res) => res.json({ status: "up", timestamp: new Date(), pid: process.pid }));
 
 // Middleware
 app.use(helmet());
@@ -73,7 +70,6 @@ app.use("/api/message", require("./routes/messageRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/nuro", require("./routes/nuroRoutes"));
 app.use("/api/docs-agent", require("./routes/docsAgentRoutes"));
-app.use("/api/test", require("./routes/testRoutes"));
 app.use("/api/deliverables", require("./routes/deliverableRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 
@@ -110,7 +106,6 @@ if (process.env.NODE_ENV === "production") {
     });
 }
 
-const PORT = 5001; // Forced to 5001 to resolve workspace API conflict
-console.log(`[DEBUG] Attempting to listen on port ${PORT}...`);
+const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

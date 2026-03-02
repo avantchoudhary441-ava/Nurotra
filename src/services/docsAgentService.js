@@ -195,14 +195,8 @@ export const docsAgentService = {
      * Manually trigger an automated save to local workspace
      */
     automateLocalSave: async (document, projectName, format) => {
-        try {
-            const response = await api.post('/docs-agent/automate-save', { document, projectName, format });
-            return response.data;
-        } catch (error) {
-            console.error("Automated save failed:", error);
-            // Silent failure for automated save (not to interrupt user flow)
-            return null;
-        }
+        const response = await api.post('/docs-agent/automate-save', { document, projectName, format });
+        return response.data;
     },
 
     /**
@@ -215,45 +209,6 @@ export const docsAgentService = {
         } catch (error) {
             console.error("Failed to open workspace:", error);
             return null;
-        }
-    },
-
-    /**
-     * Trigger native folder picker on backend
-     */
-    pickWorkspace: async () => {
-        try {
-            const response = await api.post('/docs-agent/workspaces/pick');
-            return response.data; // { path, cancelled }
-        } catch (error) {
-            console.error("Failed to pick workspace:", error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get real-time file tree from a custom path
-     */
-    getWorkspaceTree: async (path) => {
-        try {
-            const response = await api.get(`/docs-agent/workspaces/tree?path=${encodeURIComponent(path)}`);
-            return response.data;
-        } catch (error) {
-            console.error("Failed to fetch workspace tree:", error);
-            throw error;
-        }
-    },
-
-    /**
-     * Get recent files from a custom path
-     */
-    getRecentWorkspaceFiles: async (path) => {
-        try {
-            const response = await api.get(`/docs-agent/workspaces/recent?path=${encodeURIComponent(path)}`);
-            return response.data;
-        } catch (error) {
-            console.error("Failed to fetch recent files:", error);
-            throw error;
         }
     }
 };

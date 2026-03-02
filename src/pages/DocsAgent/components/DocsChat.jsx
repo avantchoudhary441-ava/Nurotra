@@ -110,22 +110,35 @@ const DocsChat = ({
         };
     }, [prompt, performSearch]);
 
+    const lastTriggerIdRef = useRef(null);
+
     useEffect(() => {
-        if (initialTrigger) {
-            setIsAutoTyping(true);
-            let i = 0;
-            const text = initialTrigger.text;
-            const typingTimer = setInterval(() => {
-                if (i < text.length) {
-                    setPrompt(text.substring(0, i + 1));
-                    i++;
-                } else {
-                    clearInterval(typingTimer);
-                    setIsAutoTyping(false);
-                }
-            }, 30);
-            return () => clearInterval(typingTimer);
+        // Only fire when a genuinely new trigger arrives (guard by id)
+        if (!initialTrigger || initialTrigger.id === lastTriggerIdRef.current) return;
+        lastTriggerIdRef.current = initialTrigger.id;
+
+        const text = initialTrigger.text || '';
+
+        // For empty-text triggers (standalone doc flow), just clear the prompt — no typing effect
+        if (!text.trim()) {
+            setPrompt('');
+            setIsAutoTyping(false);
+            return;
         }
+
+        setPrompt('');
+        setIsAutoTyping(true);
+        let i = 0;
+        const typingTimer = setInterval(() => {
+            if (i < text.length) {
+                setPrompt(text.substring(0, i + 1));
+                i++;
+            } else {
+                clearInterval(typingTimer);
+                setIsAutoTyping(false);
+            }
+        }, 30);
+        return () => clearInterval(typingTimer);
     }, [initialTrigger]);
 
     const scrollToBottom = () => {
@@ -156,6 +169,8 @@ const DocsChat = ({
             return;
         }
         if (!prompt.trim()) return;
+        if (isThinking) return; // Prevent double-submission while AI is processing
+
         const userPrompt = prompt.trim();
         setPrompt('');
         setShowSuggestions(false);
@@ -601,7 +616,11 @@ const DocsChat = ({
                     <textarea
                         ref={textareaRef}
                         value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
+                        onChange={(e) => {
+                            // If user starts typing manually, cancel any auto-typing
+                            if (isAutoTyping) setIsAutoTyping(false);
+                            setPrompt(e.target.value);
+                        }}
                         onKeyPress={handleKeyPress}
                         placeholder={isListening ? "Listening..." : isStructuring ? "Structuring..." : "Describe what you want to create..."}
                         className={`prompt-textarea ${isAutoTyping ? 'auto-typing' : ''} ${isListening ? 'listening' : ''}`}

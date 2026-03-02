@@ -1,5 +1,4 @@
 const express = require('express');
-console.log("[DEBUG] Loading docsAgentRoutes...");
 const router = express.Router();
 const docsAgentController = require('../controllers/docsAgentController');
 const { protect } = require('../middleware/authMiddleware');
@@ -15,8 +14,5 @@ router.post('/extract-metadata', protect, docsAgentController.extractMetadata);
 router.post('/structure-voice', protect, docsAgentController.structureVoicePrompt);
 router.post('/automate-save', protect, docsAgentController.automateLocalSave);
 router.post('/open-workspace', protect, docsAgentController.openWorkspace);
-router.post('/workspaces/pick', protect, docsAgentController.pickAndRegisterWorkspace);
-router.get('/workspaces/tree', protect, docsAgentController.getWorkspaceTree);
-router.get('/workspaces/recent', protect, docsAgentController.getRecentWorkspaceFiles);
 
 module.exports = router;
