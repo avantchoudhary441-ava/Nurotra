@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, Download, Cloud, FolderOpen, File, RefreshCw, Copy, Edit3 } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Download, Cloud, FolderOpen, File, RefreshCw, Copy, Edit3, Trash2 } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
 import DocEditModal from './DocEditModal';
 
@@ -14,8 +14,9 @@ const ProjectsDocs = ({
     activeProjectId // New prop
 }) => {
     const [expandedProjects, setExpandedProjects] = useState([1]);
-    const [downloading, setDownloading] = useState(null); // docId currently downloading
-    const [downloadStatus, setDownloadStatus] = useState(null); // 'success' | 'error' | null
+    const [downloading, setDownloading] = useState(null);
+    const [downloadStatus, setDownloadStatus] = useState(null);
+    const [deleting, setDeleting] = useState(null); // docId currently being deleted
     const [editingDoc, setEditingDoc] = useState(null);
 
     // Find the active document object
@@ -44,6 +45,24 @@ const ProjectsDocs = ({
     const handleExportWord = () => handleDownload(activeDoc);
     const handleExportXLSX = () => handleDownload(activeDoc);
     const handleExportPPT = () => handleDownload(activeDoc);
+
+    // ─── Delete handler ─────────────────────────────────────────────────────
+    const handleDelete = async (doc, e) => {
+        e.stopPropagation();
+        const docId = doc.id || doc._id;
+        if (!window.confirm(`Delete "${doc.name}"? This cannot be undone.`)) return;
+        setDeleting(docId);
+        try {
+            await docsAgentService.deleteDocument(docId);
+            // Notify parent to refresh the list
+            if (onUpdateDoc) onUpdateDoc(null, docId);
+        } catch (err) {
+            console.error('Delete failed:', err);
+            alert('Failed to delete document. Please try again.');
+        } finally {
+            setDeleting(null);
+        }
+    };
 
     const handleCopyToClipboard = () => {
         if (activeDoc?.content) {
@@ -180,6 +199,16 @@ const ProjectsDocs = ({
                                                         ? <RefreshCw size={12} className="animate-spin" />
                                                         : <Download size={12} />}
                                                 </button>
+                                                <button
+                                                    className="doc-mini-action doc-delete-action"
+                                                    onClick={(e) => handleDelete(doc, e)}
+                                                    title="Delete Document"
+                                                    disabled={deleting === (doc.id || doc._id)}
+                                                >
+                                                    {deleting === (doc.id || doc._id)
+                                                        ? <RefreshCw size={12} className="animate-spin" />
+                                                        : <Trash2 size={12} />}
+                                                </button>
                                                 {activeDocId === doc.id && isSyncing && (
                                                     <RefreshCw size={10} className="animate-spin doc-sync-icon" />
                                                 )}
@@ -233,6 +262,16 @@ const ProjectsDocs = ({
                                             ? <RefreshCw size={12} className="animate-spin" />
                                             : <Download size={12} />}
                                     </button>
+                                    <button
+                                        className="doc-mini-action doc-delete-action"
+                                        onClick={(e) => handleDelete(doc, e)}
+                                        title="Delete Document"
+                                        disabled={deleting === (doc.id || doc._id)}
+                                    >
+                                        {deleting === (doc.id || doc._id)
+                                            ? <RefreshCw size={12} className="animate-spin" />
+                                            : <Trash2 size={12} />}
+                                    </button>
                                     {activeDocId === doc.id && isSyncing && (
                                         <RefreshCw size={10} className="animate-spin doc-sync-icon" />
                                     )}
@@ -243,57 +282,59 @@ const ProjectsDocs = ({
                 )}
             </div>
 
-            {/* Export & Sync Actions */}
-            <div className="export-sync-section">
-                <h3 className="section-title">export & sync</h3>
+            {/* Export & Sync Actions — temporarily disabled */}
+            {false && (
+                <div className="export-sync-section">
+                    <h3 className="section-title">export &amp; sync</h3>
 
-                <div className="export-buttons">
-                    <button className="export-btn" onClick={handleCopyToClipboard}>
-                        <Copy size={14} />
-                        <span>Copy for G-Docs</span>
-                    </button>
-                    <button className="export-btn">
-                        <Cloud size={14} />
-                        <span>Sync to Drive</span>
-                    </button>
-                </div>
-
-                <div className="export-formats">
-                    <span className="format-label">Export as:</span>
-                    <div className="format-chips">
-                        <button className="format-chip">PDF</button>
-                        <button
-                            className={`format-chip ${activeDoc?.type === 'word' ? 'active-action' : ''}`}
-                            onClick={handleExportWord}
-                        >
-                            DOCX
+                    <div className="export-buttons">
+                        <button className="export-btn" onClick={handleCopyToClipboard}>
+                            <Copy size={14} />
+                            <span>Copy for G-Docs</span>
                         </button>
-                        <button
-                            className={`format-chip ${activeDoc?.type === 'ppt' ? 'active-action' : ''}`}
-                            onClick={handleExportPPT}
-                        >
-                            PPTX
-                        </button>
-                        <button
-                            className={`format-chip ${activeDoc?.type === 'excel' ? 'active-action' : ''}`}
-                            onClick={handleExportXLSX}
-                        >
-                            XLSX
+                        <button className="export-btn">
+                            <Cloud size={14} />
+                            <span>Sync to Drive</span>
                         </button>
                     </div>
-                </div>
 
-                {/* Cloud Download Notification */}
-                {downloadStatus && (
-                    <div className={`sync-notification sidebar-sync ${downloadStatus}`}>
-                        {downloadStatus === 'success' ? (
-                            <span>☁️ Downloaded from <strong>cloud workspace</strong></span>
-                        ) : (
-                            <span>❌ Download failed — try again</span>
-                        )}
+                    <div className="export-formats">
+                        <span className="format-label">Export as:</span>
+                        <div className="format-chips">
+                            <button className="format-chip">PDF</button>
+                            <button
+                                className={`format-chip ${activeDoc?.type === 'word' ? 'active-action' : ''}`}
+                                onClick={handleExportWord}
+                            >
+                                DOCX
+                            </button>
+                            <button
+                                className={`format-chip ${activeDoc?.type === 'ppt' ? 'active-action' : ''}`}
+                                onClick={handleExportPPT}
+                            >
+                                PPTX
+                            </button>
+                            <button
+                                className={`format-chip ${activeDoc?.type === 'excel' ? 'active-action' : ''}`}
+                                onClick={handleExportXLSX}
+                            >
+                                XLSX
+                            </button>
+                        </div>
                     </div>
-                )}
-            </div>
+
+                    {/* Cloud Download Notification */}
+                    {downloadStatus && (
+                        <div className={`sync-notification sidebar-sync ${downloadStatus}`}>
+                            {downloadStatus === 'success' ? (
+                                <span>☁️ Downloaded from <strong>cloud workspace</strong></span>
+                            ) : (
+                                <span>❌ Download failed — try again</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
             {/* Doc Edit Modal */}
             {editingDoc && (
                 <DocEditModal

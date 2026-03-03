@@ -5,7 +5,7 @@
 
 const INTENT_WEIGHTS = {
     CREATE: { keywords: ['create', 'make', 'generate', 'build', 'new', 'start', 'prepare', 'write', 'draft', 'compose', 'structure', 'arrange'], weight: 1.0 },
-    MODIFY: { keywords: ['edit', 'change', 'update', 'fix', 'refine', 'revise', 'modify', 'calculate', 'sum', 'average', 'addition', 'math', 'total', 'arithmetic', 'correct', 'improve', 'enhance'], weight: 0.9 },
+    MODIFY: { keywords: ['edit', 'change', 'update', 'fix', 'refine', 'revise', 'modify', 'calculate', 'sum', 'average', 'addition', 'math', 'total', 'arithmetic', 'correct', 'improve', 'enhance', 'add', 'include', 'insert', 'append', 'remove section', 'rename', 'replace', 'rewrite section', 'expand', 'shorten', 'make it', 'adjust'], weight: 0.9 },
     QUERY: { keywords: ['what', 'how', 'who', 'analyze', 'explain', 'search', 'tell me', 'find', 'lookup', 'research'], weight: 0.8 },
     DATA_OP: { keywords: ['merge', 'sort', 'filter', 'calculate', 'clean', 'duplicate', 'sum', 'average', 'tally'], weight: 1.0 },
     CONVERT: { keywords: ['turn into', 'convert', 'summarize to', 'transform', 'translate', 'export'], weight: 1.0 },
@@ -262,8 +262,37 @@ const classifyIntent = (prompt) => {
     };
 };
 
+/**
+ * Context-aware intent classification.
+ * When a document is already open and no strong CREATE signal found,
+ * default to MODIFY instead of QUERY.
+ * @param {string} prompt
+ * @param {boolean} hasOpenDoc - true if a document is currently active in the editor
+ */
+const contextualClassifyIntent = (prompt, hasOpenDoc = false) => {
+    const result = classifyIntent(prompt);
+
+    // Strong CREATE signals — user explicitly wants something new
+    const strongCreateSignals = ['create', 'make', 'generate', 'build', 'new', 'start', 'prepare', 'draft', 'compose'];
+    const lowerPrompt = prompt.toLowerCase();
+    const hasStrongCreate = strongCreateSignals.some(kw => lowerPrompt.includes(kw));
+
+    // If a doc is open and there's no explicit "create new" signal, treat as MODIFY
+    if (hasOpenDoc && !hasStrongCreate && result.intent !== 'QUERY') {
+        return { ...result, intent: 'MODIFY', confidence: Math.max(result.confidence, 0.85) };
+    }
+
+    // If a doc is open and the intent is QUERY with no create signal, still assume MODIFY
+    if (hasOpenDoc && !hasStrongCreate && result.intent === 'QUERY') {
+        return { ...result, intent: 'MODIFY', confidence: 0.8 };
+    }
+
+    return result;
+};
+
 module.exports = {
     classifyIntent,
+    contextualClassifyIntent,
     detectDocType,
     detectLength,
     detectRisk,

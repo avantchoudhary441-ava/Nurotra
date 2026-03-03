@@ -11,7 +11,8 @@ import {
     Undo,
     Search,
     FileText,
-    FolderOpen
+    FolderOpen,
+    Edit3
 } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
@@ -30,9 +31,11 @@ const DocsChat = ({
     pastConversations,
     onSelectHistory,
     currentDoc,
+    currentProject,
     allDocs,
     onOpenDoc,
-    onOpenProject
+    onOpenProject,
+    onExitEditMode   // ← new: clears the active doc (exit edit mode)
 }) => {
     const [prompt, setPrompt] = useState('');
     const [isListening, setIsListening] = useState(false);
@@ -205,7 +208,7 @@ const DocsChat = ({
             const agentMsg = {
                 id: Date.now() + 1,
                 type: response.intent === 'CREATE' ? 'narration' : 'agent_answer',
-                text: response.text,
+                text: response?.text || response?.message || "Processing your request...",
                 clarification: response.clarification,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
@@ -399,7 +402,7 @@ const DocsChat = ({
             const agentMsg = {
                 id: Date.now() + 1,
                 type: response.intent === 'CREATE' ? 'narration' : 'agent_answer',
-                text: response.text,
+                text: response?.text || response?.message || "Applying structural changes...",
                 clarification: response.clarification,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
@@ -566,6 +569,27 @@ const DocsChat = ({
             </div>
 
             <div className="input-section">
+                {/* ── Edit Mode Banner ─────────────────────────────────────── */}
+                {currentDoc && (
+                    <div className="edit-mode-banner">
+                        <div className="edit-mode-info">
+                            <Edit3 size={13} className="edit-mode-icon" />
+                            <span className="edit-mode-label">Editing:</span>
+                            <span className="edit-mode-filename" title={currentDoc.name}>
+                                {currentDoc.name?.length > 30
+                                    ? currentDoc.name.substring(0, 30) + '...'
+                                    : currentDoc.name}
+                            </span>
+                        </div>
+                        <button
+                            className="edit-mode-exit"
+                            onClick={onExitEditMode}
+                            title="Exit edit mode (create a new document instead)"
+                        >
+                            <X size={12} />
+                        </button>
+                    </div>
+                )}
                 {/* Keyword Search Suggestions */}
                 {showSuggestions && (searchSuggestions.documents.length > 0 || searchSuggestions.projects.length > 0) && (
                     <div className="doc-search-suggestions">
@@ -624,7 +648,7 @@ const DocsChat = ({
                             setPrompt(e.target.value);
                         }}
                         onKeyPress={handleKeyPress}
-                        placeholder={isListening ? "Listening..." : isStructuring ? "Structuring..." : "Describe what you want to create..."}
+                        placeholder={isListening ? "Listening..." : isStructuring ? "Structuring..." : currentDoc ? "Describe the changes you want to make..." : "Describe what you want to create..."}
                         className={`prompt-textarea ${isAutoTyping ? 'auto-typing' : ''} ${isListening ? 'listening' : ''}`}
                         rows={1}
                         disabled={isStructuring}

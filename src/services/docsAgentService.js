@@ -41,10 +41,12 @@ export const docsAgentService = {
      */
     generateResponse: async (prompt, intent, context = {}) => {
         try {
+            const hasOpenDoc = !!(context.currentDoc && (context.currentDoc.id || context.currentDoc._id));
             const response = await api.post('/docs-agent/query', {
                 prompt,
                 history: context.history || [],
-                currentDoc: context.currentDoc || null
+                currentDoc: context.currentDoc || null,
+                hasOpenDoc   // ← tells controller/AI to use MODIFY path
             });
 
             // The backend returns { intent, text, clarification, steps? }
@@ -254,6 +256,19 @@ export const docsAgentService = {
         } catch (error) {
             console.error('Failed to list workspace:', error);
             return [];
+        }
+    },
+
+    /**
+     * Delete a document and its associated workspace file from MongoDB.
+     */
+    deleteDocument: async (documentId) => {
+        try {
+            const response = await api.delete(`/docs-agent/documents/${documentId}`);
+            return response.data;
+        } catch (error) {
+            console.error('Failed to delete document:', error);
+            throw error;
         }
     }
 };

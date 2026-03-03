@@ -427,12 +427,18 @@ const DocsAgentPage = () => {
                 const projectForSync = currentProject || projects.find(p => p.documents?.some(d => String(d.id) === String(savedDoc.id)));
                 docsAgentService.automateLocalSave(savedDoc, projectForSync ? projectForSync.name : "").catch(() => { });
 
-                addLiveUpdate(isModify ? '✅ Changes applied! Your document is updated.' : '✅ Done! Your document is ready for you.');
+                if (isModify) {
+                    addLiveUpdate('✅ Changes applied! Your document is updated.');
+                    addLiveUpdate('📥 Download the file to access the latest changes.');
+                } else {
+                    addLiveUpdate('✅ Done! Your document is ready for you.');
+                }
                 setAgentStatus('Success!');
             } else {
                 // Return to idle but keep the text response visible in chat
                 addLiveUpdate("⚠️ I found some information, but I couldn't create the file yet.");
-                addLiveUpdate(`Response: "${response.text.substring(0, 40)}..."`);
+                const respText = response?.text || response?.message || "No textual response received.";
+                addLiveUpdate(`Response: "${respText.substring(0, 40)}..."`);
                 setAgentStatus('Ready');
             }
         } catch (error) {
@@ -597,8 +603,15 @@ const DocsAgentPage = () => {
 
     const openProject = (project) => {
         setCurrentProject(project);
-        setCurrentDoc(null); // Clear active doc to show project overview/entry
+        setCurrentDoc(null);
         setAgentStatus('Viewing Project');
+        setExecutionState(prev => ({ ...prev, status: 'idle' }));
+    };
+
+    // Exit edit mode — clear active doc without deleting it
+    const exitEditMode = () => {
+        setCurrentDoc(null);
+        setAgentStatus('Ready');
         setExecutionState(prev => ({ ...prev, status: 'idle' }));
     };
 
@@ -608,13 +621,27 @@ const DocsAgentPage = () => {
         ...projects.flatMap(p => (p.documents || []).map(d => ({ ...d, projectName: p.name })))
     ];
 
-    // Handle doc metadata update from edit modal
-    const handleUpdateDoc = (updatedDoc) => {
-        // Update standalone docs
+    // Handle doc metadata update from edit modal, or deletion (updatedDoc=null, deletedId provided)
+    const handleUpdateDoc = (updatedDoc, deletedId = null) => {
+        if (!updatedDoc && deletedId) {
+            // ── Deletion path ──
+            setStandaloneDocs(prev => prev.filter(d => String(d.id || d._id) !== String(deletedId)));
+            setProjects(prev =>
+                prev.map(p => ({
+                    ...p,
+                    documents: (p.documents || []).filter(d => String(d.id || d._id) !== String(deletedId)),
+                    docCount: Math.max(0, (p.docCount || 1) - 1)
+                }))
+            );
+            if (currentDoc && String(currentDoc.id || currentDoc._id) === String(deletedId)) {
+                setCurrentDoc(null);
+            }
+            return;
+        }
+        // ── Update path ──
         setStandaloneDocs(prev =>
             prev.map(d => (String(d.id || d._id) === String(updatedDoc.id || updatedDoc._id) ? { ...d, ...updatedDoc } : d))
         );
-        // Update project docs
         setProjects(prev =>
             prev.map(p => ({
                 ...p,
@@ -623,7 +650,6 @@ const DocsAgentPage = () => {
                 )
             }))
         );
-        // Update current doc if it's the one being edited
         if (currentDoc && String(currentDoc.id || currentDoc._id) === String(updatedDoc.id || updatedDoc._id)) {
             setCurrentDoc(prev => ({ ...prev, ...updatedDoc }));
         }
@@ -751,6 +777,7 @@ const DocsAgentPage = () => {
                     allDocs={allDocs}
                     onOpenDoc={openDocument}
                     onOpenProject={openProject}
+                    onExitEditMode={exitEditMode}
                 />
             </div>
         </div>

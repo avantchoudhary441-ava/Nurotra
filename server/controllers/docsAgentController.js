@@ -1,7 +1,9 @@
 const Project = require("../models/Project");
 const Document = require("../models/Document");
+const WorkspaceFile = require("../models/WorkspaceFile");
 const aiService = require("../services/aiService");
 const intentEngine = require("../services/intentEngine");
+const { contextualClassifyIntent } = require("../services/intentEngine");
 const { saveToCloud } = require("./workspaceController");
 
 /**
@@ -10,6 +12,7 @@ const { saveToCloud } = require("./workspaceController");
  */
 const processQuery = async (req, res) => {
     const { prompt, history, currentDoc } = req.body;
+    const hasOpenDoc = !!(currentDoc && (currentDoc.id || currentDoc._id));
 
     if (!prompt) {
         return res.status(400).json({ message: "Prompt is required" });
@@ -22,17 +25,20 @@ const processQuery = async (req, res) => {
             niche: req.user.niche || "General"
         };
 
-        // 1. Hybrid Intent Detection (Invisible Intelligence)
-        let intentInfo = intentEngine.classifyIntent(prompt);
+        // 1. Context-aware Intent Detection
+        let intentInfo = contextualClassifyIntent(prompt, hasOpenDoc);
         let categoryOverride = null;
 
         // If confidence is low, trigger Intent Rescue (Invisible to user)
         if (intentInfo.confidence < 0.8) {
             console.log(`Debug: Low confidence (${intentInfo.confidence}). Rescuing intent via LLM...`);
             const rescue = await aiService.extractIntentWithLLM(prompt);
-            intentInfo.intent = rescue.intent;
+            // Only override if rescue gives CREATE — don't override MODIFY when doc is open
+            if (!hasOpenDoc || rescue.intent === 'CREATE') {
+                intentInfo.intent = rescue.intent;
+            }
             categoryOverride = rescue.category;
-            intentInfo.confidence = 0.9; // Boost confidence after rescue
+            intentInfo.confidence = 0.9;
         }
 
         const risk = intentEngine.detectRisk(prompt);
@@ -51,8 +57,9 @@ const processQuery = async (req, res) => {
             intent: intentInfo.intent,
             risk,
             metadata,
-            advancedOps, // Injected into AI prompt for dynamic feature generation
-            currentDoc // Pass the current document for iterative editing
+            advancedOps,
+            currentDoc,
+            hasOpenDoc  // ← tells AI to use MODIFY system prompt
         });
         res.json(response);
     } catch (error) {
@@ -310,6 +317,28 @@ const searchDocuments = async (req, res) => {
     }
 };
 
+/**
+ * Delete a document and its associated workspace file
+ * Route: DELETE /api/docs-agent/documents/:id
+ */
+const deleteDocument = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const document = await Document.findOne({ _id: id, userId: req.user._id });
+        if (!document) {
+            return res.status(404).json({ message: "Document not found" });
+        }
+        // Delete the binary workspace file if it exists
+        await WorkspaceFile.deleteOne({ documentId: id, userId: req.user._id });
+        // Delete the document record
+        await Document.deleteOne({ _id: id, userId: req.user._id });
+        res.json({ message: "Document deleted successfully", id });
+    } catch (error) {
+        console.error("Delete Document Error:", error);
+        res.status(500).json({ message: "Failed to delete document" });
+    }
+};
+
 module.exports = {
     processQuery,
     getProjects,
@@ -317,6 +346,7 @@ module.exports = {
     getDocuments,
     createDocument,
     updateDocument,
+    deleteDocument,
     searchDocuments,
     extractMetadata,
     structureVoicePrompt,

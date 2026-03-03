@@ -2116,6 +2116,21 @@
     background: rgba(139, 92, 246, 0.15) !important;
 }
 
+/* Delete button — red on hover */
+.doc-delete-action {
+    opacity: 0;
+    transition: all 0.2s ease;
+}
+
+.document-item:hover .doc-delete-action {
+    opacity: 1;
+}
+
+.doc-delete-action:hover {
+    color: #f87171 !important;
+    background: rgba(239, 68, 68, 0.15) !important;
+}
+
 /* Modal Overlay */
 .doc-edit-modal-overlay {
     position: fixed;
@@ -2499,4 +2514,71 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+}
+
+/* ========================================
+   EDIT MODE BANNER
+   ======================================== */
+
+.edit-mode-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.85rem;
+    margin-bottom: 0.5rem;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 10px;
+    animation: slideUp 0.25s ease-out;
+}
+
+.edit-mode-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    overflow: hidden;
+}
+
+.edit-mode-icon {
+    color: var(--accent-2);
+    flex-shrink: 0;
+}
+
+.edit-mode-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #a78bfa;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
+.edit-mode-filename {
+    font-size: 0.78rem;
+    color: #e2d9f3;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+
+.edit-mode-exit {
+    background: transparent;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0.2rem;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    margin-left: 0.5rem;
+}
+
+.edit-mode-exit:hover {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
 }

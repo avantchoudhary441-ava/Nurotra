@@ -591,18 +591,55 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
             formatInstructions += buildAdvancedWordFeatures(advancedOps, prompt);
         }
 
-        const systemPrompt = `You are the Nurotra Content Architect.
+        // ── MODIFY path: targeted edit of existing document ──────────────────
+        let systemPrompt;
+        if (currentDoc && (intent === 'MODIFY' || preParsed?.hasOpenDoc)) {
+            const existingStructure = currentDoc.rawStructure ? JSON.stringify(currentDoc.rawStructure) : null;
+            const existingContent = currentDoc.content ? currentDoc.content.substring(0, 4000) : '';
+
+            systemPrompt = `You are the Nurotra Document Editor. You are editing an EXISTING document.
+
+EXISTING DOCUMENT NAME: "${currentDoc.name || 'Untitled'}"
+EXISTING DOCUMENT CONTENT (first 4000 chars):
+${existingContent}
+${existingStructure ? `\nEXISTING STRUCTURE (JSON):\n${existingStructure}` : ''}
+
+YOUR TASK:
+- Apply ONLY the changes the user requested. Do NOT regenerate the whole document from scratch.
+- Preserve all existing sections, text, and structure that were NOT mentioned in the request.
+- If the user says "add a section about X", add it. If they say "rename the title", rename only the title. If they say "make it shorter", condense — do not change unrelated sections.
+- Return the COMPLETE updated document wrapped in the required JSON envelope.
+
+REQUIRED JSON ENVELOPE:
+{
+  "intent": "MODIFY",
+  "text": "Brief summary of what was changed (e.g. 'Added a new section about marketing goals')",
+  "generation": {
+    "type": "${docType}",
+    "data": { ... your updated document data ... }
+  }
+}
+
+CRITICAL RULES:
+- Output ONLY valid JSON. No markdown fences.
+- Use the SAME fileName as the original: "${currentDoc.name || 'document.docx'}"
+- Keep all existing sections intact unless explicitly asked to change them.
+
+${formatInstructions}`;
+        } else {
+            // ── CREATE path: generate a brand new document ────────────────────
+            systemPrompt = `You are the Nurotra Content Architect.
         MISSION: Generate structured JSON for a ${intent} action.
         DOCUMENT TYPE: ${docType.toUpperCase()}.
         DETAIL LEVEL: ${lengthPref}.
-        
+
         CRITICAL RULES:
         - Output ONLY valid JSON.
         - GENERATE COMPLETE, PROFESSIONAL CONTENT. Avoid saying "[Insert content here]".
         - If a section is requested, write the full content for it.
-        ${currentDoc ? `ITERATIVE EDIT: Preserve existing structure: ${JSON.stringify(currentDoc.rawStructure)}` : ''}
 
         ${formatInstructions}`;
+        }
 
         const userPrompt = `Request: "${prompt}"`;
         let rawResponse = await generateWithFallback(userPrompt, systemPrompt);

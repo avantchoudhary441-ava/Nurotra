@@ -10,6 +10,7 @@ router.get('/documents', protect, docsAgentController.getDocuments);
 router.get('/documents/search', protect, docsAgentController.searchDocuments);
 router.post('/documents', protect, docsAgentController.createDocument);
 router.put('/documents/:id', protect, docsAgentController.updateDocument);
+router.delete('/documents/:id', protect, docsAgentController.deleteDocument);
 router.post('/extract-metadata', protect, docsAgentController.extractMetadata);
 router.post('/structure-voice', protect, docsAgentController.structureVoicePrompt);
 router.post('/automate-save', protect, docsAgentController.automateLocalSave);
