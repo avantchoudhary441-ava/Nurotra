@@ -253,11 +253,24 @@ const DocsAgentPage = () => {
                                 md += `\n---\n*— Page Break —*\n---\n\n`;
                                 break;
                             case 'image':
-                                if (block.url) {
-                                    md += `![${block.caption || 'Image'}](${block.url})\n`;
+                                if (block.url || data.image_url) {
+                                    md += `![${block.caption || 'Image'}](${block.url || data.image_url})\n\n`;
                                 } else {
                                     md += `> 🖼️ **[Image Placeholder: ${block.caption || 'Insert image here'}]** *(${block.width || 400}×${block.height || 250}px)*\n\n`;
                                 }
+                                break;
+                            case 'graph':
+                            case 'chart':
+                                md += `> 📊 **Chart:** ${block.title || data.graph_config?.title || 'Data Visualization'}\n`;
+                                if (block.data || data.graph_config?.data) {
+                                    const graphData = block.data || data.graph_config?.data;
+                                    md += `| ${block.type || 'Value'} | Amount |\n`;
+                                    md += `| --- | --- |\n`;
+                                    graphData.forEach(d => {
+                                        md += `| ${d.name} | ${d.value} |\n`;
+                                    });
+                                }
+                                md += '\n';
                                 break;
                             case 'watermark':
                                 md += `> ⚠️ **Watermark:** "${block.text}"\n\n`;
