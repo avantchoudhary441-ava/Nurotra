@@ -55,6 +55,14 @@ const ADVANCED_OPS_MAP = {
         'protect', 'protection', 'read only', 'read-only', 'restrict editing',
         'restrict', 'lock', 'password protect', 'form fields only', 'no editing'
     ],
+    VISUAL_GENERATION: [
+        'generate image', 'create image', 'draw', 'picture of', 'show an image',
+        'visualize as image', 'add a photo', 'insert image', 'generate a picture'
+    ],
+    DATA_VISUALIZATION: [
+        'graph', 'chart', 'plot', 'bar chart', 'pie chart', 'line graph',
+        'visualize data', 'create a chart', 'draw a graph', 'show statistics'
+    ],
 };
 
 /**

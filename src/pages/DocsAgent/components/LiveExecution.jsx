@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap, ChevronDown } from 'lucide-react';
 import EntryPoint from './EntryPoint';
+import DynamicGraph from './DynamicGraph';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
 import { docsAgentService } from '../../../services/docsAgentService';
 
@@ -313,7 +314,25 @@ const LiveExecution = ({
                         ) : (
                             <div className="markdown-preview">
                                 {currentDoc.content ? (
-                                    <pre className="preview-text">{currentDoc.content}</pre>
+                                    <div className="preview-container">
+                                        {/* Visual Add-ons */}
+                                        {currentDoc.rawStructure?.image_url && (
+                                            <div className="preview-image-container mb-6">
+                                                <img
+                                                    src={currentDoc.rawStructure.image_url}
+                                                    alt="Generated Visual"
+                                                    className="rounded-lg shadow-lg max-w-full h-auto border border-gray-800"
+                                                />
+                                                <p className="text-xs text-gray-500 mt-2 italic text-center">AI Generated Image</p>
+                                            </div>
+                                        )}
+
+                                        {currentDoc.rawStructure?.graph_config && (
+                                            <DynamicGraph config={currentDoc.rawStructure.graph_config} />
+                                        )}
+
+                                        <pre className="preview-text">{currentDoc.content}</pre>
+                                    </div>
                                 ) : (
                                     <div className="empty-canvas">
                                         <File size={40} className="empty-icon" />
