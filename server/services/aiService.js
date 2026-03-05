@@ -43,7 +43,7 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
         throw new Error("No GEMINI_API_KEY found in environment");
     }
 
-    const geminiModels = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest", "gemini-pro-latest", "gemini-pro"];
+    const geminiModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-flash-latest"];
     let lastError = null;
 
     // Outer Loop: API Keys (The Reservoir)
@@ -582,9 +582,36 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
 `;
         } else {
             formatInstructions = `
-        POWERPOINT SCHEMA:
-        { "type": "ppt", "data": { "slides": [{ "title": "Slide Title", "bullets": ["Point 1"] }] } }
-`;
+        POWERPOINT PRESENTATION RULES:
+        1. NARRATIVE FLOW: Ensure a logical progression from "Executive Overview" to "Strategic Implementation".
+        2. SMART CONTENT DISTRIBUTION:
+           - Limit slides to 4-6 high-impact bullets.
+           - If a topic is complex, split it into two slides (e.g., "AI Basics" and "AI Advanced").
+           - Summarize long text; NEVER put paragraphs on slides.
+        3. PROFESSIONAL STYLING:
+           - Each slide MUST have a "title" and a "bullets" array.
+           - Optional: "theme" (Modern | Corporate | Dark | Creative).
+           - Optional: "accentColor" (Hex code).
+        4. SCHEMA:
+        {
+          "intent": "${intent}",
+          "text": "Generated a professional ${lengthPref} presentation.",
+          "generation": {
+            "type": "ppt",
+            "data": {
+              "fileName": "Presentation.pptx",
+              "title": "Presentation Main Title",
+              "theme": "Modern",
+              "slides": [
+                { 
+                  "title": "Slide Title", 
+                  "bullets": ["Synthesized point 1", "Synthesized point 2"],
+                  "speakerNotes": "Context for the presenter..." 
+                }
+              ]
+            }
+          }
+        }`;
         }
 
         if (docType === 'word' || advancedOps.some(op => ['VISUAL_GENERATION', 'DATA_VISUALIZATION'].includes(op))) {
@@ -652,11 +679,20 @@ ${formatInstructions}`;
             parsed = JSON.parse(repairJson(cleanJson));
         }
 
-        // Post-processing to ensure no empty sections
+        // Post-processing to ensure no empty sections or slides
         if (parsed?.generation?.type === 'word' && parsed.generation.data?.sections) {
             parsed.generation.data.sections.forEach(sec => {
                 if (!sec.blocks || sec.blocks.length === 0) {
                     sec.blocks = [{ type: 'paragraph', text: `Detailed analysis of ${sec.heading} will follow standard professional guidelines.`, style: { italic: true } }];
+                }
+            });
+        }
+
+        if (parsed?.generation?.type === 'ppt' && parsed.generation.data?.slides) {
+            parsed.generation.data.slides.forEach((slide, idx) => {
+                if (!slide.title) slide.title = `Slide ${idx + 1}`;
+                if (!slide.bullets || slide.bullets.length === 0) {
+                    slide.bullets = ["Professional synthesis of key narrative points.", "Supporting evidence and strategic alignment."];
                 }
             });
         }

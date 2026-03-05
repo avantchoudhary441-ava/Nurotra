@@ -206,13 +206,52 @@ const saveExcel = async (data, fullPath, safeWriteBuffer) => {
     return safeWriteBuffer(buffer, fullPath);
 };
 
+const getPPTTheme = (themeName) => {
+    const themes = {
+        'Modern': { color: '2D3436', accent: '0984E3', font: 'Helvetica', bg: 'FFFFFF' },
+        'Corporate': { color: '2C3E50', accent: '2980B9', font: 'Arial', bg: 'F4F7F6' },
+        'Dark': { color: 'DFE6E9', accent: '00CEC9', font: 'Verdana', bg: '2D3436' },
+        'Creative': { color: '2D3436', accent: '6C5CE7', font: 'Georgia', bg: 'FAFAFA' }
+    };
+    return themes[themeName] || themes['Modern'];
+};
+
 const savePPT = async (data, fullPath, safeWriteBuffer) => {
     const pres = new pptxgen();
+    const theme = getPPTTheme(data.theme);
+    
     if (data.slides) {
         data.slides.forEach(s => {
             const slide = pres.addSlide();
-            slide.addText(String(s.title || "Slide"), { x: 0.5, y: 0.5, fontSize: 24, bold: true });
-            if (s.bullets) slide.addText(s.bullets.join('\n'), { x: 0.5, y: 1.5, fontSize: 18, bullet: true });
+            slide.background = { fill: theme.bg };
+
+            // Title Bar Accent
+            slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: 1.1, fill: theme.accent });
+
+            // Title 
+            slide.addText(String(s.title || "Slide"), { 
+                x: 0.5, y: 0.3, w: '90%', h: 0.6,
+                fontSize: 32, bold: true, color: 'FFFFFF',
+                fontFace: theme.font, align: 'left',
+                valign: 'middle'
+            });
+
+            // Content Area (y: 1.6 to avoid overlap)
+            if (s.bullets && s.bullets.length > 0) {
+                slide.addText(
+                    s.bullets.map(b => ({ text: String(b), options: { bullet: true, indent: 20, margin: 10 } })),
+                    { 
+                        x: 0.5, y: 1.6, w: '90%', h: 5.0,
+                        fontSize: 18, color: theme.color,
+                        fontFace: theme.font,
+                        lineSpacing: 28,
+                        valign: 'top'
+                    }
+                );
+            }
+
+            // Branding
+            slide.addText("Nurotra Intelligence", { x: 8.0, y: 7.2, fontSize: 10, color: theme.accent, italic: true });
         });
     }
     const buffer = await pres.write('nodebuffer');
