@@ -8,13 +8,13 @@ import {
     Play,
     X,
     RotateCcw,
-    Undo,
     Search,
     FileText,
     FolderOpen,
     Edit3,
     Clock,
-    TrendingUp
+    TrendingUp,
+    CornerUpLeft
 } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
@@ -28,8 +28,7 @@ const DocsChat = ({
     onAgentIntent,
     isPaused,
     onTogglePause,
-    onUndo,
-    onRollback,
+    onInlineUndo,     // ← (msgId, snapshot) → restores state up to that message
     pastConversations,
     onSelectHistory,
     currentDoc,
@@ -37,10 +36,11 @@ const DocsChat = ({
     allDocs,
     onOpenDoc,
     onOpenProject,
-    onExitEditMode,   // ← clears the active doc (exit edit mode)
-    revalReminders,   // ← array of overdue doc names
-    onDismissRevalReminder, // ← callback to dismiss reminders
-    selectedDocIds = []
+    onExitEditMode,
+    revalReminders,
+    onDismissRevalReminder,
+    selectedDocIds = [],
+    onAnalysisResult
 }) => {
     const [prompt, setPrompt] = useState('');
     const [isListening, setIsListening] = useState(false);
@@ -60,6 +60,9 @@ const DocsChat = ({
             text: 'Ready to assist. Upload files or describe what you need.'
         }
     ]);
+
+    // Command-as-Input files (separate from analysis docs)
+    // REMOVED separate command states — consolidated into uploadedFiles
 
     const textareaRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -168,9 +171,32 @@ const DocsChat = ({
         }
     }, [prompt]);
 
+    // Store actual File objects so they can be sent to analysis API
+    const [rawUploadedFiles, setRawUploadedFiles] = useState([]);
+
     const handleFileUpload = (e) => {
         const files = Array.from(e.target.files);
-        setUploadedFiles(prev => [...prev, ...files.map(f => ({ id: Date.now(), name: f.name }))]);
+        setRawUploadedFiles(prev => [...prev, ...files]);
+        setUploadedFiles(prev => [
+            ...prev, 
+            ...files.map(f => ({ 
+                id: Date.now() + Math.random(), 
+                name: f.name,
+                type: f.type,
+                preview: f.type.startsWith('image/') ? URL.createObjectURL(f) : null 
+            }))
+        ]);
+        // Reset input so same file can be re-uploaded
+        e.target.value = '';
+    };
+
+    const removeUploadedFile = (fileId) => {
+        setUploadedFiles(prev => {
+            const file = prev.find(f => f.id === fileId);
+            if (file?.preview) URL.revokeObjectURL(file.preview);
+            return prev.filter(f => f.id !== fileId);
+        });
+        setRawUploadedFiles(prev => prev.filter((_, i) => uploadedFiles[i]?.id !== fileId));
     };
 
     const handleExecute = async () => {
@@ -179,31 +205,123 @@ const DocsChat = ({
             return;
         }
         if (!prompt.trim()) return;
-        if (isThinking) return; // Prevent double-submission while AI is processing
+        if (isThinking) return;
 
         const userPrompt = prompt.trim();
         setPrompt('');
         setShowSuggestions(false);
 
+        // ── Capture a state snapshot BEFORE this command executes ──
+        // The parent passes a function that returns its current state slice.
+        // We embed it into the message so we can restore it on undo.
+        const snapshot = onInlineUndo ? onInlineUndo('GET_SNAPSHOT') : null;
+
+        const msgId = Date.now();
         const userMsg = {
-            id: Date.now(),
+            id: msgId,
             type: 'user',
             text: userPrompt,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            snapshot  // → stored so inline undo can restore
         };
         setStrategyMessages(prev => [...prev, userMsg]);
-
         setIsThinking(true);
 
+        let finalPrompt = userPrompt;
+
+        // ──────────────────────────────────────────────────────────────
+        // SMART ROUTING: ANALYSIS vs COMMAND EXTRACTION
+        // ──────────────────────────────────────────────────────────────
+        const totalDocCount = selectedDocIds.length + rawUploadedFiles.length;
+
+        if (totalDocCount > 0) {
+            try {
+                // First, call Analysis API to detect intent
+                const analysisResult = await docsAgentService.analyzeDocuments(
+                    userPrompt,
+                    selectedDocIds,
+                    rawUploadedFiles
+                );
+
+                if (analysisResult.isAnalysisRequest === false) {
+                    // 🧠 CASE A: FILES ARE INSTRUCTIONS (COMMANDS)
+                    // If backend says this isn't an analysis request, treat files as commands
+                    if (rawUploadedFiles.length > 0) {
+                        setStrategyMessages(prev => [...prev, {
+                            id: Date.now() + 0.1,
+                            type: 'system',
+                            text: `🔍 Checking ${rawUploadedFiles.length} file(s) for instructions...`,
+                            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        }]);
+
+                        const extractionResult = await docsAgentService.extractCommandFromFiles(rawUploadedFiles, userPrompt);
+                        
+                        if (extractionResult.success) {
+                            finalPrompt = extractionResult.combinedCommand;
+                            
+                            // Show user the extracted intent
+                            setStrategyMessages(prev => [...prev, {
+                                id: Date.now() + 0.2,
+                                type: 'info',
+                                text: `📝 **Extracted Intent:**\n\n${extractionResult.combinedCommand.substring(0, 400)}${extractionResult.combinedCommand.length > 400 ? '...' : ''}`,
+                                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            }]);
+                        }
+                    }
+
+                    // Clear uploaded files after they've been read as commands
+                    setUploadedFiles([]);
+                    setRawUploadedFiles([]);
+                    
+                    // Fall through to normal query execution below with the UPDATED finalPrompt
+                } else if (analysisResult.clarificationNeeded) {
+                    setIsThinking(false);
+                    setStrategyMessages(prev => [...prev, {
+                        id: Date.now() + 1,
+                        type: 'agent_answer',
+                        text: `🤔 ${analysisResult.clarificationMessage}`,
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    }]);
+                    return;
+                } else {
+                    // ✅ CASE B: ANALYSIS REQUEST
+                    setIsThinking(false);
+                    const docNames = (analysisResult.analysisReport?._meta?.docsAnalyzed || []).map(d => d.name).join(', ');
+                    setStrategyMessages(prev => [...prev, {
+                        id: Date.now() + 1,
+                        type: 'agent_answer',
+                        text: `✅ Analysis complete for: **${docNames || 'selected documents'}**. The Intelligence Report is now showing in the workspace panel. A Word report (${analysisResult.wordReportName || 'Analysis_Report.docx'}) has been saved to your Docs section.`,
+                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    }]);
+                    setRawUploadedFiles([]);
+                    setUploadedFiles([]);
+                    if (onAnalysisResult) onAnalysisResult(analysisResult);
+                    return;
+                }
+            } catch (err) {
+                console.error('[DocsChat] Routing error:', err.message);
+                setIsThinking(false);
+                setStrategyMessages(prev => [...prev, {
+                    id: Date.now() + 1,
+                    type: 'error',
+                    text: `❌ Processing failed: ${err.message || 'Please try again.'}`,
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }]);
+                return;
+            }
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // NORMAL CREATION / QUERY ROUTE (no docs, or non-analysis prompt)
+        // ──────────────────────────────────────────────────────────────
         try {
-            const intent = docsAgentService.parseIntent(userPrompt);
-            // Pass history context from strategyMessages
+            const intent = docsAgentService.parseIntent(finalPrompt);
             const historyContext = strategyMessages
                 .filter(m => m.type === 'user' || m.type === 'agent_answer')
                 .slice(-5)
                 .map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.text }));
 
-            const response = await docsAgentService.generateResponse(userPrompt, intent, {
+            const response = await docsAgentService.generateResponse(finalPrompt, intent, {
                 history: historyContext,
                 currentDoc: currentDoc,
                 docIds: selectedDocIds
@@ -220,16 +338,15 @@ const DocsChat = ({
             };
             setStrategyMessages(prev => [...prev, agentMsg]);
 
-            // DELEGATE EXECUTION to parent page with the FULL response payload
             if (onAgentIntent) {
                 onAgentIntent({
-                    description: userPrompt,
+                    description: finalPrompt,
                     type: 'TASK_EXECUTION',
                     payload: response
                 });
             }
         } catch (error) {
-            console.error("Docs Agent Error:", error);
+            console.error('Docs Agent Error:', error);
             setIsThinking(false);
             setStrategyMessages(prev => [...prev, {
                 id: Date.now() + 1,
@@ -504,6 +621,23 @@ const DocsChat = ({
                 )}
                 {strategyMessages.map((msg) => (
                     <div key={msg.id} className={`strategy-message ${msg.type}`}>
+                        {msg.type === 'user' && (
+                            <button
+                                className="msg-undo-btn"
+                                title="Undo this command and everything after it"
+                                onClick={() => {
+                                    if (onInlineUndo) {
+                                        // Restore state from the snapshot saved before this message
+                                        onInlineUndo('RESTORE', msg.id, msg.snapshot);
+                                        // Trim chat: remove this message and all after it
+                                        setStrategyMessages(prev => prev.slice(0, prev.findIndex(m => m.id === msg.id)));
+                                    }
+                                }}
+                            >
+                                <CornerUpLeft size={11} />
+                                <span>Undo</span>
+                            </button>
+                        )}
                         {msg.type === 'system' ? (
                             <span>{msg.text} • {msg.time}</span>
                         ) : (
@@ -584,10 +718,6 @@ const DocsChat = ({
                 <div ref={messagesEndRef} />
             </div>
 
-            <div className="chat-controls">
-                <button className="control-btn" onClick={onUndo}><Undo size={14} /> <span>Undo</span></button>
-                <button className="control-btn" onClick={onRollback}><RotateCcw size={14} /> <span>Rollback</span></button>
-            </div>
 
             <div className="input-section">
                 {/* ── Edit Mode Banner ─────────────────────────────────────── */}
@@ -611,20 +741,17 @@ const DocsChat = ({
                         </button>
                     </div>
                 )}
-                {/* Smart Analyze Button for Multi-Select */}
-                {!currentDoc && selectedDocIds.length > 0 && (
-                    <div className="smart-analyze-trigger animate-fade-in-up">
-                        <button
-                            className="smart-analyze-btn"
-                            onClick={() => onAgentIntent({
-                                description: `Analyze and compare the ${selectedDocIds.length} selected documents. Provide deep insights, summaries, and data trends.`,
-                                type: 'TASK_EXECUTION'
-                            })}
-                        >
-                            <TrendingUp size={16} />
-                            <span>Smart Analyze Selected ({selectedDocIds.length})</span>
-                            <div className="btn-shine"></div>
-                        </button>
+                {/* Document Status Indicator — shows doc count, prompts user to type */}
+                {!currentDoc && (selectedDocIds.length + rawUploadedFiles.length) > 0 && (
+                    <div className="doc-status-indicator animate-fade-in-up">
+                        <div className="doc-status-pill">
+                            <TrendingUp size={14} className="doc-status-icon" />
+                            <span className="doc-status-text">
+                                <strong>{selectedDocIds.length + rawUploadedFiles.length}</strong>
+                                {' '}document{(selectedDocIds.length + rawUploadedFiles.length) > 1 ? 's' : ''} ready for analysis
+                            </span>
+                            <span className="doc-status-hint">↓ Type your prompt to analyze</span>
+                        </div>
                     </div>
                 )}
 
@@ -676,6 +803,25 @@ const DocsChat = ({
                         </div>
                     </div>
                 )}
+                {/* File Previews (Analytic or Command) */}
+                {uploadedFiles.length > 0 && (
+                    <div className="command-previews animate-fade-in-up">
+                        {uploadedFiles.map(file => (
+                            <div key={file.id} className="command-file-chip">
+                                {file.preview ? (
+                                    <img src={file.preview} alt="preview" className="cmd-img-preview" />
+                                ) : (
+                                    <FileText size={14} className="cmd-file-icon" />
+                                )}
+                                <span className="cmd-file-name" title={file.name}>{file.name}</span>
+                                <button className="cmd-remove-btn" onClick={() => removeUploadedFile(file.id)}>
+                                    <X size={10} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 <div className="prompt-box">
                     <textarea
                         ref={textareaRef}
@@ -693,13 +839,19 @@ const DocsChat = ({
                     />
                     <div className="prompt-actions">
                         <div className="left-actions">
-                            <button className="action-btn" onClick={() => fileInputRef.current.click()}><Paperclip size={18} /></button>
+                            <button 
+                                className="action-btn" 
+                                onClick={() => fileInputRef.current.click()} 
+                                title="Attach files or images"
+                            >
+                                <Paperclip size={18} />
+                            </button>
                             <button className={`action-btn ${isListening ? 'listening' : ''}`} onClick={toggleVoice}><Mic size={18} /></button>
                         </div>
                         <button className="execute-btn" onClick={handleExecute}><ArrowRight size={18} /></button>
                     </div>
                 </div>
-                <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
+                <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} multiple />
             </div>
         </div>
     );

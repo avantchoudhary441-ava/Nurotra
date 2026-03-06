@@ -20,6 +20,7 @@ const DocsAgentPage = () => {
     const [revalReminders, setRevalReminders] = useState([]); // Overdue doc names for chat reminders
     const [selectedDocIds, setSelectedDocIds] = useState([]); // Multiple docs for analysis
     const [analyticsData, setAnalyticsData] = useState(null); // Data for AnalyticsHub
+    const [wordReport, setWordReport] = useState({ buffer: null, name: null }); // For download
     
     // Robust derivation of all documents
     const allDocs = useMemo(() => {
@@ -35,6 +36,73 @@ const DocsAgentPage = () => {
                 ? prev.filter(id => id !== docId)
                 : [...prev, docId]
         );
+    };
+
+    /**
+     * Called by DocsChat when document analysis completes.
+     * Shows the AnalyticsHub panel and refreshes the Docs sidebar.
+     */
+    const handleAnalysisResult = (result) => {
+        if (result?.analysisReport) {
+            setAnalyticsData(result.analysisReport);
+        }
+        if (result?.wordReportBuffer) {
+            setWordReport({ buffer: result.wordReportBuffer, name: result.wordReportName });
+        }
+        if (result?.updatedDocs) {
+            setStandaloneDocs(result.updatedDocs);
+        } else {
+            fetchInitialData();
+        }
+    };
+
+    /**
+     * Dual-mode inline undo handler attached to each user message.
+     *
+     * mode === 'GET_SNAPSHOT':
+     *   Returns a deep snapshot of all recoverable state BEFORE a command runs.
+     *   Called in DocsChat right before adding a user message.
+     *
+     * mode === 'RESTORE':
+     *   Restores the captured snapshot, reverting the document/project/execution
+     *   state to what it was before that command was executed.
+     */
+    const handleInlineUndo = (mode, _msgId, snapshot) => {
+        if (mode === 'GET_SNAPSHOT') {
+            // Return a plain-object copy of all state that can be restored
+            return {
+                currentDoc: currentDoc ? { ...currentDoc } : null,
+                standaloneDocs: standaloneDocs.map(d => ({ ...d })),
+                projects: projects.map(p => ({ ...p })),
+                executionState: { ...executionState, liveUpdates: [] },
+                analyticsData: analyticsData ? { ...analyticsData } : null,
+                wordReport: { ...wordReport }
+            };
+        }
+
+        if (mode === 'RESTORE') {
+            if (!snapshot) {
+                // No snapshot (e.g. first message) — full reset
+                setCurrentDoc(null);
+                setExecutionState(prev => ({ ...prev, status: 'idle', plan: null, liveUpdates: [] }));
+                setAnalyticsData(null);
+                setWordReport({ buffer: null, name: null });
+                console.log('[InlineUndo] Restored to initial state (no snapshot)');
+                return;
+            }
+            // Restore all captured state
+            setCurrentDoc(snapshot.currentDoc);
+            setStandaloneDocs(snapshot.standaloneDocs);
+            setProjects(snapshot.projects);
+            setExecutionState({
+                ...snapshot.executionState,
+                status: 'idle',
+                liveUpdates: []
+            });
+            setAnalyticsData(snapshot.analyticsData);
+            setWordReport(snapshot.wordReport);
+            console.log('[InlineUndo] Restored snapshot:', _msgId);
+        }
     };
 
     const fetchInitialData = async () => {
@@ -772,6 +840,8 @@ const DocsAgentPage = () => {
                     executionState={executionState}
                     currentDoc={currentDoc}
                     analyticsData={analyticsData}
+                    wordReportBuffer={wordReport.buffer}
+                    wordReportName={wordReport.name}
                     liveUpdates={executionState.liveUpdates}
                     onProjectCreated={handleProjectCreated}
                     onDocCreated={handleDocCreated}
@@ -780,6 +850,7 @@ const DocsAgentPage = () => {
                     onCancelExecution={() => {
                         setExecutionState(prev => ({ ...prev, status: 'idle', plan: null }));
                         setAnalyticsData(null);
+                        setWordReport({ buffer: null, name: null });
                         setAgentStatus('Ready');
                     }}
                 />
@@ -807,8 +878,7 @@ const DocsAgentPage = () => {
                             return next;
                         });
                     }}
-                    onUndo={handleUndo}
-                    onRollback={handleRollback}
+                    onInlineUndo={handleInlineUndo}
                     pastConversations={pastConversations}
                     onSelectHistory={handleSelectHistory}
                     currentDoc={currentDoc}
@@ -820,6 +890,7 @@ const DocsAgentPage = () => {
                     onExitEditMode={exitEditMode}
                     revalReminders={revalReminders}
                     onDismissRevalReminder={() => setRevalReminders([])}
+                    onAnalysisResult={handleAnalysisResult}
                 />
             </div>
         </div>

@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const docsAgentController = require('../controllers/docsAgentController');
 const { protect } = require('../middleware/authMiddleware');
 
+// In-memory storage for analysis file uploads
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } }); // 20MB max
+
 router.post('/query', protect, docsAgentController.processQuery);
+router.post('/analyze', protect, upload.array('files', 10), docsAgentController.analyzeDocuments);
 router.get('/projects', protect, docsAgentController.getProjects);
 router.post('/projects', protect, docsAgentController.createProject);
 router.get('/documents', protect, docsAgentController.getDocuments);
@@ -16,5 +21,6 @@ router.post('/structure-voice', protect, docsAgentController.structureVoicePromp
 router.post('/automate-save', protect, docsAgentController.automateLocalSave);
 router.post('/open-workspace', protect, docsAgentController.openWorkspace);
 router.post('/documents/:id/mark-revaluated', protect, docsAgentController.markRevaluated);
+router.post('/extract-command', protect, upload.array('files', 5), docsAgentController.extractCommands);
 
 module.exports = router;

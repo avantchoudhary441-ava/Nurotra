@@ -11,6 +11,8 @@ const LiveExecution = ({
     executionState,
     currentDoc,
     analyticsData,
+    wordReportBuffer,
+    wordReportName,
     liveUpdates,
     onProjectCreated,
     onDocCreated,
@@ -59,6 +61,20 @@ const LiveExecution = ({
         return (
             <div className="live-execution-panel analytics-mode">
                 <AnalyticsHub data={analyticsData} />
+            </div>
+        );
+    }
+
+    // 0. Analysis Report View — shown when document analysis completes
+    if (analyticsData) {
+        return (
+            <div className="live-execution-panel" style={{ padding: 0, overflow: 'hidden' }}>
+                <AnalyticsHub
+                    data={analyticsData}
+                    wordReportBuffer={wordReportBuffer}
+                    wordReportName={wordReportName}
+                    onClose={() => onCancelExecution && onCancelExecution()}
+                />
             </div>
         );
     }

@@ -282,5 +282,42 @@ export const docsAgentService = {
             console.error('Failed to mark document as revaluated:', error);
             throw error;
         }
+    },
+
+    /**
+     * Document Analysis — core analysis endpoint.
+     * Sends prompt + sidebar-selected IDs + uploaded file blobs as multipart/form-data.
+     * @param {string} prompt - User's analysis prompt
+     * @param {string[]} selectedDocIds - IDs of sidebar selected docs
+     * @param {File[]} uploadedFiles - FileList or array of File objects from paperclip
+     * @returns Analysis report JSON + savedDoc reference
+     */
+    analyzeDocuments: async (prompt, selectedDocIds = [], uploadedFiles = []) => {
+        const formData = new FormData();
+        formData.append('prompt', prompt);
+        formData.append('selectedDocIds', JSON.stringify(selectedDocIds));
+        uploadedFiles.forEach(f => formData.append('files', f));
+
+        const response = await api.post('/docs-agent/analyze', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
+    },
+
+    /**
+     * Extract actionable commands from uploaded files/images.
+     * @param {File[]} files - Files to extract commands from
+     * @param {string} userText - Optional accompanying text
+     */
+    extractCommandFromFiles: async (files, userText = '') => {
+        const formData = new FormData();
+        formData.append('userText', userText);
+        files.forEach(f => formData.append('files', f));
+
+        const response = await api.post('/docs-agent/extract-command', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
     }
 };
+

@@ -5,6 +5,8 @@ const aiService = require("../services/aiService");
 const intentEngine = require("../services/intentEngine");
 const { contextualClassifyIntent } = require("../services/intentEngine");
 const { saveToCloud } = require("./workspaceController");
+const { runDocumentAnalysis } = require("../services/documentAnalysisService");
+const { extractCommandsFromFiles } = require("../services/commandExtractionService");
 
 // Revaluation helper: compute next due date from interval
 const computeNextDueDate = (interval, fromDate = new Date()) => {
@@ -408,6 +410,66 @@ const markRevaluated = async (req, res) => {
     }
 };
 
+/**
+ * Document Analysis Endpoint
+ * Route: POST /api/docs-agent/analyze
+ * Accepts multipart/form-data with:
+ *   - prompt (string)
+ *   - selectedDocIds (JSON array string)
+ *   - files[] (optional uploaded files via multer)
+ */
+const analyzeDocuments = async (req, res) => {
+    try {
+        const { prompt, selectedDocIds: rawIds } = req.body;
+        const uploadedFiles = req.files || [];
+
+        if (!prompt) {
+            return res.status(400).json({ message: 'Prompt is required' });
+        }
+
+        let selectedDocIds = [];
+        try {
+            selectedDocIds = rawIds ? JSON.parse(rawIds) : [];
+        } catch { selectedDocIds = []; }
+
+        const totalDocs = selectedDocIds.length + uploadedFiles.length;
+        if (totalDocs === 0) {
+            return res.status(400).json({ message: 'No documents provided for analysis' });
+        }
+
+        const result = await runDocumentAnalysis(prompt, selectedDocIds, uploadedFiles, req.user);
+
+        if (!result.isAnalysisRequest) {
+            // Not an analysis prompt — return signal to frontend to handle normally
+            return res.json({ isAnalysisRequest: false });
+        }
+
+        if (result.clarificationNeeded) {
+            return res.json({
+                isAnalysisRequest: true,
+                clarificationNeeded: true,
+                clarificationMessage: result.clarificationMessage
+            });
+        }
+
+        // Refresh sidebar by returning all standalone docs
+        const updatedDocs = await Document.find({ user: req.user._id, projectId: null }).sort({ createdAt: -1 });
+
+        return res.json({
+            isAnalysisRequest: true,
+            clarificationNeeded: false,
+            analysisReport: result.analysisReport,
+            savedDoc: result.savedDoc,
+            wordReportName: result.wordReportName,
+            wordReportBuffer: result.wordReportBuffer,
+            updatedDocs: updatedDocs.map(d => ({ ...d._doc, id: d._id }))
+        });
+    } catch (error) {
+        console.error('[analyzeDocuments] Error:', error);
+        res.status(500).json({ message: 'Document analysis failed. Please try again.' });
+    }
+};
+
 module.exports = {
     processQuery,
     getProjects,
@@ -421,5 +483,22 @@ module.exports = {
     structureVoicePrompt,
     automateLocalSave,
     openWorkspace,
-    markRevaluated
+    markRevaluated,
+    analyzeDocuments,
+    extractCommands: async (req, res) => {
+        try {
+            const { userText } = req.body;
+            const files = req.files || [];
+            
+            if (files.length === 0) {
+                return res.status(400).json({ success: false, message: "No files uploaded" });
+            }
+
+            const result = await extractCommandsFromFiles(files, userText);
+            res.json({ success: true, ...result });
+        } catch (error) {
+            console.error("[DocsAgentController] Extract command error:", error);
+            res.status(500).json({ success: false, message: error.message });
+        }
+    }
 };
