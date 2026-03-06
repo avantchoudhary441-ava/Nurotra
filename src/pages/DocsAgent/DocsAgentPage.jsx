@@ -17,6 +17,7 @@ const DocsAgentPage = () => {
     const [standaloneDocs, setStandaloneDocs] = useState([]);
     const [currentDoc, setCurrentDoc] = useState(null); // Active document in editor
     const [currentProject, setCurrentProject] = useState(null); // Active project context
+    const [revalReminders, setRevalReminders] = useState([]); // Overdue doc names for chat reminders
 
     const fetchInitialData = async () => {
         try {
@@ -26,6 +27,16 @@ const DocsAgentPage = () => {
             ]);
             setProjects(fetchedProjects);
             setStandaloneDocs(fetchedDocs);
+
+            // Check for overdue revaluation docs
+            const allDocs = [
+                ...fetchedDocs,
+                ...fetchedProjects.flatMap(p => p.documents || [])
+            ];
+            const overdueDocs = allDocs.filter(d => d.isDue);
+            if (overdueDocs.length > 0) {
+                setRevalReminders(overdueDocs.map(d => d.name));
+            }
         } catch (error) {
             console.error("Failed to load initial data:", error);
         }
@@ -778,6 +789,8 @@ const DocsAgentPage = () => {
                     onOpenDoc={openDocument}
                     onOpenProject={openProject}
                     onExitEditMode={exitEditMode}
+                    revalReminders={revalReminders}
+                    onDismissRevalReminder={() => setRevalReminders([])}
                 />
             </div>
         </div>

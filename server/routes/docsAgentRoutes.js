@@ -15,5 +15,6 @@ router.post('/extract-metadata', protect, docsAgentController.extractMetadata);
 router.post('/structure-voice', protect, docsAgentController.structureVoicePrompt);
 router.post('/automate-save', protect, docsAgentController.automateLocalSave);
 router.post('/open-workspace', protect, docsAgentController.openWorkspace);
+router.post('/documents/:id/mark-revaluated', protect, docsAgentController.markRevaluated);
 
 module.exports = router;

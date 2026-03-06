@@ -14,11 +14,19 @@ const CACHE_TTL = 1000 * 60 * 60; // 1 Hour
 const getApiKeys = () => {
     const keys = [];
     if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
-    let i = 2;
-    while (process.env[`GEMINI_API_KEY_${i}`]) {
-        keys.push(process.env[`GEMINI_API_KEY_${i}`]);
-        i++;
-    }
+
+    // Support non-sequential keys (GEMINI_API_KEY_2, GEMINI_API_KEY_6, etc.)
+    Object.keys(process.env)
+        .filter(key => key.startsWith('GEMINI_API_KEY_'))
+        .sort((a, b) => {
+            const numA = parseInt(a.split('_').pop());
+            const numB = parseInt(b.split('_').pop());
+            return numA - numB;
+        })
+        .forEach(key => {
+            keys.push(process.env[key]);
+        });
+
     return keys;
 };
 
@@ -43,7 +51,7 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
         throw new Error("No GEMINI_API_KEY found in environment");
     }
 
-    const geminiModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-flash-latest"];
+    const geminiModels = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-pro-latest"];
     let lastError = null;
 
     // Outer Loop: API Keys (The Reservoir)
@@ -85,9 +93,9 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
                     // If Quota Exceeded, break model loop and try next key immediately OR try next model
                     // Usually, 429 means THIS key is out of quota for THIS model or ALL models.
                     if (statusCode === 429 || errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("limit")) {
-                        console.log(`Debug: Key ${keyAttemptIndex + 1} hit quota. Trying next fallback...`);
+                        console.log(`Debug: Key ${keyAttemptIndex + 1} | Model ${modelName} hit quota. Trying next model...`);
                         lastError = new Error(`Quota Exceeded: ${errorMsg}`);
-                        break; // Try next model with same key, or if all models fail, next key
+                        continue; // IMPORTANT: Try next model for THE SAME key
                     }
 
                     if (statusCode === 503 && retries < maxRetries) {
@@ -462,6 +470,7 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         const risk = preParsed?.risk || { isHighRisk: false };
         const currentDoc = preParsed?.currentDoc || null;
         const advancedOps = preParsed?.advancedOps || [];
+        const composition_profile = metadata.composition_profile || 'GOLDEN_RATIO';
 
         const { detectDocType, detectLength } = require('./intentEngine');
         const { type: docType } = detectDocType(prompt);
@@ -494,27 +503,26 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         { "type": "styled_paragraph", "style_name": "Heading 1", "text": "..." }
 `;
             }
-            if (ops.includes('VISUAL_GENERATION')) {
+            if (ops.includes('VISUAL_GENERATION') || composition_profile === 'GOLDEN_RATIO') {
                 block += `
-        --- IMAGE GENERATION/SOURCING TRIGGERED ---
-        The user explicitly asked for an image. 
+        --- AUTONOMOUS IMAGE GENERATION/SOURCING ---
+        The document profile is GOLDEN_RATIO or the user explicitly requested an image.
         1. Set the top-level "visual_intent" to "IMAGE_GEN".
-        2. In the "generation" object:
-           - If user wants a generic/realistic image, add "image_query": "Short search term".
-           - If user wants a specific custom image, add "image_prompt": "Detailed DALL-E prompt".
-        3. Do NOT provide a final URL, the system will inject it.
+        2. In "generation", add "image_query": "Descriptive search term for high-quality photo" OR "image_prompt" for custom DALL-E.
+        3. Do NOT provide a final URL.
+        4. Insert an 'image' block in your Word sections where this belongs.
 `;
             }
-            if (ops.includes('DATA_VISUALIZATION')) {
+            if (ops.includes('DATA_VISUALIZATION') || composition_profile === 'GOLDEN_RATIO') {
                 block += `
-        --- DATA VISUALIZATION TRIGGERED ---
-        The user explicitly asked for a graph/chart. 
-        1. Set the top-level "visual_intent" to "GRAPH_GEN".
+        --- AUTONOMOUS DATA VISUALIZATION ---
+        The document profile is GOLDEN_RATIO or the user explicitly asked for a chart.
+        1. Set the top-level "visual_intent" to "GRAPH_GEN" (or "BOTH_GEN" if also generating images).
         2. Add a "graph_config" object to "generation":
            { 
              "type": "bar" | "line" | "pie", 
-             "title": "Chart Title", 
-             "data": [{ "name": "Label", "value": 100 }, ...],
+             "title": "Analytical Chart", 
+             "data": [{ "name": "Metric", "value": 100 }, ...],
              "xAxisName": "...",
              "yAxisName": "..."
            }
@@ -539,16 +547,29 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
              * MEDIUM: 4-6 balanced sections, moderate detail in each.
              * DETAILED: 7+ comprehensive sections, in-depth analysis and extensive prose.
 
-        2. STRUCTURAL EXCELLENCE:
+        2. STRUCTURAL EXCELLENCE AND PROPORTION INTELLIGENCE:
            - Every section MUST have at least 2-3 substantive blocks. 
            - Use "cover_page" for formal reports.
            - Use "page_break" between major thematic divisions.
            - Ensure "header" and "footer" (including "{{page_number}}") are configured.
+${composition_profile === 'GOLDEN_RATIO' ? `
+           - REQUIRED PROPORTIONS (The Golden Ratio): You MUST autonomously balance the content as follows:
+             * Written explanation: 50-60%
+             * Tables & data: 15-20%
+             * Charts & graphs: 15-20% (Trigger via "visual_intent": "GRAPH_GEN")
+             * Images / diagrams: 5-10% (Insert 'image' blocks)
+           - AUTONOMOUS VISUALS: Proactively insert 'table' and 'image' blocks to hit these proportions based on the ${lengthPref} length, even without explicit user commands. Quality is paramount.` : `
+           - REQUIRED PROPORTIONS (Text-Heavy Profile):
+             * This is a formal/technical document (e.g. Legal, Policy, Contract).
+             * Focus 90%+ on structured, high-quality professional text.
+             * STRICTLY AVOID decorative images and charts.
+             * Use 'table' blocks only for strict data organization.`}
 
         3. MS OFFICE FEATURE UTILIZATION:
            - If numerical data is implied (e.g., "financial highlights"), use "formula_table" with SUM/AVERAGE formulas.
            - Use "styled_paragraph" for clear visual hierarchy.
            - Use "bold" in style objects to highlight key professional terms.
+           - Quality Assurance: Never compromise the quality of text, tables, or charts. All inserted visuals and tables must directly target and synthesize the factual data of the prompt.
 
         FULL WORD SCHEMA:
         {
@@ -566,7 +587,8 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
                   "heading": "Executive Summary",
                   "level": 1,
                   "blocks": [
-                    { "type": "paragraph", "text": "Start with powerful, synthesized content here...", "style": { "bold": ["powerful", "content"] } }
+                    { "type": "paragraph", "text": "Start with powerful, synthesized content here...", "style": { "bold": ["powerful", "content"] } },
+                    { "type": "image", "url": "", "caption": "Descriptive caption", "width": 400, "height": 250 }
                   ]
                 }
               ]
@@ -697,36 +719,61 @@ ${formatInstructions}`;
             });
         }
 
-        // Handle Visuals Post-Generation (Images) - Waterfall Strategy: Search -> Generate
-        if (parsed.visual_intent === 'IMAGE_GEN' && (parsed.generation?.image_prompt || parsed.generation?.image_query)) {
-            try {
-                let imageUrl = null;
-                const searchQuery = parsed.generation.image_query || parsed.generation.image_prompt;
+        // =====================================================================
+        // ROBUST IMAGE SOURCING: Scan all sections/blocks for missing URLs
+        // =====================================================================
+        if (parsed?.generation?.data?.sections || parsed?.generation?.data?.slides) {
+            const visualItems = [];
 
-                // Phase 1: Try Search (Unsplash)
-                console.log(`[DocsAgent] Attempting image search for: ${searchQuery}`);
-                imageUrl = await searchImageFromUnsplash(searchQuery);
-
-                // Phase 2: Fallback to Generation (DALL-E) if search yields nothing or if explicitly requested to generate
-                // We check if the user used "generate" but NOT "search/find"
-                const forceGenerate = prompt.toLowerCase().includes('generate') && !prompt.toLowerCase().includes('search') && !prompt.toLowerCase().includes('find');
-
-                if (!imageUrl || forceGenerate) {
-                    if (parsed.generation.image_prompt) {
-                        console.log(`[DocsAgent] Search failed or Generator preferred. Invoking DALL-E...`);
-                        imageUrl = await generateImageWithOpenAI(parsed.generation.image_prompt);
-                        parsed.text = "Generated a custom visual for your document (Fallback).";
+            // Collect blocks needing images
+            if (parsed.generation.data.sections) {
+                parsed.generation.data.sections.forEach(sec => {
+                    if (sec.blocks) {
+                        sec.blocks.forEach(block => {
+                            if (block.type === 'image') {
+                                const isPlaceholder = !block.url || block.url.includes('nurotra.com') || block.url.includes('example.com') || block.url.includes('placeholder');
+                                if (isPlaceholder) {
+                                    visualItems.push({ block, query: block.caption || sec.heading || "Professional background" });
+                                }
+                            }
+                        });
                     }
-                } else {
-                    parsed.text = "Sourced a high-quality visual for your document (Quota saved).";
-                }
+                });
+            }
 
-                if (imageUrl) {
-                    parsed.generation.image_url = imageUrl;
+            // Collect slides needing images
+            if (parsed.generation.data.slides) {
+                parsed.generation.data.slides.forEach(slide => {
+                    const isPlaceholder = !slide.image_url || slide.image_url.includes('nurotra.com') || slide.image_url.includes('example.com') || slide.image_url.includes('placeholder');
+                    if (isPlaceholder || slide.title.toLowerCase().includes('image')) {
+                        visualItems.push({ slide, query: slide.title || "Business presentation" });
+                    }
+                });
+            }
+
+            // Source images for identified items
+            if (visualItems.length > 0 || parsed.visual_intent === 'IMAGE_GEN') {
+                try {
+                    console.log(`[DocsAgent] Found ${visualItems.length} items needing images.`);
+
+                    // Main image query (from top level or first identified item)
+                    const mainQuery = parsed.generation.image_query || parsed.generation.image_prompt || (visualItems.length > 0 ? visualItems[0].query : prompt);
+
+                    // A. Source main image for top-level generation data
+                    const mainUrl = await searchImageFromUnsplash(mainQuery);
+                    if (mainUrl) parsed.generation.image_url = mainUrl;
+
+                    // B. Fill missing/placeholder URLs in blocks (Awaited concurrently)
+                    await Promise.all(visualItems.map(async item => {
+                        const itemUrl = await searchImageFromUnsplash(item.query);
+                        if (itemUrl) {
+                            if (item.block) item.block.url = itemUrl;
+                            if (item.slide) item.slide.image_url = itemUrl;
+                        }
+                    }));
+                } catch (imgErr) {
+                    console.error("Post-Gen Image Sourcing Failed:", imgErr.message);
                 }
-            } catch (imgErr) {
-                console.error("Image Recovery Failed:", imgErr.message);
-                parsed.text += " (Note: Image sourcing failed, but document plan is ready)";
             }
         }
 

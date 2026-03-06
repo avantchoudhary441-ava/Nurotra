@@ -12,7 +12,8 @@ import {
     Search,
     FileText,
     FolderOpen,
-    Edit3
+    Edit3,
+    Clock
 } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
@@ -35,7 +36,9 @@ const DocsChat = ({
     allDocs,
     onOpenDoc,
     onOpenProject,
-    onExitEditMode   // ← new: clears the active doc (exit edit mode)
+    onExitEditMode,   // ← clears the active doc (exit edit mode)
+    revalReminders,   // ← array of overdue doc names
+    onDismissRevalReminder // ← callback to dismiss reminders
 }) => {
     const [prompt, setPrompt] = useState('');
     const [isListening, setIsListening] = useState(false);
@@ -481,6 +484,21 @@ const DocsChat = ({
             )}
 
             <div className="strategy-feed">
+                {/* Revaluation Reminders */}
+                {revalReminders && revalReminders.length > 0 && (
+                    <div className="reval-reminder-msg">
+                        <Clock size={14} />
+                        <span>
+                            <strong>{revalReminders.length} document{revalReminders.length > 1 ? 's' : ''}</strong> due for revaluation: {revalReminders.slice(0, 3).join(', ')}{revalReminders.length > 3 ? ` +${revalReminders.length - 3} more` : ''}. Would you like to update {revalReminders.length > 1 ? 'them' : 'it'}?
+                        </span>
+                        <button
+                            onClick={onDismissRevalReminder}
+                            style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer', marginLeft: 'auto', padding: '2px' }}
+                        >
+                            <X size={12} />
+                        </button>
+                    </div>
+                )}
                 {strategyMessages.map((msg) => (
                     <div key={msg.id} className={`strategy-message ${msg.type}`}>
                         {msg.type === 'system' ? (

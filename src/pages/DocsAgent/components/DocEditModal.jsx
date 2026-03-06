@@ -22,6 +22,8 @@ const DocEditModal = ({ doc, onSave, onClose }) => {
     const [keywordsText, setKeywordsText] = useState('');
     const [saving, setSaving] = useState(false);
     const [hoveredField, setHoveredField] = useState(null);
+    const [revalEnabled, setRevalEnabled] = useState(false);
+    const [revalInterval, setRevalInterval] = useState('monthly');
 
     useEffect(() => {
         if (doc) {
@@ -30,8 +32,23 @@ const DocEditModal = ({ doc, onSave, onClose }) => {
             setKeywordsText(
                 Array.isArray(doc.keywords) ? doc.keywords.join(', ') : ''
             );
+            const hasReval = doc.revaluation?.interval;
+            setRevalEnabled(!!hasReval);
+            setRevalInterval(hasReval || 'monthly');
         }
     }, [doc]);
+
+    const computeNextDate = (interval) => {
+        const d = new Date();
+        switch (interval) {
+            case 'weekly': d.setDate(d.getDate() + 7); break;
+            case 'biweekly': d.setDate(d.getDate() + 14); break;
+            case 'monthly': d.setDate(d.getDate() + 30); break;
+            case 'quarterly': d.setDate(d.getDate() + 90); break;
+            default: return null;
+        }
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
 
     const handleSave = async () => {
         if (!name.trim()) return;
@@ -42,7 +59,11 @@ const DocEditModal = ({ doc, onSave, onClose }) => {
                 .map(k => k.trim())
                 .filter(Boolean);
 
-            await onSave(doc.id, { name: name.trim(), description: description.trim(), keywords });
+            const revaluation = revalEnabled
+                ? { interval: revalInterval }
+                : { interval: null };
+
+            await onSave(doc.id, { name: name.trim(), description: description.trim(), keywords, revaluation });
             onClose();
         } catch (err) {
             console.error('Failed to save doc metadata:', err);
@@ -155,6 +176,46 @@ const DocEditModal = ({ doc, onSave, onClose }) => {
                         ))}
                     </div>
                 )}
+
+                {/* ─── Revaluation Schedule ─────────────────────────────── */}
+                <div className="doc-edit-field reval-section">
+                    <label className="doc-edit-label">
+                        ⏱ Revaluation Schedule
+                        <span className="doc-edit-label-hint">ⓘ</span>
+                    </label>
+
+                    <div className="reval-toggle-row">
+                        <label className="reval-toggle-label">
+                            <input
+                                type="checkbox"
+                                className="reval-checkbox"
+                                checked={revalEnabled}
+                                onChange={(e) => setRevalEnabled(e.target.checked)}
+                            />
+                            <span className="reval-toggle-text">
+                                {revalEnabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                        </label>
+                    </div>
+
+                    {revalEnabled && (
+                        <div className="reval-config">
+                            <select
+                                className="reval-select"
+                                value={revalInterval}
+                                onChange={(e) => setRevalInterval(e.target.value)}
+                            >
+                                <option value="weekly">Weekly (every 7 days)</option>
+                                <option value="biweekly">Bi-Weekly (every 14 days)</option>
+                                <option value="monthly">Monthly (every 30 days)</option>
+                                <option value="quarterly">Quarterly (every 90 days)</option>
+                            </select>
+                            <span className="reval-next-date">
+                                Next revaluation: {computeNextDate(revalInterval)}
+                            </span>
+                        </div>
+                    )}
+                </div>
 
                 {/* Actions */}
                 <div className="doc-edit-actions">

@@ -57,7 +57,8 @@ const ADVANCED_OPS_MAP = {
     ],
     VISUAL_GENERATION: [
         'generate image', 'create image', 'draw', 'picture of', 'show an image',
-        'visualize as image', 'add a photo', 'insert image', 'generate a picture'
+        'visualize as image', 'add a photo', 'insert image', 'generate a picture',
+        'with an image', 'add image', 'include image', 'picture', 'photo', 'graphic'
     ],
     DATA_VISUALIZATION: [
         'graph', 'chart', 'plot', 'bar chart', 'pie chart', 'line graph',
@@ -160,6 +161,13 @@ const generateMetadata = (prompt, overrideIntent = null, overrideCategory = null
         }
     }
 
+    // Determine Composition Profile (Golden Ratio vs Text-Heavy)
+    let composition_profile = 'GOLDEN_RATIO'; // Default
+    const textHeavyKeywords = ['legal', 'contract', 'agreement', 'terms', 'privacy', 'policy', 'memo', 'academic', 'thesis', 'sop', 'standard operating procedure', 'documentation', 'spec'];
+    if (textHeavyKeywords.some(kw => lowerPrompt.includes(kw)) || category === 'Legal' || category === 'Education') {
+        composition_profile = 'TEXT_HEAVY';
+    }
+
     // Smart Naming
     const allIntentKeywords = Object.values(INTENT_WEIGHTS).flatMap(d => d.keywords);
     const docTypeKeywords = ['excel', 'sheet', 'spreadsheet', 'csv', 'word', 'doc', 'report', 'ppt', 'presentation', 'slide', 'powerpoint', 'table', 'data', 'document', 'file'];
@@ -183,7 +191,8 @@ const generateMetadata = (prompt, overrideIntent = null, overrideCategory = null
         category,
         purpose: `Hybrid ${category} execution`,
         entities: [],
-        confidenceScore: confidence
+        confidenceScore: confidence,
+        composition_profile
     };
 };
 

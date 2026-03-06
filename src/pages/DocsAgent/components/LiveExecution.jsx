@@ -255,6 +255,12 @@ const LiveExecution = ({
                                         >
                                             <FileText size={14} /> As PowerPoint (.pptx)
                                         </button>
+                                        <button
+                                            className="export-dropdown-item export-item-pdf"
+                                            onClick={() => handleExport('pdf')}
+                                        >
+                                            <FileText size={14} /> As PDF (.pdf)
+                                        </button>
                                     </div>
                                 )}
                             </div>
