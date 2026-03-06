@@ -25,8 +25,9 @@ const computeNextDueDate = (interval, fromDate = new Date()) => {
  * Route: POST /api/docs-agent/query
  */
 const processQuery = async (req, res) => {
-    const { prompt, history, currentDoc } = req.body;
+    const { prompt, history, currentDoc, docIds } = req.body;
     const hasOpenDoc = !!(currentDoc && (currentDoc.id || currentDoc._id));
+    const selectedDocCount = docIds ? docIds.length : (hasOpenDoc ? 1 : 0);
 
     if (!prompt) {
         return res.status(400).json({ message: "Prompt is required" });
@@ -40,7 +41,7 @@ const processQuery = async (req, res) => {
         };
 
         // 1. Context-aware Intent Detection
-        let intentInfo = contextualClassifyIntent(prompt, hasOpenDoc);
+        let intentInfo = contextualClassifyIntent(prompt, hasOpenDoc, selectedDocCount);
         let categoryOverride = null;
 
         // If confidence is low, trigger Intent Rescue (Invisible to user)
@@ -73,6 +74,7 @@ const processQuery = async (req, res) => {
             metadata,
             advancedOps,
             currentDoc,
+            docIds, // Add this
             hasOpenDoc  // ← tells AI to use MODIFY system prompt
         });
         res.json(response);

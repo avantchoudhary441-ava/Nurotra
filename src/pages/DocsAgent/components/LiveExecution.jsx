@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap, ChevronDown } from 'lucide-react';
 import EntryPoint from './EntryPoint';
 import DynamicGraph from './DynamicGraph';
+import AnalyticsHub from './AnalyticsHub';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
 import { docsAgentService } from '../../../services/docsAgentService';
 
@@ -9,6 +10,7 @@ const LiveExecution = ({
     projects,
     executionState,
     currentDoc,
+    analyticsData,
     liveUpdates,
     onProjectCreated,
     onDocCreated,
@@ -51,6 +53,15 @@ const LiveExecution = ({
             setTimeout(() => setSyncStatus(null), 4000);
         }
     };
+
+    // 0. Analytics / Comparison View (Synthesized Results)
+    if (analyticsData) {
+        return (
+            <div className="live-execution-panel analytics-mode">
+                <AnalyticsHub data={analyticsData} />
+            </div>
+        );
+    }
 
     // 1. Idle / Entrance
     if (executionState.status === 'idle' && !currentDoc) {

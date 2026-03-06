@@ -66,7 +66,9 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
 
             while (retries <= maxRetries) {
                 try {
-                    console.log(`Debug: Key ${keyAttemptIndex + 1}/${apiKeys.length} | Model: ${modelName} | Retry: ${retries}`);
+                    if (retries === 0) {
+                        console.log(`[AI Reservoir] Attempting Key ${keyAttemptIndex + 1}/${apiKeys.length} | Model: ${modelName}`);
+                    }
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
                     const response = await axios.post(url, {
@@ -93,9 +95,9 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
                     // If Quota Exceeded, break model loop and try next key immediately OR try next model
                     // Usually, 429 means THIS key is out of quota for THIS model or ALL models.
                     if (statusCode === 429 || errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("limit")) {
-                        console.log(`Debug: Key ${keyAttemptIndex + 1} | Model ${modelName} hit quota. Trying next model...`);
+                        console.warn(`[AI Reservoir] Key ${keyAttemptIndex + 1} hit quota limit. Rotating to next available resource...`);
                         lastError = new Error(`Quota Exceeded: ${errorMsg}`);
-                        continue; // IMPORTANT: Try next model for THE SAME key
+                        break; // Break model loop to try next key immediately
                     }
 
                     if (statusCode === 503 && retries < maxRetries) {
@@ -471,6 +473,17 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         const currentDoc = preParsed?.currentDoc || null;
         const advancedOps = preParsed?.advancedOps || [];
         const composition_profile = metadata.composition_profile || 'GOLDEN_RATIO';
+        const docIds = preParsed?.docIds || [];
+
+        // Aggregated content for ANALYZE/COMPARE
+        let contextContent = "";
+        if (docIds && docIds.length > 0) {
+            const Document = require("../models/Document");
+            const contextDocs = await Document.find({ _id: { $in: docIds } });
+            contextContent = contextDocs.map(d => `--- DOCUMENT: ${d.name} ---\n${d.content}`).join("\n\n");
+        } else if (currentDoc) {
+            contextContent = `--- DOCUMENT: ${currentDoc.name} ---\n${currentDoc.content}`;
+        }
 
         const { detectDocType, detectLength } = require('./intentEngine');
         const { type: docType } = detectDocType(prompt);
@@ -640,9 +653,64 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
             formatInstructions += buildAdvancedWordFeatures(advancedOps, prompt);
         }
 
+        // ── Analytical path: extract insights across documents ────────────────
+        const analystPrompt = `You are the Nurotra Intelligence Analyst. Your goal is to extract deep insights, compare data, and generate structured analytical reports.
+        CRITICAL: Your response MUST be a valid JSON object.
+        SOURCE CONTEXT:
+        ${contextContent}
+
+        REQUIRED JSON SCHEMA (6 SECTIONS):
+        {
+          "intent": "${intent}",
+          "text": "Executive Narrative (markdown)",
+          "documentSummaries": [
+             { 
+               "name": "Doc Name", 
+               "short": "5-6 lines concise summary", 
+               "detailed": ["Bullet 1", "Bullet 2", "Bullet 3"] 
+             }
+          ],
+          "keyInsights": {
+             "keywords": ["key1", "key2"],
+             "topicClustering": ["Topic A", "Topic B"],
+             "sentiment": "Positive|Negative|Neutral",
+             "importantSections": ["Highlighted text or section names"]
+          },
+          "comparativeAnalysis": {
+             "similarities": ["Sim 1", "Sim 2"],
+             "differences": ["Diff 1", "Diff 2"],
+             "comparisonTable": {
+                "headers": ["Aspect", "Doc 1", "Doc 2"],
+                "rows": [["Pricing", "$10", "$12"], ["SLA", "99%", "95%"]]
+             }
+          },
+          "dataTrends": {
+             "metrics": { "Label": "Value" },
+             "trends": ["Trend 1", "Trend 2"],
+             "themes": ["Theme A"]
+          },
+          "generation": {
+             "type": "generic",
+             "visual_intent": "ANALYTICS_DASHBOARD",
+             "graph_config": {
+                "type": "bar|line|pie",
+                "title": "Data Visualization",
+                "data": [{ "name": "Label", "value": 100 }, ...],
+                "xAxisName": "Metric",
+                "yAxisName": "Count"
+             }
+          },
+          "finalOutcome": {
+             "verdict": "Strategic conclusion",
+             "bestOption": "Most important insight or best-performing data point"
+          }
+        }`;
+
         // ── MODIFY path: targeted edit of existing document ──────────────────
         let systemPrompt;
-        if (currentDoc && (intent === 'MODIFY' || preParsed?.hasOpenDoc)) {
+        if (intent === 'ANALYZE' || intent === 'COMPARE') {
+            systemPrompt = analystPrompt;
+        } else if (currentDoc && (intent === 'MODIFY' || preParsed?.hasOpenDoc)) {
             const existingStructure = currentDoc.rawStructure ? JSON.stringify(currentDoc.rawStructure) : null;
             const existingContent = currentDoc.content ? currentDoc.content.substring(0, 4000) : '';
 

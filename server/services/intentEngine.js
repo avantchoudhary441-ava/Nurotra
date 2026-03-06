@@ -7,6 +7,8 @@ const INTENT_WEIGHTS = {
     CREATE: { keywords: ['create', 'make', 'generate', 'build', 'new', 'start', 'prepare', 'write', 'draft', 'compose', 'structure', 'arrange'], weight: 1.0 },
     MODIFY: { keywords: ['edit', 'change', 'update', 'fix', 'refine', 'revise', 'modify', 'calculate', 'sum', 'average', 'addition', 'math', 'total', 'arithmetic', 'correct', 'improve', 'enhance', 'add', 'include', 'insert', 'append', 'remove section', 'rename', 'replace', 'rewrite section', 'expand', 'shorten', 'make it', 'adjust'], weight: 0.9 },
     QUERY: { keywords: ['what', 'how', 'who', 'analyze', 'explain', 'search', 'tell me', 'find', 'lookup', 'research'], weight: 0.8 },
+    ANALYZE: { keywords: ['analyze', 'summarize', 'extract', 'insights', 'points', 'statistics', 'key concepts', 'summary', 'report', 'detailed summary', 'short summary', 'intelligence'], weight: 1.2 },
+    COMPARE: { keywords: ['compare', 'similarities', 'differences', 'trends', 'relationships', 'versus', 'vs', 'contrast', 'comparison', 'cross-reference', 'side by side'], weight: 1.5 },
     DATA_OP: { keywords: ['merge', 'sort', 'filter', 'calculate', 'clean', 'duplicate', 'sum', 'average', 'tally'], weight: 1.0 },
     CONVERT: { keywords: ['turn into', 'convert', 'summarize to', 'transform', 'translate', 'export'], weight: 1.0 },
 };
@@ -278,8 +280,17 @@ const classifyIntent = (prompt) => {
  * @param {string} prompt
  * @param {boolean} hasOpenDoc - true if a document is currently active in the editor
  */
-const contextualClassifyIntent = (prompt, hasOpenDoc = false) => {
+const contextualClassifyIntent = (prompt, hasOpenDoc = false, selectedDocCount = 0) => {
     const result = classifyIntent(prompt);
+
+    // If multiple documents are selected, strongly suggest COMPARE or ANALYZE
+    if (selectedDocCount > 1) {
+        if (result.intent === 'MODIFY' || result.intent === 'CREATE' || result.intent === 'QUERY') {
+            const compareSignals = INTENT_WEIGHTS.COMPARE.keywords.some(kw => prompt.toLowerCase().includes(kw));
+            if (compareSignals) return { intent: 'COMPARE', confidence: 0.95 };
+            return { intent: 'ANALYZE', confidence: 0.9 };
+        }
+    }
 
     // Strong CREATE signals — user explicitly wants something new
     const strongCreateSignals = ['create', 'make', 'generate', 'build', 'new', 'start', 'prepare', 'draft', 'compose'];

@@ -11,7 +11,9 @@ const ProjectsDocs = ({
     onUpdateDoc, // Callback after metadata edit
     isSyncing,
     activeDocId,
-    activeProjectId // New prop
+    activeProjectId,
+    selectedDocIds = [],
+    onToggleDocSelection
 }) => {
     const [expandedProjects, setExpandedProjects] = useState([1]);
     const [downloading, setDownloading] = useState(null);
@@ -172,6 +174,16 @@ const ProjectsDocs = ({
                                             title={`Created on: ${new Date(doc.createdAt).toLocaleDateString()}`}
                                         >
                                             <div className="doc-main-info">
+                                                <input
+                                                    type="checkbox"
+                                                    className="doc-selector-check"
+                                                    checked={selectedDocIds.includes(doc.id)}
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        if (onToggleDocSelection) onToggleDocSelection(doc.id);
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
                                                 <span className="doc-icon">{getFileIcon(doc.type)}</span>
                                                 <span className="doc-name">{doc.name}</span>
                                                 {doc.isDue && (
@@ -240,6 +252,16 @@ const ProjectsDocs = ({
                                 title={`Created on: ${new Date(doc.createdAt).toLocaleDateString()}`}
                             >
                                 <div className="doc-main-info">
+                                    <input
+                                        type="checkbox"
+                                        className="doc-selector-check"
+                                        checked={selectedDocIds.includes(doc.id)}
+                                        onChange={(e) => {
+                                            e.stopPropagation();
+                                            if (onToggleDocSelection) onToggleDocSelection(doc.id);
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
                                     <span className="doc-icon">📄</span>
                                     <span className="doc-name">{doc.name}</span>
                                     {doc.isDue && (

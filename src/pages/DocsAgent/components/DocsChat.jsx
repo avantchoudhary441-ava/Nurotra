@@ -13,7 +13,8 @@ import {
     FileText,
     FolderOpen,
     Edit3,
-    Clock
+    Clock,
+    TrendingUp
 } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
@@ -38,7 +39,8 @@ const DocsChat = ({
     onOpenProject,
     onExitEditMode,   // ← clears the active doc (exit edit mode)
     revalReminders,   // ← array of overdue doc names
-    onDismissRevalReminder // ← callback to dismiss reminders
+    onDismissRevalReminder, // ← callback to dismiss reminders
+    selectedDocIds = []
 }) => {
     const [prompt, setPrompt] = useState('');
     const [isListening, setIsListening] = useState(false);
@@ -203,7 +205,8 @@ const DocsChat = ({
 
             const response = await docsAgentService.generateResponse(userPrompt, intent, {
                 history: historyContext,
-                currentDoc: currentDoc
+                currentDoc: currentDoc,
+                docIds: selectedDocIds
             });
 
             setIsThinking(false);
@@ -608,6 +611,23 @@ const DocsChat = ({
                         </button>
                     </div>
                 )}
+                {/* Smart Analyze Button for Multi-Select */}
+                {!currentDoc && selectedDocIds.length > 0 && (
+                    <div className="smart-analyze-trigger animate-fade-in-up">
+                        <button
+                            className="smart-analyze-btn"
+                            onClick={() => onAgentIntent({
+                                description: `Analyze and compare the ${selectedDocIds.length} selected documents. Provide deep insights, summaries, and data trends.`,
+                                type: 'TASK_EXECUTION'
+                            })}
+                        >
+                            <TrendingUp size={16} />
+                            <span>Smart Analyze Selected ({selectedDocIds.length})</span>
+                            <div className="btn-shine"></div>
+                        </button>
+                    </div>
+                )}
+
                 {/* Keyword Search Suggestions */}
                 {showSuggestions && (searchSuggestions.documents.length > 0 || searchSuggestions.projects.length > 0) && (
                     <div className="doc-search-suggestions">

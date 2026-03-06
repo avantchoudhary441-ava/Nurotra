@@ -46,6 +46,7 @@ export const docsAgentService = {
                 prompt,
                 history: context.history || [],
                 currentDoc: context.currentDoc || null,
+                docIds: context.docIds || [],
                 hasOpenDoc   // ← tells controller/AI to use MODIFY path
             });
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { docsAgentService } from '../../services/docsAgentService';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../services/generatorService';
 import ProjectsDocs from './components/ProjectsDocs';
@@ -18,6 +18,24 @@ const DocsAgentPage = () => {
     const [currentDoc, setCurrentDoc] = useState(null); // Active document in editor
     const [currentProject, setCurrentProject] = useState(null); // Active project context
     const [revalReminders, setRevalReminders] = useState([]); // Overdue doc names for chat reminders
+    const [selectedDocIds, setSelectedDocIds] = useState([]); // Multiple docs for analysis
+    const [analyticsData, setAnalyticsData] = useState(null); // Data for AnalyticsHub
+    
+    // Robust derivation of all documents
+    const allDocs = useMemo(() => {
+        return [
+            ...standaloneDocs,
+            ...projects.flatMap(p => (p.documents || []).map(d => ({ ...d, projectName: p.name })))
+        ];
+    }, [standaloneDocs, projects]);
+
+    const toggleDocSelection = (docId) => {
+        setSelectedDocIds(prev =>
+            prev.includes(docId)
+                ? prev.filter(id => id !== docId)
+                : [...prev, docId]
+        );
+    };
 
     const fetchInitialData = async () => {
         try {
@@ -373,6 +391,16 @@ const DocsAgentPage = () => {
             setExecutionState(prev => ({ ...prev, currentStep: 3 }));
             await new Promise(r => setTimeout(r, 500));
 
+            // Handle Analytics/Comparison results specifically
+            if (response.intent === 'ANALYZE' || response.intent === 'COMPARE') {
+                setAnalyticsData(response);
+                setCurrentDoc(null);
+                setAgentStatus('Analysis Complete');
+                addLiveUpdate('✅ Multi-document intelligence synthesis complete!');
+                setExecutionState(prev => ({ ...prev, status: 'idle' }));
+                return;
+            }
+
             // Step 3: Handle Generation Payload
             if (response && response.generation && response.generation.type) {
                 const { type, data } = response.generation;
@@ -601,6 +629,7 @@ const DocsAgentPage = () => {
     };
 
     const openDocument = (doc) => {
+        setAnalyticsData(null); // Clear analytics when viewing a specific doc
         setCurrentDoc(doc);
         setAgentStatus('Viewing');
         setExecutionState(prev => ({ ...prev, status: 'idle' }));
@@ -626,12 +655,7 @@ const DocsAgentPage = () => {
         setExecutionState(prev => ({ ...prev, status: 'idle' }));
     };
 
-    // Compute allDocs for search (standalone + project docs)
-    const allDocs = [
-        ...standaloneDocs,
-        ...projects.flatMap(p => (p.documents || []).map(d => ({ ...d, projectName: p.name })))
-    ];
-
+    // Handle doc metadata update from edit modal, or deletion (updatedDoc=null, deletedId provided)
     // Handle doc metadata update from edit modal, or deletion (updatedDoc=null, deletedId provided)
     const handleUpdateDoc = (updatedDoc, deletedId = null) => {
         if (!updatedDoc && deletedId) {
@@ -732,6 +756,8 @@ const DocsAgentPage = () => {
                     isSyncing={isSidebarSyncing}
                     activeDocId={currentDoc?.id}
                     activeProjectId={currentProject?.id}
+                    selectedDocIds={selectedDocIds}
+                    onToggleDocSelection={toggleDocSelection}
                 />
             </div>
 
@@ -745,6 +771,7 @@ const DocsAgentPage = () => {
                     projects={projects}
                     executionState={executionState}
                     currentDoc={currentDoc}
+                    analyticsData={analyticsData}
                     liveUpdates={executionState.liveUpdates}
                     onProjectCreated={handleProjectCreated}
                     onDocCreated={handleDocCreated}
@@ -752,6 +779,7 @@ const DocsAgentPage = () => {
                     onUpdateContent={(content) => setCurrentDoc(prev => ({ ...prev, content }))}
                     onCancelExecution={() => {
                         setExecutionState(prev => ({ ...prev, status: 'idle', plan: null }));
+                        setAnalyticsData(null);
                         setAgentStatus('Ready');
                     }}
                 />
@@ -785,6 +813,7 @@ const DocsAgentPage = () => {
                     onSelectHistory={handleSelectHistory}
                     currentDoc={currentDoc}
                     currentProject={currentProject}
+                    selectedDocIds={selectedDocIds}
                     allDocs={allDocs}
                     onOpenDoc={openDocument}
                     onOpenProject={openProject}
