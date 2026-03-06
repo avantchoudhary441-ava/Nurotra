@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, Download, Cloud, FolderOpen, File, RefreshCw, Copy, Edit3, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Download, Cloud, FolderOpen, File, RefreshCw, Copy, Edit3, Trash2, Clock } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
 import DocEditModal from './DocEditModal';
 
@@ -174,6 +174,11 @@ const ProjectsDocs = ({
                                             <div className="doc-main-info">
                                                 <span className="doc-icon">{getFileIcon(doc.type)}</span>
                                                 <span className="doc-name">{doc.name}</span>
+                                                {doc.isDue && (
+                                                    <span className="reval-badge" title="This document is due for revaluation">
+                                                        <Clock size={12} />
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="doc-actions">
                                                 <button
@@ -237,6 +242,11 @@ const ProjectsDocs = ({
                                 <div className="doc-main-info">
                                     <span className="doc-icon">📄</span>
                                     <span className="doc-name">{doc.name}</span>
+                                    {doc.isDue && (
+                                        <span className="reval-badge" title="This document is due for revaluation">
+                                            <Clock size={12} />
+                                        </span>
+                                    )}
                                 </div>
                                 <div className="doc-actions">
                                     <button

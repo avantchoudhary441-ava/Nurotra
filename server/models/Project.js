@@ -22,6 +22,21 @@ const ProjectSchema = new mongoose.Schema({
         type: Object,
         default: {}
     },
+    revaluation: {
+        interval: {
+            type: String,
+            enum: ['weekly', 'biweekly', 'monthly', 'quarterly', null],
+            default: null
+        },
+        nextDueDate: {
+            type: Date,
+            default: null
+        },
+        lastRevaluedAt: {
+            type: Date,
+            default: null
+        }
+    },
     status: {
         type: String,
         enum: ['active', 'archived', 'completed'],

@@ -130,15 +130,13 @@ export const docsAgentService = {
     },
 
     /**
-     * Update document metadata (name, description, keywords)
+     * Update document metadata (name, description, keywords, revaluation)
      */
-    updateDocumentMetadata: async (docId, { name, description, keywords }) => {
+    updateDocumentMetadata: async (docId, { name, description, keywords, revaluation }) => {
         try {
-            const response = await api.put(`/docs-agent/documents/${docId}`, {
-                name,
-                description,
-                keywords
-            });
+            const payload = { name, description, keywords };
+            if (revaluation !== undefined) payload.revaluation = revaluation;
+            const response = await api.put(`/docs-agent/documents/${docId}`, payload);
             return response.data;
         } catch (error) {
             console.error("Failed to update document metadata:", error);
@@ -268,6 +266,19 @@ export const docsAgentService = {
             return response.data;
         } catch (error) {
             console.error('Failed to delete document:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Mark a document as revaluated (reset the revaluation timer)
+     */
+    markRevaluated: async (docId) => {
+        try {
+            const response = await api.post(`/docs-agent/documents/${docId}/mark-revaluated`);
+            return response.data;
+        } catch (error) {
+            console.error('Failed to mark document as revaluated:', error);
             throw error;
         }
     }

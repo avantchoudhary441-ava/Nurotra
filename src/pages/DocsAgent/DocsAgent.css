@@ -1983,6 +1983,16 @@
     color: #fb923c;
 }
 
+.export-item-pdf:hover {
+    background: rgba(168, 85, 247, 0.2) !important;
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    box-shadow: 0 4px 15px rgba(168, 85, 247, 0.25);
+}
+
+.export-item-pdf:hover svg {
+    color: #a855f7;
+}
+
 /* Nurotra Animated Working Context Glow */
 .working-context-glow {
     position: relative;
@@ -2352,6 +2362,166 @@
     color: #a78bfa;
     font-size: 0.68rem;
     font-weight: 500;
+}
+
+/* ========================================
+   REVALUATION SCHEDULE STYLES
+   ======================================== */
+
+/* Sidebar badge */
+.reval-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 999px;
+    padding: 2px 5px;
+    margin-left: 4px;
+    flex-shrink: 0;
+    animation: revalPulse 2s ease-in-out infinite;
+}
+
+@keyframes revalPulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Modal section */
+.reval-section {
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.reval-toggle-row {
+    display: flex;
+    align-items: center;
+    margin-top: 0.35rem;
+}
+
+.reval-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.reval-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 36px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.reval-checkbox::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    background: #6b7280;
+    border-radius: 50%;
+    transition: all 0.3s;
+}
+
+.reval-checkbox:checked {
+    background: rgba(245, 158, 11, 0.25);
+    border-color: rgba(245, 158, 11, 0.5);
+}
+
+.reval-checkbox:checked::after {
+    transform: translateX(16px);
+    background: #f59e0b;
+}
+
+.reval-toggle-text {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.reval-checkbox:checked~.reval-toggle-text {
+    color: #f59e0b;
+}
+
+.reval-config {
+    margin-top: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    animation: tooltipFade 0.2s ease;
+}
+
+.reval-select {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 0.55rem 0.85rem;
+    color: #ffffff;
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+.reval-select:focus {
+    border-color: rgba(245, 158, 11, 0.5);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
+.reval-select option {
+    background: #0a0a0f;
+    color: #ffffff;
+}
+
+.reval-next-date {
+    font-size: 0.72rem;
+    color: #f59e0b;
+    font-weight: 500;
+    padding-left: 0.15rem;
+}
+
+/* Chat revaluation reminder */
+.reval-reminder-msg {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    font-size: 0.78rem;
+    animation: slideUp 0.3s ease-out;
+    margin-bottom: 0.5rem;
+}
+
+.reval-reminder-msg strong {
+    color: #f59e0b;
 }
 
 /* Actions */

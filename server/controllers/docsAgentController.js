@@ -6,6 +6,20 @@ const intentEngine = require("../services/intentEngine");
 const { contextualClassifyIntent } = require("../services/intentEngine");
 const { saveToCloud } = require("./workspaceController");
 
+// Revaluation helper: compute next due date from interval
+const computeNextDueDate = (interval, fromDate = new Date()) => {
+    if (!interval) return null;
+    const d = new Date(fromDate);
+    switch (interval) {
+        case 'weekly': d.setDate(d.getDate() + 7); break;
+        case 'biweekly': d.setDate(d.getDate() + 14); break;
+        case 'monthly': d.setDate(d.getDate() + 30); break;
+        case 'quarterly': d.setDate(d.getDate() + 90); break;
+        default: return null;
+    }
+    return d;
+};
+
 /**
  * Process Docs Agent Query
  * Route: POST /api/docs-agent/query
@@ -77,13 +91,19 @@ const getProjects = async (req, res) => {
         const projects = await Project.find({ userId: req.user._id }).sort({ updatedAt: -1 });
 
         // Populate documents for each project
+        const now = new Date();
         const projectsWithDocs = await Promise.all(projects.map(async (project) => {
             const documents = await Document.find({ projectId: project._id });
+            const projectIsDue = project.revaluation?.nextDueDate && new Date(project.revaluation.nextDueDate) <= now;
             return {
                 ...project._doc,
                 id: project._id,
+                isDue: !!projectIsDue,
                 docCount: documents.length,
-                documents: documents.map(d => ({ ...d._doc, id: d._id }))
+                documents: documents.map(d => {
+                    const docIsDue = d.revaluation?.nextDueDate && new Date(d.revaluation.nextDueDate) <= now;
+                    return { ...d._doc, id: d._id, isDue: !!docIsDue };
+                })
             };
         }));
 
@@ -126,7 +146,11 @@ const getDocuments = async (req, res) => {
             projectId: { $exists: false }
         }).sort({ updatedAt: -1 });
 
-        res.json(documents.map(d => ({ ...d._doc, id: d._id })));
+        const now = new Date();
+        res.json(documents.map(d => {
+            const isDue = d.revaluation?.nextDueDate && new Date(d.revaluation.nextDueDate) <= now;
+            return { ...d._doc, id: d._id, isDue: !!isDue };
+        }));
     } catch (error) {
         console.error("Get Documents Error:", error);
         res.status(500).json({ message: "Failed to fetch documents" });
@@ -180,6 +204,22 @@ const updateDocument = async (req, res) => {
         if (content !== undefined) document.content = content;
         if (rawStructure) document.rawStructure = rawStructure;
         if (metadata) document.metadata = { ...document.metadata, ...metadata };
+
+        // Handle revaluation schedule
+        if (req.body.revaluation !== undefined) {
+            const reval = req.body.revaluation;
+            if (reval && reval.interval) {
+                document.revaluation = {
+                    interval: reval.interval,
+                    nextDueDate: computeNextDueDate(reval.interval),
+                    lastRevaluedAt: document.revaluation?.lastRevaluedAt || null
+                };
+            } else {
+                // Clear revaluation
+                document.revaluation = { interval: null, nextDueDate: null, lastRevaluedAt: null };
+            }
+        }
+
         document.updatedAt = new Date();
 
         await document.save();
@@ -339,6 +379,33 @@ const deleteDocument = async (req, res) => {
     }
 };
 
+/**
+ * Mark a document as revaluated (reset the timer)
+ * Route: POST /api/docs-agent/documents/:id/mark-revaluated
+ */
+const markRevaluated = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const document = await Document.findOne({ _id: id, userId: req.user._id });
+        if (!document) {
+            return res.status(404).json({ message: "Document not found" });
+        }
+        if (!document.revaluation?.interval) {
+            return res.status(400).json({ message: "Document has no revaluation schedule" });
+        }
+
+        const now = new Date();
+        document.revaluation.lastRevaluedAt = now;
+        document.revaluation.nextDueDate = computeNextDueDate(document.revaluation.interval, now);
+        await document.save();
+
+        res.json({ ...document._doc, id: document._id, isDue: false });
+    } catch (error) {
+        console.error("Mark Revaluated Error:", error);
+        res.status(500).json({ message: "Failed to mark document as revaluated" });
+    }
+};
+
 module.exports = {
     processQuery,
     getProjects,
@@ -351,5 +418,6 @@ module.exports = {
     extractMetadata,
     structureVoicePrompt,
     automateLocalSave,
-    openWorkspace
+    openWorkspace,
+    markRevaluated
 };

@@ -51,6 +51,21 @@ const DocumentSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    revaluation: {
+        interval: {
+            type: String,
+            enum: ['weekly', 'biweekly', 'monthly', 'quarterly', null],
+            default: null
+        },
+        nextDueDate: {
+            type: Date,
+            default: null
+        },
+        lastRevaluedAt: {
+            type: Date,
+            default: null
+        }
+    },
     status: {
         type: String,
         enum: ['draft', 'final', 'executing'],

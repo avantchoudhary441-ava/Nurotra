@@ -274,8 +274,65 @@ const renderFormulaTable = (block, colWidth) => {
 // ==========================================
 // WORD DOCUMENT GENERATOR (Rich Content Blocks + Advanced Features)
 // ==========================================
-export const generateWordDoc = async (data) => {
+/**
+ * Normalizes document structure by detecting Markdown-style images
+ * in text blocks and converting them into dedicated image blocks.
+ */
+const normalizeContent = (data) => {
+    if (!data || !data.sections || !Array.isArray(data.sections)) return;
+
+    data.sections.forEach(sec => {
+        let newBlocks = [];
+        const processText = (text, originalBlock = {}) => {
+            const regex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+            let lastIndex = 0;
+            let match;
+            let found = false;
+
+            while ((match = regex.exec(text)) !== null) {
+                found = true;
+                const before = text.substring(lastIndex, match.index);
+                if (before.trim()) {
+                    newBlocks.push({ ...originalBlock, type: originalBlock.type || 'paragraph', text: before.trim() });
+                }
+                newBlocks.push({ type: 'image', url: match[2], caption: match[1] });
+                lastIndex = regex.lastIndex;
+            }
+
+            if (found) {
+                const after = text.substring(lastIndex);
+                if (after.trim()) {
+                    newBlocks.push({ ...originalBlock, type: originalBlock.type || 'paragraph', text: after.trim() });
+                }
+                return true;
+            }
+            return false;
+        };
+
+        if (sec.blocks && Array.isArray(sec.blocks)) {
+            sec.blocks.forEach(block => {
+                if ((block.type === 'paragraph' || block.type === 'styled_paragraph') && block.text) {
+                    if (!processText(block.text, block)) {
+                        newBlocks.push(block);
+                    }
+                } else {
+                    newBlocks.push(block);
+                }
+            });
+            sec.blocks = newBlocks;
+        } else if (sec.content) {
+            if (processText(sec.content)) {
+                sec.blocks = newBlocks;
+                delete sec.content;
+            }
+        }
+    });
+};
+
+export const generateWordDoc = async (docData) => {
     try {
+        const data = JSON.parse(JSON.stringify(docData));
+        normalizeContent(data);
         const { fileName, title, titleStyle, sections, header, footer, watermark, protection } = data;
 
         // --- Numbering config for numbered lists ---
@@ -515,8 +572,11 @@ export const generateWordDoc = async (data) => {
                                 break;
                             }
                             case 'image': {
-                                if (block.url) {
-                                    const imgBuffer = await fetchImageAsBuffer(block.url);
+                                const imgUrl = block.url || data.image_url;
+                                const isExampleUrl = imgUrl && (imgUrl.includes('example.com') || imgUrl.includes('placeholder') || imgUrl.includes('localhost') || imgUrl.includes('nurotra.com'));
+
+                                if (imgUrl && !isExampleUrl) {
+                                    const imgBuffer = await fetchImageAsBuffer(imgUrl);
                                     if (imgBuffer) {
                                         docChildren.push(new Paragraph({
                                             children: [new ImageRun({
@@ -534,16 +594,17 @@ export const generateWordDoc = async (data) => {
                                             }));
                                         }
                                     } else {
-                                        // Placeholder if image can't be fetched
+                                        // Real fetch failed
                                         docChildren.push(new Paragraph({
-                                            children: [new TextRun({ text: `[Image: ${block.caption || 'Untitled'}]`, highlight: "yellow", bold: true, font: "Calibri", size: 24 })],
+                                            children: [new TextRun({ text: `🖼️ [Image Download Failed: ${imgUrl}]`, color: "FF0000", italics: true, size: 20 })],
                                             alignment: AlignmentType.CENTER,
                                             spacing: { after: 200 }
                                         }));
                                     }
                                 } else {
+                                    // No URL OR it's just an example/placeholder URL
                                     docChildren.push(new Paragraph({
-                                        children: [new TextRun({ text: `[Image: ${block.caption || 'Insert image here'}]`, highlight: "yellow", bold: true, font: "Calibri", size: 24 })],
+                                        children: [new TextRun({ text: `🖼️ [Image Placeholder: ${block.caption || 'Insert image here'}]`, color: "888888", italics: true, size: 20 })],
                                         alignment: AlignmentType.CENTER,
                                         spacing: { after: 200 }
                                     }));
@@ -707,8 +768,10 @@ export const generateExcelSheet = async (data) => {
 // ==========================================
 // POWERPOINT PRESENTATION GENERATOR
 // ==========================================
-export const generatePresentation = async (data) => {
+export const generatePresentation = async (docData) => {
     try {
+        const data = JSON.parse(JSON.stringify(docData));
+        normalizeContent(data);
         const { fileName, slides } = data;
         const pres = new pptxgen();
 
@@ -718,6 +781,9 @@ export const generatePresentation = async (data) => {
                 slide.addText(slideData.title || "Slide", {
                     x: 0.5, y: 0.5, w: '90%', fontSize: 24, bold: true, color: '363636'
                 });
+                if (slideData.image_url || data.image_url) {
+                    slide.addImage({ path: slideData.image_url || data.image_url, x: '50%', y: '50%', w: 3, h: 2 });
+                }
                 if (slideData.bullets && Array.isArray(slideData.bullets)) {
                     slide.addText(slideData.bullets.join('\n'), {
                         x: 0.5, y: 1.5, w: '90%', h: '70%', fontSize: 18, color: '666666', bullet: true

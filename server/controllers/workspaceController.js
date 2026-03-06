@@ -44,7 +44,8 @@ const downloadFile = async (req, res) => {
         const mimeMap = {
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'pdf': 'application/pdf'
         };
 
         // Try to find existing cloud file
