@@ -55,14 +55,12 @@ const isSpreadsheet = (mime) =>
 // ─────────────────────────────────────────────────────────────
 // GEMINI VISION — extract text/commands from image
 // ─────────────────────────────────────────────────────────────
+/**
+ * GEMINI VISION — extract text/commands from image using direct API call
+ */
 const extractCommandFromImage = async (buffer, mimeType, fileName) => {
-    const apiKeys = getGeminiKeys();
-    if (!apiKeys.length) {
-        return `[Image uploaded: ${fileName}. Describe what you want to do with this image.]`;
-    }
-
-    // Convert buffer to base64
     const base64Data = buffer.toString('base64');
+    const apiKeys = getGeminiKeys();
 
     const systemInstruction = `You are an AI that reads images and extracts actionable document creation instructions.
 Look at this image carefully and extract:
@@ -72,10 +70,11 @@ Look at this image carefully and extract:
 4. If it is a screenshot of content: extract the key content/instructions
 5. Formulate everything as a clear, actionable instruction for a document creation agent
 
-Output ONLY the extracted command/instruction. Do not add preamble. Be specific and actionable.
-Example output: "Create a marketing report with sections: Executive Summary, Market Analysis, Competitor Overview, Strategy, and Conclusion. Include a table comparing 3 competitors."`;
+Output ONLY the extracted command/instruction. Do not add preamble.
+Example: "Create a marketing report with sections: Executive Summary, Market Analysis, and Conclusion."`;
 
-    const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+    // Only use models confirmed to support vision via v1beta
+    const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 
     for (const key of apiKeys) {
         for (const model of models) {
@@ -84,19 +83,11 @@ Example output: "Create a marketing report with sections: Executive Summary, Mar
                 const resp = await axios.post(url, {
                     contents: [{
                         parts: [
-                            {
-                                inlineData: {
-                                    mimeType,
-                                    data: base64Data
-                                }
-                            },
+                            { inline_data: { mime_type: mimeType, data: base64Data } },
                             { text: systemInstruction }
                         ]
                     }],
-                    generationConfig: {
-                        maxOutputTokens: 2048,
-                        temperature: 0.1
-                    }
+                    generationConfig: { maxOutputTokens: 2048, temperature: 0.1 }
                 }, { timeout: 30000 });
 
                 const text = resp.data?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -108,18 +99,52 @@ Example output: "Create a marketing report with sections: Executive Summary, Mar
                 const status = err.response?.status;
                 const msg = err.response?.data?.error?.message || err.message;
                 console.warn(`[CommandExtraction] ${model} vision failed (${status}): ${msg}`);
-                if (status === 429) break; // quota — try next key
+                if (status === 429) break;
             }
         }
     }
 
-    // Fallback if all vision calls fail
-    return `[Image "${fileName}" was uploaded but visual AI is currently unavailable. Please describe what you want to do with this image in the text box.]`;
+    return `[Image "${fileName}" could not be read by OCR. Please describe what you want to create in the text box.]`;
 };
 
 // ─────────────────────────────────────────────────────────────
 // TEXT DOCUMENT — extract command from document content
 // ─────────────────────────────────────────────────────────────
+/**
+ * GEMINI LLM — extract actionable command from document text
+ */
+const extractActionableCommandWithLLM = async (text, fileName) => {
+    const apiKeys = getGeminiKeys();
+    if (!apiKeys.length) return null;
+
+    const systemInstruction = `You are the Nurotra Intelligence Layer. 
+Extract the most important actionable instructions/commands from the following document content. 
+If the document contains a list of tasks, return them as a clear request for the document agent.
+If it is a reference document, summarize the key points as building blocks.
+Output ONLY the final actionable instruction. No preamble.`;
+
+    const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+    const prompt = `Document Name: ${fileName}\nContent:\n${text.substring(0, 10000)}`;
+
+    for (const key of apiKeys) {
+        for (const model of models) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+                const resp = await axios.post(url, {
+                    contents: [{ parts: [{ text: `${systemInstruction}\n\n${prompt}` }] }],
+                    generationConfig: { maxOutputTokens: 2048, temperature: 0.2 }
+                }, { timeout: 20000 });
+
+                return resp.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+            } catch (err) {
+                console.warn(`[CommandExtraction] LLM fallback failed for ${model}: ${err.message}`);
+                if (err.response?.status === 429) break;
+            }
+        }
+    }
+    return null;
+};
+
 const extractCommandFromDocument = async (buffer, mimeType, fileName) => {
     let rawText = '';
 
@@ -154,25 +179,24 @@ const extractCommandFromDocument = async (buffer, mimeType, fileName) => {
         return `The uploaded file "${fileName}" appears to be empty or could not be read. Please check the file.`;
     }
 
-    // Trim to a reasonable size
-    const trimmed = rawText.substring(0, 4000).trim();
+    // --- LLM ENHANCEMENT ---
+    const llmCommand = await extractActionableCommandWithLLM(rawText, fileName);
+    if (llmCommand) return llmCommand;
 
-    // Build a structured command from the content
+    // Fallback to rule-based if LLM fails
+    const trimmed = rawText.substring(0, 4000).trim();
     const lines = trimmed.split('\n').filter(l => l.trim().length > 0);
     const wordCount = trimmed.split(/\s+/).length;
-
-    // If it reads like instructions (imperative sentences) — use as-is
     const instructionKeywords = /\b(create|write|make|generate|draft|build|design|include|add|list|provide|summarize|analyze|compare|structure|organize)\b/i;
     const hasInstructions = lines.slice(0, 10).some(l => instructionKeywords.test(l));
 
     if (hasInstructions && wordCount < 500) {
-        // Treat the document content directly as the command
         return `Based on the instructions in "${fileName}":\n\n${trimmed}`;
     }
 
-    // Otherwise, wrap it with a clear instruction prefix
     return `Using the content from "${fileName}" as the specification:\n\n${trimmed}\n\nPlease create a well-structured document based on the above content and structure.`;
 };
+
 
 // ─────────────────────────────────────────────────────────────
 // MAIN ENTRY — extract commands from all uploaded files

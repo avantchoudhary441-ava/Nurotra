@@ -42,21 +42,29 @@ const processQuery = async (req, res) => {
             niche: req.user.niche || "General"
         };
 
-        // 1. Context-aware Intent Detection
+        // 1. Context-aware Intent Detection (Prioritize LLM Rescue if requested or data is complex)
         let intentInfo = contextualClassifyIntent(prompt, hasOpenDoc, selectedDocCount);
         let categoryOverride = null;
 
-        // If confidence is low, trigger Intent Rescue (Invisible to user)
-        if (intentInfo.confidence < 0.8) {
-            console.log(`Debug: Low confidence (${intentInfo.confidence}). Rescuing intent via LLM...`);
-            const rescue = await aiService.extractIntentWithLLM(prompt);
-            // Only override if rescue gives CREATE — don't override MODIFY when doc is open
-            if (!hasOpenDoc || rescue.intent === 'CREATE') {
-                intentInfo.intent = rescue.intent;
+        // --- LLM SHIFT: Always verify intent via LLM if it's a critical request or confidence is not absolute ---
+        if (intentInfo.confidence < 0.95 || selectedDocCount > 0) {
+            console.log(`[LLM Shift] Verifying intent via Gemini...`);
+            try {
+                const rescue = await aiService.extractIntentWithLLM(prompt);
+                if (rescue) {
+                    // Only override if rescue is definitive and not conflicting with open doc logic
+                    if (!hasOpenDoc || rescue.intent !== 'QUERY') {
+                        intentInfo.intent = rescue.intent;
+                    }
+                    categoryOverride = rescue.category;
+                    intentInfo.confidence = 1.0;
+                    console.log(`[LLM Shift] Intent updated to: ${intentInfo.intent} (${categoryOverride})`);
+                }
+            } catch (err) {
+                console.warn("LLM Intent Rescue failed, falling back to NLP:", err.message);
             }
-            categoryOverride = rescue.category;
-            intentInfo.confidence = 0.9;
         }
+
 
         const risk = intentEngine.detectRisk(prompt);
 
@@ -420,7 +428,7 @@ const markRevaluated = async (req, res) => {
  */
 const analyzeDocuments = async (req, res) => {
     try {
-        const { prompt, selectedDocIds: rawIds } = req.body;
+        const { prompt, selectedDocIds: rawIds, projectId } = req.body;
         const uploadedFiles = req.files || [];
 
         if (!prompt) {
@@ -437,7 +445,8 @@ const analyzeDocuments = async (req, res) => {
             return res.status(400).json({ message: 'No documents provided for analysis' });
         }
 
-        const result = await runDocumentAnalysis(prompt, selectedDocIds, uploadedFiles, req.user);
+        const result = await runDocumentAnalysis(prompt, selectedDocIds, uploadedFiles, req.user, projectId);
+
 
         if (!result.isAnalysisRequest) {
             // Not an analysis prompt — return signal to frontend to handle normally
@@ -489,7 +498,7 @@ module.exports = {
         try {
             const { userText } = req.body;
             const files = req.files || [];
-            
+
             if (files.length === 0) {
                 return res.status(400).json({ success: false, message: "No files uploaded" });
             }

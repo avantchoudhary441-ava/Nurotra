@@ -7,6 +7,50 @@
 const { parseDocument, parsePDF, parseDOCX, parseText } = require('../utils/documentParser');
 const Document = require('../models/Document');
 const ExcelJS = require('exceljs');
+const { spawn } = require('child_process');
+const path = require('path');
+
+// ─────────────────────────────────────────────────────────────
+// PYTHON ANALYSIS ENGINE INTERFACE
+// ─────────────────────────────────────────────────────────────
+const callPythonAnalysisEngine = async (documents, prompt, analysisType) => {
+    return new Promise((resolve, reject) => {
+        const pythonPath = 'python'; // or full path if needed
+        const scriptPath = path.join(__dirname, 'python', 'analysis_orchestrator.py');
+
+        const payload = JSON.stringify({ documents, prompt, analysisType });
+
+        const pyProcess = spawn(pythonPath, [scriptPath]);
+
+        let output = '';
+        let errorOutput = '';
+
+        pyProcess.stdin.write(payload);
+        pyProcess.stdin.end();
+
+        pyProcess.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+
+        pyProcess.stderr.on('data', (data) => {
+            errorOutput += data.toString();
+        });
+
+        pyProcess.on('close', (code) => {
+            if (code !== 0) {
+                console.error('[PythonAnalysis] Error code:', code, errorOutput);
+                return reject(new Error(`Python process failed with code ${code}: ${errorOutput}`));
+            }
+            try {
+                const result = JSON.parse(output);
+                resolve(result);
+            } catch (err) {
+                console.error('[PythonAnalysis] JSON Parse Error:', err.message, output.substring(0, 500));
+                reject(new Error('Failed to parse Python analysis output'));
+            }
+        });
+    });
+};
 
 // ─────────────────────────────────────────────────────────────
 // ANALYSIS INTENT DETECTOR  (rule-based, no API)
@@ -14,8 +58,14 @@ const ExcelJS = require('exceljs');
 const detectAnalysisIntent = async (prompt, docCount) => {
     const p = prompt.toLowerCase();
 
-    const isCreate = /\b(create|write|generate|draft|make a new|compose|build)\b/.test(p);
-    if (isCreate && docCount === 0) {
+    const isCreate = /\b(create|write|generate|draft|make a new|compose|build|draw|use|read|from)\b/.test(p);
+    const isQuestion = /\b(what|how|who|where|why|search|lookup|research|explain)\b/.test(p);
+    const isEdit = /\b(edit|change|update|fix|modify|add|remove|shorten|expand|adjust|refine)\b/.test(p);
+    const isAnalyze = /\b(analyze|summarize|insight|point|trend|extract|summary|report|compare|versus|vs|contrast)\b/.test(p);
+
+    // If there's an explicit "Create" command even with files, it's NOT a document analysis request.
+    // It's a "File as input/instruction" request.
+    if (isCreate && !isAnalyze) {
         return { isAnalysisRequest: false };
     }
 
@@ -132,15 +182,15 @@ const buildDocumentSet = async (selectedDocIds = [], uploadedFiles = []) => {
 // ─────────────────────────────────────────────────────────────
 
 const STOP_WORDS = new Set([
-    'the','a','an','and','or','but','in','on','at','to','for','of','with','by',
-    'from','is','are','was','were','be','been','being','have','has','had','do',
-    'does','did','will','would','could','should','may','might','shall','can',
-    'this','that','these','those','it','its','he','she','they','we','you','i',
-    'not','no','as','if','so','yet','up','into','than','then','when','where',
-    'how','what','which','who','whom','also','about','above','after','before',
-    'between','during','each','few','more','most','other','some','such','only',
-    'both','all','any','every','much','many','very','just','out','there','here',
-    'their','them','my','our','your','his','her','its','over','under','again','further'
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+    'from', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do',
+    'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'shall', 'can',
+    'this', 'that', 'these', 'those', 'it', 'its', 'he', 'she', 'they', 'we', 'you', 'i',
+    'not', 'no', 'as', 'if', 'so', 'yet', 'up', 'into', 'than', 'then', 'when', 'where',
+    'how', 'what', 'which', 'who', 'whom', 'also', 'about', 'above', 'after', 'before',
+    'between', 'during', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only',
+    'both', 'all', 'any', 'every', 'much', 'many', 'very', 'just', 'out', 'there', 'here',
+    'their', 'them', 'my', 'our', 'your', 'his', 'her', 'its', 'over', 'under', 'again', 'further'
 ]);
 
 /** Tokenize text into words */
@@ -622,7 +672,17 @@ const generateAnalysisWordReport = async (analysisResult, docs, analysisType) =>
         const ca = analysisResult.comparativeAnalysis;
         if (ca.similarities?.length) { children.push(makePara('Similarities', true)); ca.similarities.forEach(s => children.push(makeBullet(s))); }
         if (ca.differences?.length) { children.push(makePara('Differences', true)); ca.differences.forEach(d => children.push(makeBullet(d))); }
-        children.push(makeDivider());
+    }
+
+    if (analysisResult.pythonInsights?.length) {
+        children.push(makeHeading(isMultiDoc ? '10. Automated Data Insights' : '9. Automated Data Insights'));
+        analysisResult.pythonInsights.forEach(ds => {
+            children.push(makePara(`Dataset: ${ds.docName}`, true));
+            if (ds.insights.summary) children.push(makeBullet(ds.insights.summary));
+            (ds.insights.trends || []).forEach(t => children.push(makeBullet(t)));
+            (ds.insights.anomalies || []).forEach(a => children.push(makeBullet(a)));
+            (ds.insights.dominant_insights || []).forEach(d => children.push(makeBullet(d)));
+        });
     }
 
     children.push(new Paragraph({
@@ -638,7 +698,7 @@ const generateAnalysisWordReport = async (analysisResult, docs, analysisType) =>
 // ─────────────────────────────────────────────────────────────
 // MAIN ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────
-const runDocumentAnalysis = async (prompt, selectedDocIds = [], uploadedFiles = [], user) => {
+const runDocumentAnalysis = async (prompt, selectedDocIds = [], uploadedFiles = [], user, projectId = null) => {
     const totalDocCount = selectedDocIds.length + uploadedFiles.length;
     console.log('[DocumentAnalysis] Starting analysis. Docs:', totalDocCount, '| Prompt:', prompt.substring(0, 80));
 
@@ -662,28 +722,123 @@ const runDocumentAnalysis = async (prompt, selectedDocIds = [], uploadedFiles = 
         };
     }
 
-    // Step 3: Run local analysis
-    const analysisResult = await runAnalysisModules(docs, intentResult.modules, intentResult.analysisType, prompt);
+    // --- NEW: Multi-Stage Python Pipeline ---
+    let structuredInsights = null;
+    try {
+        console.log('[DocumentAnalysis] Running Python Analysis Engine...');
+        structuredInsights = await callPythonAnalysisEngine(docs, prompt, intentResult.analysisType);
+        console.log('[DocumentAnalysis] Python Engine processing complete. Chunks:', structuredInsights.chunks_count);
+    } catch (pyErr) {
+        console.warn('[DocumentAnalysis] Python Engine failed, continuing with limited context:', pyErr.message);
+    }
+
+    // --- LLM SHIFT: LLM-Based Analysis (Primary Engine) ---
+    let analysisResult;
+    let engineUsed = 'local-nlp';
+    try {
+        console.log('[LLM Shift] Attempting high-quality analysis via Gemini...');
+
+        // Prepare professional context for LLM
+        const datasetContext = structuredInsights?.dataset_insights?.map(d =>
+            `DATASET [${d.docName}]: ${JSON.stringify(d.insights)}`
+        ).join('\n') || 'None';
+
+        const entityContext = JSON.stringify(structuredInsights?.aggregated_entities || {});
+
+        const systemPrompt = `You are a professional market intelligence analyst and senior document auditor at Nurotra Intelligence.
+
+Your objective is to generate a comprehensive, strategic analysis report based on structured insights extracted from documents.
+
+PROMPT CONTEXT:
+${prompt}
+
+STRUCTURED INSIGHTS PROVIDED:
+1. ENTITIES: ${entityContext}
+2. DATASET STATISTICS/TRENDS: ${datasetContext}
+3. DOCUMENT STRUCTURE: ${structuredInsights?.processed_docs?.map(d => `${d.name} (${d.chunks} chunks)`).join(', ')}
+
+Your response MUST be a valid JSON object matching the detailed Nurotra analysis schema. 
+Focus on:
+- Executive Summary (Strategic highlights)
+- Key Topics (What matters most)
+- Entity Relationships (How people/orgs interact)
+- Quantitative Insights (Statistics and trends detected in data)
+- Risks & Challenges (Identify bottlenecks or threats)
+- Strategic Takeaways
+
+Respond ONLY with the JSON object.`;
+
+        const userPromptSnippet = `Please analyze these documents and provide deep insights.\n\nRaw Text Sample:\n${docs.map(d => d.content).join('\n').substring(0, 15000)}`;
+
+        const aiService = require('./aiService');
+        const rawLLMResult = await aiService.generateWithFallback(userPromptSnippet, systemPrompt);
+
+        // Clean and parse JSON
+        let cleanLLMJson = rawLLMResult.replace(/```json/gi, "").replace(/```/g, "").trim();
+        const start = cleanLLMJson.indexOf('{');
+        const end = cleanLLMJson.lastIndexOf('}');
+        if (start !== -1 && end !== -1) {
+            cleanLLMJson = cleanLLMJson.substring(start, end + 1);
+        }
+
+        analysisResult = JSON.parse(cleanLLMJson);
+
+        // Merge structured data from Python into LLM result if missing
+        if (structuredInsights) {
+            analysisResult.entities = analysisResult.entities || structuredInsights.aggregated_entities;
+            analysisResult.pythonInsights = structuredInsights.dataset_insights;
+        }
+
+        engineUsed = 'llm-gemini';
+        console.log('[LLM Shift] LLM analysis successful.');
+    } catch (llmErr) {
+        console.warn('[LLM Shift] LLM analysis failed, falling back to Local NLP:', llmErr.message);
+        // Fallback to the original local module if Gemini or Python+Gemini fails
+        analysisResult = await runAnalysisModules(docs, intentResult.modules, intentResult.analysisType, prompt);
+    }
+
+    // Finalize report data
+    if (structuredInsights && analysisResult) {
+        analysisResult.metadata = docs.map(d => ({
+            name: d.name,
+            chunks: (structuredInsights.processed_docs || []).find(pd => pd.name === d.name)?.chunks || 0
+        }));
+    }
+
 
     // Step 4: Generate Word report
     const { buffer, name: reportName } = await generateAnalysisWordReport(analysisResult, docs, intentResult.analysisType);
 
-    // Step 5: Save report as a new Document record
+    // Step 5: Save report as a new Document record & WorkspaceFile
     let savedDoc = null;
     try {
         const newDoc = await Document.create({
             name: reportName.replace('.docx', ''),
-            content: `[Analysis Report] ${reportName} — Generated by Nurotra Local Intelligence Engine`,
+            content: `[Analysis Report] ${reportName} — Generated by Nurotra Intelligence Layer`,
             type: 'word',
             userId: user._id,
+            projectId: projectId || null,
             description: `Automated analysis of: ${docs.map(d => d.name).join(', ')}`,
             keywords: ['analysis', 'report', 'generated'],
             status: 'final'
         });
-        savedDoc = { id: String(newDoc._id), name: newDoc.name };
-        console.log('[DocumentAnalysis] Saved report to DB:', newDoc.name, String(newDoc._id));
+        savedDoc = { id: String(newDoc._id), name: newDoc.name, projectId: newDoc.projectId };
+
+        // --- Persistence Shift: Save binary to WorkspaceFile (MongoDB Cloud) ---
+        const WorkspaceFile = require('../models/WorkspaceFile');
+        await WorkspaceFile.create({
+            userId: user._id,
+            documentId: newDoc._id,
+            projectId: projectId || null,
+            fileName: reportName,
+            fileType: 'docx',
+            fileData: buffer,
+            size: buffer.length
+        });
+
+        console.log('[DocumentAnalysis] Saved report and cloud binary:', newDoc.name, String(newDoc._id));
     } catch (e) {
-        console.error('[DocumentAnalysis] Failed to save report:', e.message);
+        console.error('[DocumentAnalysis] Failed to save report or binary:', e.message);
     }
 
     return {
@@ -696,7 +851,7 @@ const runDocumentAnalysis = async (prompt, selectedDocIds = [], uploadedFiles = 
                 modules: intentResult.modules,
                 docsAnalyzed: docs.map(d => ({ name: d.name, source: d.source })),
                 timestamp: new Date().toISOString(),
-                engine: 'local-nlp'
+                engine: engineUsed
             }
         },
         savedDoc,
@@ -704,6 +859,7 @@ const runDocumentAnalysis = async (prompt, selectedDocIds = [], uploadedFiles = 
         wordReportName: reportName
     };
 };
+
 
 module.exports = {
     runDocumentAnalysis,

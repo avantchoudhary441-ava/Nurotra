@@ -21,7 +21,7 @@ const DocsAgentPage = () => {
     const [selectedDocIds, setSelectedDocIds] = useState([]); // Multiple docs for analysis
     const [analyticsData, setAnalyticsData] = useState(null); // Data for AnalyticsHub
     const [wordReport, setWordReport] = useState({ buffer: null, name: null }); // For download
-    
+
     // Robust derivation of all documents
     const allDocs = useMemo(() => {
         return [
@@ -49,10 +49,25 @@ const DocsAgentPage = () => {
         if (result?.wordReportBuffer) {
             setWordReport({ buffer: result.wordReportBuffer, name: result.wordReportName });
         }
-        if (result?.updatedDocs) {
+
+        if (result?.savedDoc) {
+            const newDoc = {
+                ...result.savedDoc,
+                createdAt: new Date().toISOString(),
+                type: 'word'
+            };
+
+            if (result.savedDoc.projectId) {
+                setProjects(prev => prev.map(p =>
+                    String(p.id) === String(result.savedDoc.projectId)
+                        ? { ...p, documents: [newDoc, ...(p.documents || [])], docCount: (p.docCount || 0) + 1 }
+                        : p
+                ));
+            } else {
+                setStandaloneDocs(prev => [newDoc, ...prev]);
+            }
+        } else if (result?.updatedDocs) {
             setStandaloneDocs(result.updatedDocs);
-        } else {
-            fetchInitialData();
         }
     };
 
@@ -503,7 +518,11 @@ const DocsAgentPage = () => {
                     });
 
                     // Refresh sidebar data to reflect updates
-                    await fetchInitialData();
+                    setStandaloneDocs(prev => prev.map(d => String(d.id) === String(savedDoc.id) ? { ...d, ...savedDoc } : d));
+                    setProjects(prev => prev.map(p => ({
+                        ...p,
+                        documents: (p.documents || []).map(d => String(d.id) === String(savedDoc.id) ? { ...d, ...savedDoc } : d)
+                    })));
                 } else {
                     // *** CREATE NEW ***
                     savedDoc = await docsAgentService.createDocument({
@@ -522,7 +541,15 @@ const DocsAgentPage = () => {
 
                     // Update UI state
                     if (intentData.projectId) {
-                        await fetchInitialData();
+                        setProjects(prev => prev.map(p =>
+                            String(p.id) === String(intentData.projectId)
+                                ? {
+                                    ...p,
+                                    documents: [savedDoc, ...(p.documents || [])],
+                                    docCount: (p.docCount || 0) + 1
+                                }
+                                : p
+                        ));
                     } else {
                         setStandaloneDocs(prev => [savedDoc, ...prev]);
                     }

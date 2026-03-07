@@ -18,6 +18,7 @@ app.use(express.json());
 // Production CORS Configuration
 const allowedOrigins = [
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "http://localhost:5174",
     "https://nurotra.online",
     "https://www.nurotra.online",

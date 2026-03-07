@@ -36,10 +36,13 @@ let currentKeyIndex = 0;
  * Direct Gemini Generation using Raw REST (Axios)
  * Bypasses SDK limits and reservoir complexity.
  * Implements Multi-Key Rotation & Model Fallback.
+ * @param {string} prompt - The user prompt
+ * @param {string} systemPrompt - Optional system context
+ * @param {Array} images - Optional array of { mimeType: string, data: base64 } objects
  */
-const generateWithFallback = async (prompt, systemPrompt = "") => {
-    const cacheKey = Buffer.from(prompt + systemPrompt).toString('base64').substring(0, 32);
-    if (responseCache.has(cacheKey)) {
+const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
+    const cacheKey = Buffer.from(prompt + systemPrompt + (images.length > 0 ? images[0].data.substring(0, 20) : '')).toString('base64').substring(0, 32);
+    if (responseCache.has(cacheKey) && images.length === 0) {
         const cached = responseCache.get(cacheKey);
         if (Date.now() - cached.timestamp < CACHE_TTL) {
             return cached.data;
@@ -51,7 +54,13 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
         throw new Error("No GEMINI_API_KEY found in environment");
     }
 
-    const geminiModels = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-pro-latest"];
+    // VERIFIED working models via v1beta REST API
+    const geminiModels = [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b"
+    ];
     let lastError = null;
 
     // Outer Loop: API Keys (The Reservoir)
@@ -66,23 +75,42 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
 
             while (retries <= maxRetries) {
                 try {
-                    if (retries === 0) {
-                        console.log(`[AI Reservoir] Attempting Key ${keyAttemptIndex + 1}/${apiKeys.length} | Model: ${modelName}`);
-                    }
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
+                    const parts = [];
+                    if (systemPrompt) {
+                        parts.push({ text: `System Instruction: ${systemPrompt}` });
+                    }
+                    
+                    // Add images if provided (Vision)
+                    if (images && images.length > 0) {
+                        images.forEach(img => {
+                            parts.push({
+                                inline_data: {
+                                    mime_type: img.mimeType || "image/png",
+                                    data: img.data
+                                }
+                            });
+                        });
+                    }
+
+                    // Add the actual text prompt
+                    parts.push({ text: prompt });
+
                     const response = await axios.post(url, {
-                        contents: [{
-                            parts: [{ text: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }]
-                        }],
-                        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 8192 }
+                        contents: [{ parts }],
+                        generationConfig: { 
+                            responseMimeType: "application/json", 
+                            maxOutputTokens: 8192 
+                        }
                     });
 
                     if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
                         const text = response.data.candidates[0].content.parts[0].text.trim();
-                        // Update current starting key for next request (load balancing)
                         currentKeyIndex = keyAttemptIndex;
-                        responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                        if (images.length === 0) {
+                            responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                        }
                         return text;
                     }
                     throw new Error("Invalid response format");
@@ -92,12 +120,10 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
 
                     console.warn(`Debug: Key ${keyAttemptIndex + 1} | Model ${modelName} failed: ${errorMsg}`);
 
-                    // If Quota Exceeded, break model loop and try next key immediately OR try next model
-                    // Usually, 429 means THIS key is out of quota for THIS model or ALL models.
                     if (statusCode === 429 || errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("limit")) {
-                        console.warn(`[AI Reservoir] Key ${keyAttemptIndex + 1} hit quota limit. Rotating to next available resource...`);
+                        console.warn(`[AI Reservoir] Key ${keyAttemptIndex + 1} hit quota limit. Rotating...`);
                         lastError = new Error(`Quota Exceeded: ${errorMsg}`);
-                        break; // Break model loop to try next key immediately
+                        break; 
                     }
 
                     if (statusCode === 503 && retries < maxRetries) {
@@ -107,12 +133,10 @@ const generateWithFallback = async (prompt, systemPrompt = "") => {
                     }
 
                     lastError = new Error(`Gemini Error (${modelName}): ${errorMsg}`);
-                    break; // Next model
+                    break;
                 }
             }
         }
-        // If we reach here, this key failed for all models
-        console.warn(`Debug: Key ${keyAttemptIndex + 1} exhausted for all models.`);
     }
 
     throw lastError || new Error("All API keys and models in the reservoir have failed.");
@@ -848,7 +872,7 @@ ${formatInstructions}`;
         return parsed;
     } catch (error) {
         console.error("Docs Agent Execution Error:", error.message);
-        return { intent: "QUERY", text: `Recalibrating engine... ${error.message}` };
+        return { intent: "QUERY", text: "I encountered an issue processing your request. Please try again or rephrase your prompt." };
     }
 };
 
@@ -959,5 +983,6 @@ module.exports = {
     processDocsAgentQuery,
     extractMetadata,
     structureVoiceIntent,
-    extractIntentWithLLM
+    extractIntentWithLLM,
+    generateWithFallback
 };

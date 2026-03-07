@@ -211,9 +211,13 @@ const DocsChat = ({
         setPrompt('');
         setShowSuggestions(false);
 
+        // ── Immediately capture and clear uploaded files so UI is responsive ──
+        const capturedFiles = [...rawUploadedFiles];
+        const capturedDocIds = [...selectedDocIds];
+        setUploadedFiles([]);
+        setRawUploadedFiles([]);
+
         // ── Capture a state snapshot BEFORE this command executes ──
-        // The parent passes a function that returns its current state slice.
-        // We embed it into the message so we can restore it on undo.
         const snapshot = onInlineUndo ? onInlineUndo('GET_SNAPSHOT') : null;
 
         const msgId = Date.now();
@@ -222,7 +226,7 @@ const DocsChat = ({
             type: 'user',
             text: userPrompt,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            snapshot  // → stored so inline undo can restore
+            snapshot
         };
         setStrategyMessages(prev => [...prev, userMsg]);
         setIsThinking(true);
@@ -232,34 +236,31 @@ const DocsChat = ({
         // ──────────────────────────────────────────────────────────────
         // SMART ROUTING: ANALYSIS vs COMMAND EXTRACTION
         // ──────────────────────────────────────────────────────────────
-        const totalDocCount = selectedDocIds.length + rawUploadedFiles.length;
+        const totalDocCount = capturedDocIds.length + capturedFiles.length;
 
         if (totalDocCount > 0) {
             try {
                 // First, call Analysis API to detect intent
                 const analysisResult = await docsAgentService.analyzeDocuments(
                     userPrompt,
-                    selectedDocIds,
-                    rawUploadedFiles
+                    capturedDocIds,
+                    capturedFiles
                 );
 
                 if (analysisResult.isAnalysisRequest === false) {
                     // 🧠 CASE A: FILES ARE INSTRUCTIONS (COMMANDS)
-                    // If backend says this isn't an analysis request, treat files as commands
-                    if (rawUploadedFiles.length > 0) {
+                    if (capturedFiles.length > 0) {
                         setStrategyMessages(prev => [...prev, {
                             id: Date.now() + 0.1,
                             type: 'system',
-                            text: `🔍 Checking ${rawUploadedFiles.length} file(s) for instructions...`,
+                            text: `🔍 Checking ${capturedFiles.length} file(s) for instructions...`,
                             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                         }]);
 
-                        const extractionResult = await docsAgentService.extractCommandFromFiles(rawUploadedFiles, userPrompt);
+                        const extractionResult = await docsAgentService.extractCommandFromFiles(capturedFiles, userPrompt);
                         
                         if (extractionResult.success) {
                             finalPrompt = extractionResult.combinedCommand;
-                            
-                            // Show user the extracted intent
                             setStrategyMessages(prev => [...prev, {
                                 id: Date.now() + 0.2,
                                 type: 'info',
@@ -268,11 +269,6 @@ const DocsChat = ({
                             }]);
                         }
                     }
-
-                    // Clear uploaded files after they've been read as commands
-                    setUploadedFiles([]);
-                    setRawUploadedFiles([]);
-                    
                     // Fall through to normal query execution below with the UPDATED finalPrompt
                 } else if (analysisResult.clarificationNeeded) {
                     setIsThinking(false);
@@ -300,6 +296,9 @@ const DocsChat = ({
                 }
             } catch (err) {
                 console.error('[DocsChat] Routing error:', err.message);
+                // Always clear files even on error so they don't get stuck
+                setUploadedFiles([]);
+                setRawUploadedFiles([]);
                 setIsThinking(false);
                 setStrategyMessages(prev => [...prev, {
                     id: Date.now() + 1,
@@ -748,9 +747,9 @@ const DocsChat = ({
                             <TrendingUp size={14} className="doc-status-icon" />
                             <span className="doc-status-text">
                                 <strong>{selectedDocIds.length + rawUploadedFiles.length}</strong>
-                                {' '}document{(selectedDocIds.length + rawUploadedFiles.length) > 1 ? 's' : ''} ready for analysis
+                                {' '}item{(selectedDocIds.length + rawUploadedFiles.length) > 1 ? 's' : ''} ready
                             </span>
-                            <span className="doc-status-hint">↓ Type your prompt to analyze</span>
+                            <span className="doc-status-hint">↓ Type a prompt to analyze or create from these</span>
                         </div>
                     </div>
                 )}
