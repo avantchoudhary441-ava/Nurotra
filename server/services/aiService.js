@@ -54,12 +54,12 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
         throw new Error("No GEMINI_API_KEY found in environment");
     }
 
-    // VERIFIED working models via v1beta REST API
+    // VERIFIED working models via v1beta REST API (updated for robustness)
     const geminiModels = [
+        "gemini-flash-latest",
+        "gemini-pro-latest",
         "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-8b"
+        "gemini-2.0-flash-lite"
     ];
     let lastError = null;
 
@@ -81,7 +81,7 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
                     if (systemPrompt) {
                         parts.push({ text: `System Instruction: ${systemPrompt}` });
                     }
-                    
+
                     // Add images if provided (Vision)
                     if (images && images.length > 0) {
                         images.forEach(img => {
@@ -99,9 +99,9 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
 
                     const response = await axios.post(url, {
                         contents: [{ parts }],
-                        generationConfig: { 
-                            responseMimeType: "application/json", 
-                            maxOutputTokens: 8192 
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            maxOutputTokens: 8192
                         }
                     });
 
@@ -123,7 +123,8 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
                     if (statusCode === 429 || errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("limit")) {
                         console.warn(`[AI Reservoir] Key ${keyAttemptIndex + 1} hit quota limit. Rotating...`);
                         lastError = new Error(`Quota Exceeded: ${errorMsg}`);
-                        break; 
+                        lastError.isQuotaError = true; // ← crucial flag for documentAnalysisService
+                        break;
                     }
 
                     if (statusCode === 503 && retries < maxRetries) {

@@ -793,8 +793,17 @@ Respond ONLY with the JSON object.`;
         console.log('[LLM Shift] LLM analysis successful.');
     } catch (llmErr) {
         console.warn('[LLM Shift] LLM analysis failed, falling back to Local NLP:', llmErr.message);
+
         // Fallback to the original local module if Gemini or Python+Gemini fails
         analysisResult = await runAnalysisModules(docs, intentResult.modules, intentResult.analysisType, prompt);
+
+        // Tag the result with a visibility bridge for the frontend
+        if (llmErr.isQuotaError) {
+            analysisResult.engineWarning = "QUOTA_EXCEEDED";
+        } else {
+            analysisResult.engineWarning = "CONNECTION_ERROR";
+        }
+        analysisResult.isFallback = true;
     }
 
     // Finalize report data

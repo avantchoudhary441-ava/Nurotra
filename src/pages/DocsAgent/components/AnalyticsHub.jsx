@@ -98,6 +98,23 @@ const AnalyticsHub = ({ data, onClose, wordReportBuffer, wordReportName }) => {
                 </div>
             )}
 
+            {/* ── Engine Status Banner ── */}
+            {data.isFallback && (
+                <div className="analytics-engine-warning fade-in-down">
+                    <div className="engine-warning-icon">
+                        <AlertTriangle size={16} />
+                    </div>
+                    <div className="engine-warning-content">
+                        <p className="engine-warning-title">
+                            {data.engineWarning === 'QUOTA_EXCEEDED' ? 'Limited Intelligence Mode (Quota Exceeded)' : 'Local Processing Mode'}
+                        </p>
+                        <p className="engine-warning-text">
+                            The premium Gemini AI is currently unavailable. This report was generated using the local NLP engine, which provides essential analysis but with less depth and narrative logic.
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div className="analytics-grid">
 
                 {/* 1. Executive Summary */}
