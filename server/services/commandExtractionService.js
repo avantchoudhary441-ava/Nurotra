@@ -12,23 +12,15 @@
  * Falls back gracefully if Gemini Vision is unavailable.
  */
 
-const axios = require('axios');
 const ExcelJS = require('exceljs');
 const { parsePDF, parseDOCX, parseText } = require('../utils/documentParser');
+const aiService = require('./aiService');
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
-const getGeminiKeys = () => {
-    const keys = [];
-    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
-    Object.keys(process.env)
-        .filter(k => k.startsWith('GEMINI_API_KEY_'))
-        .sort()
-        .forEach(k => keys.push(process.env[k]));
-    return keys;
-};
+// Keys are now handled centrally in aiService.js
 
 /** Determine MIME type from filename */
 const getMimeFromName = (name = '') => {
@@ -56,11 +48,10 @@ const isSpreadsheet = (mime) =>
 // GEMINI VISION — extract text/commands from image
 // ─────────────────────────────────────────────────────────────
 /**
- * GEMINI VISION — extract text/commands from image using direct API call
+ * Centralized AI Call — extract text/commands from image
  */
 const extractCommandFromImage = async (buffer, mimeType, fileName) => {
     const base64Data = buffer.toString('base64');
-    const apiKeys = getGeminiKeys();
 
     const systemInstruction = `You are an AI that reads images and extracts actionable document creation instructions.
 Look at this image carefully and extract:
@@ -70,38 +61,21 @@ Look at this image carefully and extract:
 4. If it is a screenshot of content: extract the key content/instructions
 5. Formulate everything as a clear, actionable instruction for a document creation agent
 
-Output ONLY the extracted command/instruction. Do not add preamble.
-Example: "Create a marketing report with sections: Executive Summary, Market Analysis, and Conclusion."`;
+Output ONLY the extracted command/instruction. Do not add preamble.`;
 
-    // Only use models confirmed to support vision via v1beta
-    const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+    try {
+        const result = await aiService.generateWithFallback(
+            `Extract instructions from file: ${fileName}`,
+            systemInstruction,
+            [{ mimeType, data: base64Data }]
+        );
 
-    for (const key of apiKeys) {
-        for (const model of models) {
-            try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-                const resp = await axios.post(url, {
-                    contents: [{
-                        parts: [
-                            { inline_data: { mime_type: mimeType, data: base64Data } },
-                            { text: systemInstruction }
-                        ]
-                    }],
-                    generationConfig: { maxOutputTokens: 2048, temperature: 0.1 }
-                }, { timeout: 30000 });
-
-                const text = resp.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (text) {
-                    console.log('[CommandExtraction] Image read via', model, '- length:', text.length);
-                    return text.trim();
-                }
-            } catch (err) {
-                const status = err.response?.status;
-                const msg = err.response?.data?.error?.message || err.message;
-                console.warn(`[CommandExtraction] ${model} vision failed (${status}): ${msg}`);
-                if (status === 429) break;
-            }
+        if (result) {
+            console.log('[CommandExtraction] Image read successful via AI Service');
+            return result.trim();
         }
+    } catch (err) {
+        console.warn(`[CommandExtraction] Vision failed for ${fileName}: ${err.message}`);
     }
 
     return `[Image "${fileName}" could not be read by OCR. Please describe what you want to create in the text box.]`;
@@ -111,38 +85,24 @@ Example: "Create a marketing report with sections: Executive Summary, Market Ana
 // TEXT DOCUMENT — extract command from document content
 // ─────────────────────────────────────────────────────────────
 /**
- * GEMINI LLM — extract actionable command from document text
+ * Centralized AI Call — extract actionable command from document text
  */
 const extractActionableCommandWithLLM = async (text, fileName) => {
-    const apiKeys = getGeminiKeys();
-    if (!apiKeys.length) return null;
-
     const systemInstruction = `You are the Nurotra Intelligence Layer. 
 Extract the most important actionable instructions/commands from the following document content. 
 If the document contains a list of tasks, return them as a clear request for the document agent.
 If it is a reference document, summarize the key points as building blocks.
 Output ONLY the final actionable instruction. No preamble.`;
 
-    const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
-    const prompt = `Document Name: ${fileName}\nContent:\n${text.substring(0, 10000)}`;
+    const prompt = `Document Name: ${fileName}\nContent:\n${text.substring(0, 15000)}`;
 
-    for (const key of apiKeys) {
-        for (const model of models) {
-            try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-                const resp = await axios.post(url, {
-                    contents: [{ parts: [{ text: `${systemInstruction}\n\n${prompt}` }] }],
-                    generationConfig: { maxOutputTokens: 2048, temperature: 0.2 }
-                }, { timeout: 20000 });
-
-                return resp.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-            } catch (err) {
-                console.warn(`[CommandExtraction] LLM fallback failed for ${model}: ${err.message}`);
-                if (err.response?.status === 429) break;
-            }
-        }
+    try {
+        const result = await aiService.generateWithFallback(prompt, systemInstruction);
+        return result || null;
+    } catch (err) {
+        console.warn(`[CommandExtraction] LLM fallback failed for ${fileName}: ${err.message}`);
+        return null;
     }
-    return null;
 };
 
 const extractCommandFromDocument = async (buffer, mimeType, fileName) => {

@@ -732,13 +732,12 @@ const runDocumentAnalysis = async (prompt, selectedDocIds = [], uploadedFiles = 
         console.warn('[DocumentAnalysis] Python Engine failed, continuing with limited context:', pyErr.message);
     }
 
-    // --- LLM SHIFT: LLM-Based Analysis (Primary Engine) ---
+    // --- LLM SHIFT: OpenAI-First High-Quality Analysis ---
     let analysisResult;
     let engineUsed = 'local-nlp';
     try {
-        console.log('[LLM Shift] Attempting high-quality analysis via Gemini...');
+        console.log('[LLM Shift] Executing high-precision analysis via OpenAI/Gemini Hybrid...');
 
-        // Prepare professional context for LLM
         const datasetContext = structuredInsights?.dataset_insights?.map(d =>
             `DATASET [${d.docName}]: ${JSON.stringify(d.insights)}`
         ).join('\n') || 'None';
@@ -757,31 +756,27 @@ STRUCTURED INSIGHTS PROVIDED:
 2. DATASET STATISTICS/TRENDS: ${datasetContext}
 3. DOCUMENT STRUCTURE: ${structuredInsights?.processed_docs?.map(d => `${d.name} (${d.chunks} chunks)`).join(', ')}
 
-Your response MUST be a valid JSON object matching the detailed Nurotra analysis schema. 
-Focus on:
-- Executive Summary (Strategic highlights)
-- Key Topics (What matters most)
-- Entity Relationships (How people/orgs interact)
-- Quantitative Insights (Statistics and trends detected in data)
-- Risks & Challenges (Identify bottlenecks or threats)
-- Strategic Takeaways
+OUTPUT REQUIREMENT:
+You MUST respond with a valid JSON object matching the detailed Nurotra analysis schema. 
+This output is for a Docs Agent, so ensure JSON integrity is perfect.
 
 Respond ONLY with the JSON object.`;
 
         const userPromptSnippet = `Please analyze these documents and provide deep insights.\n\nRaw Text Sample:\n${docs.map(d => d.content).join('\n').substring(0, 15000)}`;
 
         const aiService = require('./aiService');
-        const rawLLMResult = await aiService.generateWithFallback(userPromptSnippet, systemPrompt);
+        // generateWithFallback now uses OpenAI as primary
+        const rawResult = await aiService.generateWithFallback(userPromptSnippet, systemPrompt);
 
-        // Clean and parse JSON
-        let cleanLLMJson = rawLLMResult.replace(/```json/gi, "").replace(/```/g, "").trim();
-        const start = cleanLLMJson.indexOf('{');
-        const end = cleanLLMJson.lastIndexOf('}');
+        // Clean and parse JSON (OpenAI is usually cleaner, but we keep the safety)
+        let cleanJson = rawResult.replace(/```json/gi, "").replace(/```/g, "").trim();
+        const start = cleanJson.indexOf('{');
+        const end = cleanJson.lastIndexOf('}');
         if (start !== -1 && end !== -1) {
-            cleanLLMJson = cleanLLMJson.substring(start, end + 1);
+            cleanJson = cleanJson.substring(start, end + 1);
         }
 
-        analysisResult = JSON.parse(cleanLLMJson);
+        analysisResult = JSON.parse(cleanJson);
 
         // Merge structured data from Python into LLM result if missing
         if (structuredInsights) {

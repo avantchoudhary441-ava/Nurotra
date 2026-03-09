@@ -33,9 +33,53 @@ const getApiKeys = () => {
 let currentKeyIndex = 0;
 
 /**
- * Direct Gemini Generation using Raw REST (Axios)
- * Bypasses SDK limits and reservoir complexity.
- * Implements Multi-Key Rotation & Model Fallback.
+ * Generate completion with OpenAI GPT (Supports Vision)
+ * @param {string} prompt 
+ * @param {string} systemPrompt 
+ * @param {Array} images - [{ mimeType, data }]
+ */
+const generateWithOpenAI = async (prompt, systemPrompt = "", images = []) => {
+    if (!openai) throw new Error("OpenAI API key not configured");
+
+    try {
+        const contentParts = [{ type: "text", text: prompt }];
+
+        // Add Vision support
+        if (images && images.length > 0) {
+            images.forEach(img => {
+                contentParts.push({
+                    type: "image_url",
+                    image_url: {
+                        url: `data:${img.mimeType || "image/png"};base64,${img.data}`
+                    }
+                });
+            });
+        }
+
+        // Detect if JSON output is expected based on prompt/system instructions
+        const needsJson = (prompt + systemPrompt).toLowerCase().includes('json');
+
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o", // High precision with vision
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: contentParts }
+            ],
+            // Only force JSON if requested AND no images (Vision + JSON mode has stricter constraints)
+            response_format: (needsJson && images.length === 0) ? { type: "json_object" } : undefined,
+            temperature: 0.1
+        });
+
+        return response.choices[0].message.content.trim();
+    } catch (error) {
+        console.warn(`[AI Service] OpenAI attempt failed: ${error.message}`);
+        throw error;
+    }
+};
+
+/**
+ * Main Generation Entry Point
+ * Now prioritizes OpenAI with Gemini reservoir as fallback.
  * @param {string} prompt - The user prompt
  * @param {string} systemPrompt - Optional system context
  * @param {Array} images - Optional array of { mimeType: string, data: base64 } objects
@@ -49,17 +93,30 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
         }
     }
 
-    const apiKeys = getApiKeys();
-    if (apiKeys.length === 0) {
-        throw new Error("No GEMINI_API_KEY found in environment");
+    // Attempt OpenAI First (Primary Engine)
+    if (openai) {
+        try {
+            console.log(`[AI Service] Attempting delivery via OpenAI (Primary)... ${images.length > 0 ? '[Vision Mode]' : ''}`);
+            const text = await generateWithOpenAI(prompt, systemPrompt, images);
+            if (text) {
+                if (images.length === 0) responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                return text;
+            }
+        } catch (openAiError) {
+            console.warn('[AI Service] OpenAI Primary failed, falling back to Gemini Reservoir.');
+        }
     }
 
-    // VERIFIED working models via v1beta REST API (updated for robustness)
+    const apiKeys = getApiKeys();
+    if (apiKeys.length === 0) {
+        throw new Error("No GEMINI_API_KEY or valid OpenAI Config found");
+    }
+
+    // Gemini Reservoir Fallback Logic
     const geminiModels = [
-        "gemini-flash-latest",
-        "gemini-pro-latest",
         "gemini-2.0-flash",
-        "gemini-2.0-flash-lite"
+        "gemini-2.0-flash-lite",
+        "gemini-flash-latest"
     ];
     let lastError = null;
 
@@ -82,7 +139,6 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
                         parts.push({ text: `System Instruction: ${systemPrompt}` });
                     }
 
-                    // Add images if provided (Vision)
                     if (images && images.length > 0) {
                         images.forEach(img => {
                             parts.push({
@@ -94,7 +150,6 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
                         });
                     }
 
-                    // Add the actual text prompt
                     parts.push({ text: prompt });
 
                     const response = await axios.post(url, {
@@ -120,10 +175,9 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
 
                     console.warn(`Debug: Key ${keyAttemptIndex + 1} | Model ${modelName} failed: ${errorMsg}`);
 
-                    if (statusCode === 429 || errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("limit")) {
-                        console.warn(`[AI Reservoir] Key ${keyAttemptIndex + 1} hit quota limit. Rotating...`);
+                    if (statusCode === 429 || errorMsg.toLowerCase().includes("quota")) {
                         lastError = new Error(`Quota Exceeded: ${errorMsg}`);
-                        lastError.isQuotaError = true; // ← crucial flag for documentAnalysisService
+                        lastError.isQuotaError = true;
                         break;
                     }
 
@@ -140,7 +194,7 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
         }
     }
 
-    throw lastError || new Error("All API keys and models in the reservoir have failed.");
+    throw lastError || new Error("All AI engines (OpenAI & Gemini Reservoir) have failed.");
 };
 
 /**
