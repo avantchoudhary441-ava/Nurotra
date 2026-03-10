@@ -227,14 +227,10 @@ export const docsAgentService = {
     /**
      * Download a file from the cloud workspace by document ID.
      * Triggers a real browser download.
-     * @param {string} documentId
-     * @param {string} fileName
-     * @param {string} format - Optional format override (pdf, docx, xlsx, pptx)
      */
-    downloadFile: async (documentId, fileName, format = null) => {
+    downloadFile: async (documentId, fileName) => {
         try {
-            const url = `/workspace/download/${documentId}${format ? `?format=${format}` : ''}`;
-            const response = await api.get(url, {
+            const response = await api.get(`/workspace/download/${documentId}`, {
                 responseType: 'blob'
             });
             // Use Content-Disposition filename if available, else fall back
@@ -245,16 +241,6 @@ export const docsAgentService = {
             return { success: true };
         } catch (error) {
             console.error('Failed to download file:', error);
-            // If the error blob contains a message (like our validation error)
-            if (error.response?.data instanceof Blob) {
-                const text = await error.response.data.text();
-                try {
-                    const json = JSON.parse(text);
-                    throw new Error(json.message || "Download failed");
-                } catch {
-                    throw new Error(text || "Download failed");
-                }
-            }
             throw error;
         }
     },

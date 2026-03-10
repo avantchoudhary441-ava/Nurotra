@@ -20,8 +20,6 @@ const DocsAgentPage = () => {
     const [revalReminders, setRevalReminders] = useState([]); // Overdue doc names for chat reminders
     const [selectedDocIds, setSelectedDocIds] = useState([]); // Multiple docs for analysis
     const [analyticsData, setAnalyticsData] = useState(null); // Data for AnalyticsHub
-    const [dashboardData, setDashboardData] = useState(null); // Data for DashboardHub
-    const [powerBiConfig, setPowerBiConfig] = useState(null); // Data for PowerBIEmbed
     const [wordReport, setWordReport] = useState({ buffer: null, name: null }); // For download
 
     // Robust derivation of all documents
@@ -47,18 +45,6 @@ const DocsAgentPage = () => {
     const handleAnalysisResult = (result) => {
         if (result?.analysisReport) {
             setAnalyticsData(result.analysisReport);
-            setDashboardData(null);
-            setPowerBiConfig(null);
-        }
-        if (result?.dashboard) {
-            setDashboardData(result);
-            setAnalyticsData(null);
-            setPowerBiConfig(null);
-        }
-        if (result?.powerBi) {
-            setPowerBiConfig(result.powerBi);
-            setAnalyticsData(null);
-            setDashboardData(null);
         }
         if (result?.wordReportBuffer) {
             setWordReport({ buffer: result.wordReportBuffer, name: result.wordReportName });
@@ -129,8 +115,6 @@ const DocsAgentPage = () => {
                 liveUpdates: []
             });
             setAnalyticsData(snapshot.analyticsData);
-            setDashboardData(snapshot.dashboardData || null);
-            setPowerBiConfig(snapshot.powerBiConfig || null);
             setWordReport(snapshot.wordReport);
             console.log('[InlineUndo] Restored snapshot:', _msgId);
         }
@@ -493,35 +477,9 @@ const DocsAgentPage = () => {
             // Handle Analytics/Comparison results specifically
             if (response.intent === 'ANALYZE' || response.intent === 'COMPARE') {
                 setAnalyticsData(response);
-                setDashboardData(null);
-                setPowerBiConfig(null);
                 setCurrentDoc(null);
                 setAgentStatus('Analysis Complete');
                 addLiveUpdate('✅ Multi-document intelligence synthesis complete!');
-                setExecutionState(prev => ({ ...prev, status: 'idle' }));
-                return;
-            }
-
-            // Handle Dashboard results
-            if (response.intent === 'DASHBOARD' && response.dashboard) {
-                setDashboardData(response);
-                setAnalyticsData(null);
-                setPowerBiConfig(null);
-                setCurrentDoc(null);
-                setAgentStatus('Dashboard Ready');
-                addLiveUpdate('✅ Real-time dashboard synthesized!');
-                setExecutionState(prev => ({ ...prev, status: 'idle' }));
-                return;
-            }
-
-            // Handle Power BI results
-            if (response.intent === 'DASHBOARD' && response.powerBi) {
-                setPowerBiConfig(response.powerBi);
-                setDashboardData(null);
-                setAnalyticsData(null);
-                setCurrentDoc(null);
-                setAgentStatus('BI Hub Ready');
-                addLiveUpdate('✅ Power BI integration module loaded!');
                 setExecutionState(prev => ({ ...prev, status: 'idle' }));
                 return;
             }
@@ -909,8 +867,6 @@ const DocsAgentPage = () => {
                     executionState={executionState}
                     currentDoc={currentDoc}
                     analyticsData={analyticsData}
-                    dashboardData={dashboardData}
-                    powerBiConfig={powerBiConfig}
                     wordReportBuffer={wordReport.buffer}
                     wordReportName={wordReport.name}
                     liveUpdates={executionState.liveUpdates}
@@ -921,8 +877,6 @@ const DocsAgentPage = () => {
                     onCancelExecution={() => {
                         setExecutionState(prev => ({ ...prev, status: 'idle', plan: null }));
                         setAnalyticsData(null);
-                        setDashboardData(null);
-                        setPowerBiConfig(null);
                         setWordReport({ buffer: null, name: null });
                         setAgentStatus('Ready');
                     }}

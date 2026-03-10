@@ -62,11 +62,10 @@ const detectAnalysisIntent = async (prompt, docCount) => {
     const isQuestion = /\b(what|how|who|where|why|search|lookup|research|explain)\b/.test(p);
     const isEdit = /\b(edit|change|update|fix|modify|add|remove|shorten|expand|adjust|refine)\b/.test(p);
     const isAnalyze = /\b(analyze|summarize|insight|point|trend|extract|summary|report|compare|versus|vs|contrast)\b/.test(p);
-    const isDashboard = /\b(dashboard|kpi|metric|overview|performance|status|stats|analytics hub|management system)\b/.test(p);
 
     // If there's an explicit "Create" command even with files, it's NOT a document analysis request.
     // It's a "File as input/instruction" request.
-    if (isCreate && !isAnalyze && !isDashboard) {
+    if (isCreate && !isAnalyze) {
         return { isAnalysisRequest: false };
     }
 
@@ -80,9 +79,6 @@ const detectAnalysisIntent = async (prompt, docCount) => {
     if (/\b(compare|comparison|versus|vs|contrast|diff|differ)\b/.test(p)) {
         analysisType = 'COMPARE';
         modules.push('comparison');
-    } else if (/\b(dashboard|kpi|overview|performance|status|stats|management system|social|marketing)\b/.test(p)) {
-        analysisType = 'DASHBOARD';
-        modules.push('insight_generation', 'information_extraction');
     } else if (/\b(risk|compliance|sensitive|danger|problem|issue|concern)\b/.test(p)) {
         analysisType = 'RISK';
         modules.push('risk_detection');

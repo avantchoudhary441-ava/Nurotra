@@ -785,66 +785,9 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
           }
         }`;
 
-        // ── DASHBOARD path: multi-widget visualization boards ──────────────
-        const dashboardPrompt = `You are the Nurotra Dashboard Strategist. Your goal is to design a high-fidelity management dashboard.
-        
-        CONTEXT:
-        ${contextContent}
-
-        DASHBOARD REQUIREMENTS:
-        1. Identify the domain: ${metadata.category === 'Marketing' ? 'Marketing Analytics' : metadata.category === 'User Management' ? 'User Ecosystem' : 'General Business Overview'}.
-        2. KPI GRID: Synthesize 3-4 critical metrics (e.g., Conversion Rate, User Retention, Social Engagement).
-        3. WIDGETS: Design a layout of 2-4 charts (Bar, Line, Pie) that visualize trends and distributions found in the context.
-        4. DATA VIEW: Provide a structured table for one of the primary datasets.
-
-        REQUIRED JSON SCHEMA:
-        {
-          "intent": "DASHBOARD",
-          "text": "Generated a professional ${metadata.category} dashboard based on the provided documents.",
-          "dashboard": {
-            "title": "${metadata.category} Dashboard",
-            "kpis": [
-                { "label": "Metric Name", "value": "123k", "trend": "+15%", "status": "success|warning|danger" }
-            ],
-            "widgets": [
-                {
-                   "type": "bar|line|pie",
-                   "title": "Widget Title",
-                   "config": {
-                      "data": [{ "name": "A", "value": 10 }, ...],
-                      "xAxisName": "X Axis",
-                      "yAxisName": "Y Axis"
-                   }
-                }
-            ],
-            "drillDownTable": {
-                "headers": ["Field 1", "Field 2"],
-                "rows": [["Val 1", "Val 2"]]
-            }
-          }
-        }`;
-
-        const powerBiPrompt = `You are the Nurotra BI Integration Specialist.
-        Determine if the user wants to connect or embed a Power BI report.
-        
-        OUTPUT SCHEMA:
-        {
-          "intent": "DASHBOARD",
-          "text": "Switching to Power BI Integration module.",
-          "powerBi": {
-             "action": "EMBED_REQUEST",
-             "status": "CONNECTION_PENDING",
-             "message": "Please authorize Power BI to access your reports."
-          }
-        }`;
-
         // ── MODIFY path: targeted edit of existing document ──────────────────
         let systemPrompt;
-        if (advancedOps.includes('POWER_BI')) {
-            systemPrompt = powerBiPrompt;
-        } else if (intent === 'DASHBOARD') {
-            systemPrompt = dashboardPrompt;
-        } else if (intent === 'ANALYZE' || intent === 'COMPARE') {
+        if (intent === 'ANALYZE' || intent === 'COMPARE') {
             systemPrompt = analystPrompt;
         } else if (currentDoc && (intent === 'MODIFY' || preParsed?.hasOpenDoc)) {
             const existingStructure = currentDoc.rawStructure ? JSON.stringify(currentDoc.rawStructure) : null;
