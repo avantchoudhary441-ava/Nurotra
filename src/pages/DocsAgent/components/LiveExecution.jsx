@@ -3,6 +3,8 @@ import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap, C
 import EntryPoint from './EntryPoint';
 import DynamicGraph from './DynamicGraph';
 import AnalyticsHub from './AnalyticsHub';
+import DashboardHub from './DashboardHub';
+import PowerBIEmbed from './PowerBIEmbed';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
 import { docsAgentService } from '../../../services/docsAgentService';
 
@@ -11,6 +13,8 @@ const LiveExecution = ({
     executionState,
     currentDoc,
     analyticsData,
+    dashboardData,
+    powerBiConfig,
     wordReportBuffer,
     wordReportName,
     liveUpdates,
@@ -27,31 +31,46 @@ const LiveExecution = ({
 
     const handleExport = async (format) => {
         if (!currentDoc) return;
+        const docId = currentDoc.id || currentDoc._id;
+        if (!docId) {
+            alert("Document must be saved before exporting.");
+            return;
+        }
+
         setShowExportMenu(false);
         setSyncStatus('syncing');
 
         try {
-            // Find project name for folder nesting
+            // 1. TRIGGER BROWSER DOWNLOAD (New functionality)
+            await docsAgentService.downloadFile(docId, currentDoc.name, format);
+
+            // 2. TRIGGER BACKEND SYNC (Existing functionality - saves to server workspace)
             let projectName = "";
             if (currentDoc.projectId && projects) {
-                const project = projects.find(p => p.id === currentDoc.projectId);
+                const project = projects.find(p => String(p.id) === String(currentDoc.projectId));
                 projectName = project ? project.name : "";
             }
 
-            // TRIGGER BACKEND SYNC (Saves to 'nurotra workplace')
             const docToSync = {
                 ...currentDoc,
-                type: format === 'xlsx' ? 'excel' : format === 'pptx' ? 'ppt' : 'word'
+                type: format === 'xlsx' ? 'excel' : format === 'pptx' ? 'ppt' : (format === 'pdf' ? currentDoc.type : 'word')
             };
 
-            const result = await docsAgentService.automateLocalSave(docToSync, projectName, format);
-            if (!result) throw new Error("Backend returned empty response");
+            await docsAgentService.automateLocalSave(docToSync, projectName, format);
 
             setSyncStatus('success');
             setTimeout(() => setSyncStatus(null), 6000);
         } catch (e) {
-            console.error("Workspace Sync failed:", e);
+            console.error("Export failed:", e);
             setSyncStatus('error');
+
+            // Check for the specific "not supported" message from backend
+            if (e.message && e.message.includes("not supported")) {
+                alert("File Export not supported in this format, select the correct file type for smooth export.");
+            } else {
+                alert(`Export failed: ${e.message}`);
+            }
+
             setTimeout(() => setSyncStatus(null), 4000);
         }
     };
@@ -60,7 +79,30 @@ const LiveExecution = ({
     if (analyticsData) {
         return (
             <div className="live-execution-panel analytics-mode">
-                <AnalyticsHub data={analyticsData} />
+                <AnalyticsHub
+                    data={analyticsData}
+                    wordReportBuffer={wordReportBuffer}
+                    wordReportName={wordReportName}
+                    onClose={() => onCancelExecution && onCancelExecution()}
+                />
+            </div>
+        );
+    }
+
+    // New Dashboard View
+    if (dashboardData) {
+        return (
+            <div className="live-execution-panel dashboard-mode" style={{ padding: 0 }}>
+                <DashboardHub data={dashboardData} />
+            </div>
+        );
+    }
+
+    // New Power BI View
+    if (powerBiConfig) {
+        return (
+            <div className="live-execution-panel powerbi-mode" style={{ padding: 0 }}>
+                <PowerBIEmbed config={powerBiConfig} />
             </div>
         );
     }

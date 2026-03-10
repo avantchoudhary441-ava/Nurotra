@@ -40,6 +40,7 @@ const saveToCloud = async (docData, userId, documentId, projectId, formatOverrid
 const downloadFile = async (req, res) => {
     try {
         const { docId } = req.params;
+        const { format } = req.query; // New: optional format override (pdf, docx, etc)
 
         const mimeMap = {
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -48,29 +49,45 @@ const downloadFile = async (req, res) => {
             'pdf': 'application/pdf'
         };
 
-        // Try to find existing cloud file
+        // If a specific format is requested, we often need to generate it on-the-fly
+        // unless it matches the stored fileType perfectly.
         let wsFile = await WorkspaceFile.findOne({ documentId: docId, userId: req.user._id });
 
-        if (!wsFile) {
-            // Not yet saved to cloud — generate on-the-fly from Document model
-            const Document = require('../models/Document');
-            const doc = await Document.findOne({ _id: docId, userId: req.user._id });
+        const Document = require('../models/Document');
+        const doc = await Document.findOne({ _id: docId, userId: req.user._id });
 
-            if (!doc) {
-                return res.status(404).json({ message: 'Document not found.' });
-            }
+        if (!doc) {
+            return res.status(404).json({ message: 'Document not found.' });
+        }
 
-            // Determine format from doc type
-            const formatMap = { excel: 'xlsx', ppt: 'pptx', word: 'docx' };
-            const format = formatMap[doc.type] || 'docx';
+        // Determine if we can use the cached WorkspaceFile
+        const requestedExt = format ? format.replace('.', '') : null;
+        const useCache = wsFile && (!requestedExt || wsFile.fileType === requestedExt);
 
-            const { buffer, ext, mimeType, fileName } = await cloudExportService.generateBuffer(
-                { name: doc.name, type: doc.type, content: doc.content, rawStructure: doc.rawStructure },
-                format
-            );
-            const fileType = ext.replace('.', '');
+        if (useCache) {
+            const mimeType = mimeMap[wsFile.fileType] || 'application/octet-stream';
+            res.setHeader('Content-Disposition', `attachment; filename="${wsFile.fileName}"`);
+            res.setHeader('Content-Type', mimeType);
+            res.setHeader('Content-Length', wsFile.size);
+            return res.send(wsFile.fileData);
+        }
 
-            // Save for next time
+        // Otherwise, generate on-the-fly (either first time or format mismatch like Export as PDF)
+        const formatToUse = requestedExt || (doc.type === 'excel' ? 'xlsx' : doc.type === 'ppt' ? 'pptx' : 'docx');
+
+        const { buffer, ext, mimeType, fileName } = await cloudExportService.generateBuffer(
+            { name: doc.name, type: doc.type, content: doc.content, rawStructure: doc.rawStructure },
+            formatToUse
+        );
+        const fileType = ext.replace('.', '');
+
+        // Only save to WorkspaceFile if it's the primary format (matching doc.type) 
+        // OR if no WorkspaceFile exists yet. We don't want to overwrite the primary .docx with a .pdf.
+        const isPrimaryFormat = (doc.type === 'word' && fileType === 'docx') ||
+            (doc.type === 'excel' && fileType === 'xlsx') ||
+            (doc.type === 'ppt' && fileType === 'pptx');
+
+        if (!wsFile || (isPrimaryFormat && wsFile.fileType !== fileType)) {
             wsFile = await WorkspaceFile.findOneAndUpdate(
                 { userId: req.user._id, documentId: docId },
                 {
@@ -86,14 +103,14 @@ const downloadFile = async (req, res) => {
             );
         }
 
-        const mimeType = mimeMap[wsFile.fileType] || 'application/octet-stream';
-        res.setHeader('Content-Disposition', `attachment; filename="${wsFile.fileName}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
         res.setHeader('Content-Type', mimeType);
-        res.setHeader('Content-Length', wsFile.size);
-        res.send(wsFile.fileData);
+        res.setHeader('Content-Length', buffer.length);
+        res.send(buffer);
     } catch (err) {
         console.error('[WorkspaceController] downloadFile error:', err);
-        res.status(500).json({ message: 'Failed to download file', error: err.message });
+        const status = err.message.includes('not supported') ? 400 : 500;
+        res.status(status).json({ message: err.message || 'Failed to download file' });
     }
 };
 

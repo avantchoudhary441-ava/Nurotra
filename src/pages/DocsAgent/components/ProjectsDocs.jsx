@@ -26,17 +26,20 @@ const ProjectsDocs = ({
     const activeDoc = allDocs.find(d => String(d.id) === String(activeDocId));
 
     // ─── Cloud download handler ─────────────────────────────────────────────
-    const handleDownload = async (doc) => {
+    const handleDownload = async (doc, format = null) => {
         if (!doc) return;
         const docId = doc.id || doc._id;
         setDownloading(docId);
         setDownloadStatus(null);
         try {
-            await docsAgentService.downloadFile(docId, doc.name);
+            await docsAgentService.downloadFile(docId, doc.name, format);
             setDownloadStatus('success');
         } catch (e) {
             console.error('Download failed:', e);
             setDownloadStatus('error');
+            if (e.message && e.message.includes("not supported")) {
+                alert("File Export not supported in this format, select the correct file type for smooth export.");
+            }
         } finally {
             setDownloading(null);
             setTimeout(() => setDownloadStatus(null), 4000);
@@ -44,9 +47,10 @@ const ProjectsDocs = ({
     };
 
     // Legacy alias for format chips — always downloads the active doc
-    const handleExportWord = () => handleDownload(activeDoc);
-    const handleExportXLSX = () => handleDownload(activeDoc);
-    const handleExportPPT = () => handleDownload(activeDoc);
+    const handleExportPDF = () => handleDownload(activeDoc, 'pdf');
+    const handleExportWord = () => handleDownload(activeDoc, 'docx');
+    const handleExportXLSX = () => handleDownload(activeDoc, 'xlsx');
+    const handleExportPPT = () => handleDownload(activeDoc, 'pptx');
 
     // ─── Delete handler ─────────────────────────────────────────────────────
     const handleDelete = async (doc, e) => {
@@ -314,59 +318,62 @@ const ProjectsDocs = ({
                 )}
             </div>
 
-            {/* Export & Sync Actions — temporarily disabled */}
-            {false && (
-                <div className="export-sync-section">
-                    <h3 className="section-title">export &amp; sync</h3>
+            {/* Export & Sync Actions */}
+            <div className="export-sync-section">
+                <h3 className="section-title">export &amp; sync</h3>
 
-                    <div className="export-buttons">
-                        <button className="export-btn" onClick={handleCopyToClipboard}>
-                            <Copy size={14} />
-                            <span>Copy for G-Docs</span>
-                        </button>
-                        <button className="export-btn">
-                            <Cloud size={14} />
-                            <span>Sync to Drive</span>
-                        </button>
-                    </div>
-
-                    <div className="export-formats">
-                        <span className="format-label">Export as:</span>
-                        <div className="format-chips">
-                            <button className="format-chip">PDF</button>
-                            <button
-                                className={`format-chip ${activeDoc?.type === 'word' ? 'active-action' : ''}`}
-                                onClick={handleExportWord}
-                            >
-                                DOCX
-                            </button>
-                            <button
-                                className={`format-chip ${activeDoc?.type === 'ppt' ? 'active-action' : ''}`}
-                                onClick={handleExportPPT}
-                            >
-                                PPTX
-                            </button>
-                            <button
-                                className={`format-chip ${activeDoc?.type === 'excel' ? 'active-action' : ''}`}
-                                onClick={handleExportXLSX}
-                            >
-                                XLSX
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Cloud Download Notification */}
-                    {downloadStatus && (
-                        <div className={`sync-notification sidebar-sync ${downloadStatus}`}>
-                            {downloadStatus === 'success' ? (
-                                <span>☁️ Downloaded from <strong>cloud workspace</strong></span>
-                            ) : (
-                                <span>❌ Download failed — try again</span>
-                            )}
-                        </div>
-                    )}
+                <div className="export-buttons">
+                    <button className="export-btn" onClick={handleCopyToClipboard}>
+                        <Copy size={14} />
+                        <span>Copy for G-Docs</span>
+                    </button>
+                    <button className="export-btn">
+                        <Cloud size={14} />
+                        <span>Sync to Drive</span>
+                    </button>
                 </div>
-            )}
+
+                <div className="export-formats">
+                    <span className="format-label">Export as:</span>
+                    <div className="format-chips">
+                        <button
+                            className="format-chip"
+                            onClick={handleExportPDF}
+                        >
+                            PDF
+                        </button>
+                        <button
+                            className={`format-chip ${activeDoc?.type === 'word' ? 'active-action' : ''}`}
+                            onClick={handleExportWord}
+                        >
+                            DOCX
+                        </button>
+                        <button
+                            className={`format-chip ${activeDoc?.type === 'ppt' ? 'active-action' : ''}`}
+                            onClick={handleExportPPT}
+                        >
+                            PPTX
+                        </button>
+                        <button
+                            className={`format-chip ${activeDoc?.type === 'excel' ? 'active-action' : ''}`}
+                            onClick={handleExportXLSX}
+                        >
+                            XLSX
+                        </button>
+                    </div>
+                </div>
+
+                {/* Cloud Download Notification */}
+                {downloadStatus && (
+                    <div className={`sync-notification sidebar-sync ${downloadStatus}`}>
+                        {downloadStatus === 'success' ? (
+                            <span>☁️ Downloaded from <strong>cloud workspace</strong></span>
+                        ) : (
+                            <span>❌ Download failed — check format</span>
+                        )}
+                    </div>
+                )}
+            </div>
             {/* Doc Edit Modal */}
             {editingDoc && (
                 <DocEditModal

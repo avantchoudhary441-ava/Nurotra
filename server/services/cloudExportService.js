@@ -800,15 +800,37 @@ const generatePDFBuffer = async (data) => {
 };
 
 /**
- * Generate a file buffer from document data without touching disk.
- * @param {Object} docData - The document object (name, type, content, rawStructure)
- * @param {string} formatOverride - Optional: 'docx', 'xlsx', 'pptx'
- * @returns {{ buffer: Buffer, ext: string, mimeType: string, fileName: string }}
+ * Main entry point for buffer generation
+ * @param {object} docData - The document data (from MongoDB)
+ * @param {string} formatOverride - Specified format ('docx', 'xlsx', 'pptx', 'pdf')
  */
 const generateBuffer = async (docData, formatOverride) => {
-    const type = docData.type || 'docx';
-    const finalFormat = formatOverride || (type === 'excel' ? 'xlsx' : type === 'ppt' ? 'pptx' : 'docx');
-    const ext = finalFormat.startsWith('.') ? finalFormat : '.' + finalFormat;
+    const type = docData.type; // word, excel, ppt
+    const ext = formatOverride ? `.${formatOverride}` : (type === 'excel' ? '.xlsx' : type === 'ppt' ? '.pptx' : '.docx');
+
+    // --- Format Validation ---
+    if (formatOverride) {
+        if (formatOverride === 'docx' && type !== 'word') {
+            throw new Error(`File Export not supported in this format, select the correct file type for smooth export.`);
+        }
+        if (formatOverride === 'xlsx' && type !== 'excel') {
+            throw new Error(`File Export not supported in this format, select the correct file type for smooth export.`);
+        }
+        if (formatOverride === 'pptx' && type !== 'ppt') {
+            throw new Error(`File Export not supported in this format, select the correct file type for smooth export.`);
+        }
+    }
+
+    const data = rescueToFormat(docData, ext);
+    normalizeContent(data);
+    data.fileName = docData.name || "document";
+
+    let buffer;
+    if (ext === '.docx') buffer = await generateWordBuffer(data);
+    else if (ext === '.xlsx') buffer = await generateExcelBuffer(data);
+    else if (ext === '.pptx') buffer = await generatePPTBuffer(data);
+    else if (ext === '.pdf') buffer = await generatePDFBuffer(data);
+    else throw new Error("Unsupported format");
 
     const mimeMap = {
         '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -817,20 +839,12 @@ const generateBuffer = async (docData, formatOverride) => {
         '.pdf': 'application/pdf'
     };
 
-    const mimeType = mimeMap[ext] || 'application/octet-stream';
-    const baseName = String(docData.name || "Document").replace(/[<>:"/\\|?*]/g, '_').trim();
-    const fileName = `${baseName}${ext}`;
-
-    const structure = rescueToFormat(docData, ext);
-    normalizeContent(structure);
-
-    let buffer;
-    if (ext === '.xlsx') buffer = await generateExcelBuffer(structure);
-    else if (ext === '.pptx') buffer = await generatePPTBuffer(structure);
-    else if (ext === '.pdf') buffer = await generatePDFBuffer(structure);
-    else buffer = await generateWordBuffer(structure);
-
-    return { buffer, ext, mimeType, fileName };
+    return {
+        buffer,
+        ext,
+        mimeType: mimeMap[ext] || 'application/octet-stream',
+        fileName: `${data.fileName.split('.')[0]}${ext}`
+    };
 };
 
 module.exports = { generateBuffer };

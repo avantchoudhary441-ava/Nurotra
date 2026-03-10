@@ -11,6 +11,7 @@ const INTENT_WEIGHTS = {
     COMPARE: { keywords: ['compare', 'similarities', 'differences', 'trends', 'relationships', 'versus', 'vs', 'contrast', 'comparison', 'cross-reference', 'side by side'], weight: 1.5 },
     DATA_OP: { keywords: ['merge', 'sort', 'filter', 'calculate', 'clean', 'duplicate', 'sum', 'average', 'tally'], weight: 1.0 },
     CONVERT: { keywords: ['turn into', 'convert', 'summarize to', 'transform', 'translate', 'export'], weight: 1.0 },
+    DASHBOARD: { keywords: ['dashboard', 'kpi', 'metrics', 'overview', 'performance', 'stats', 'analytics hub', 'visualize all', 'summary board', 'management system', 'marketing dashboard', 'social media dash', 'user management'], weight: 2.0 },
 };
 
 const CATEGORY_MAP = {
@@ -66,6 +67,9 @@ const ADVANCED_OPS_MAP = {
         'graph', 'chart', 'plot', 'bar chart', 'pie chart', 'line graph',
         'visualize data', 'create a chart', 'draw a graph', 'show statistics'
     ],
+    POWER_BI: [
+        'power bi', 'powerbi', 'microsoft bi', 'embed report', 'bi dashboard', 'connect bi'
+    ],
 };
 
 /**
@@ -79,6 +83,7 @@ const detectDocType = (prompt) => {
         word: ['word document', 'word file', 'docx', '.doc', 'word doc', 'annual report', 'company overview', 'policy document', 'standard operating procedure'],
         ppt: ['powerpoint', 'presentation', 'slide deck', 'pptx', ' ppt '],
         excel: ['excel', 'spreadsheet', 'xlsx', 'csv file', 'workbook'],
+        dashboard: ['dashboard', 'kpi', 'metrics', 'analytics hub', 'management system'],
     };
     for (const [t, keywords] of Object.entries(explicitMap)) {
         if (keywords.some(kw => lowerPrompt.includes(kw))) {
