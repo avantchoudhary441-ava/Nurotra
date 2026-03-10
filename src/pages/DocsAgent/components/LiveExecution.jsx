@@ -31,27 +31,42 @@ const LiveExecution = ({
         setSyncStatus('syncing');
 
         try {
-            // Find project name for folder nesting
-            let projectName = "";
-            if (currentDoc.projectId && projects) {
-                const project = projects.find(p => p.id === currentDoc.projectId);
-                projectName = project ? project.name : "";
+            // 1. TRIGGER BROWSER DOWNLOAD
+            // We pass the documentId, current name, and the requested format override
+            await docsAgentService.downloadFile(
+                currentDoc.id || currentDoc._id,
+                currentDoc.name,
+                format
+            );
+
+            // 2. TRIGGER BACKEND SYNC (Optional, keeps workspace updated)
+            // Skip sync for PDF as it's an export-only format, not a workspace source format.
+            if (format !== 'pdf') {
+                let projectName = "";
+                if (currentDoc.projectId && projects) {
+                    const project = projects.find(p => p.id === currentDoc.projectId);
+                    projectName = project ? project.name : "";
+                }
+
+                const docToSync = {
+                    ...currentDoc,
+                    type: format === 'xlsx' ? 'excel' : format === 'pptx' ? 'ppt' : 'word'
+                };
+                await docsAgentService.automateLocalSave(docToSync, projectName, format);
             }
-
-            // TRIGGER BACKEND SYNC (Saves to 'nurotra workplace')
-            const docToSync = {
-                ...currentDoc,
-                type: format === 'xlsx' ? 'excel' : format === 'pptx' ? 'ppt' : 'word'
-            };
-
-            const result = await docsAgentService.automateLocalSave(docToSync, projectName, format);
-            if (!result) throw new Error("Backend returned empty response");
 
             setSyncStatus('success');
             setTimeout(() => setSyncStatus(null), 6000);
         } catch (e) {
-            console.error("Workspace Sync failed:", e);
-            setSyncStatus('error');
+            console.error("Export failure:", e);
+
+            // Check for the specific "Not supported" error from backend
+            const errorMsg = e.response?.data?.message || e.message;
+            if (errorMsg.includes("not supported")) {
+                alert(errorMsg);
+            } else {
+                setSyncStatus('error');
+            }
             setTimeout(() => setSyncStatus(null), 4000);
         }
     };

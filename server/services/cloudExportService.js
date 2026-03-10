@@ -641,7 +641,7 @@ const PDFDocument = require("pdfkit-table");
 const generatePDFBuffer = async (data) => {
     return new Promise(async (resolve, reject) => {
         try {
-            const doc = new PDFDocument({ margin: 50, size: 'A4' });
+            const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
             const buffers = [];
             doc.on('data', buffers.push.bind(buffers));
             doc.on('end', () => resolve(Buffer.concat(buffers)));

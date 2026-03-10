@@ -228,20 +228,55 @@ export const docsAgentService = {
      * Download a file from the cloud workspace by document ID.
      * Triggers a real browser download.
      */
-    downloadFile: async (documentId, fileName) => {
+    downloadFile: async (documentId, fileName, format) => {
         try {
-            const response = await api.get(`/workspace/download/${documentId}`, {
+            console.log(`[docsAgentService] downloadFile: ${documentId}, format: ${format}`);
+            const url = format
+                ? `/workspace/download/${documentId}?format=${format}`
+                : `/workspace/download/${documentId}`;
+
+            const response = await api.get(url, {
                 responseType: 'blob'
             });
-            // Use Content-Disposition filename if available, else fall back
-            const contentDisposition = response.headers?.['content-disposition'] || '';
-            const match = contentDisposition.match(/filename="?([^"]+)"?/);
-            const finalName = match ? match[1] : (fileName || 'document');
+
+            // Extract filename from Content-Disposition (handles case-insensitivity)
+            let finalName = fileName || 'document';
+            const cdHeader = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+
+            if (cdHeader) {
+                const match = cdHeader.match(/filename="?([^"]+)"?/);
+                if (match && match[1]) {
+                    finalName = match[1];
+                }
+            } else if (format && !finalName.toLowerCase().endsWith('.' + format)) {
+                // Heuristic: if header is missing, at least try to append correct extension
+                finalName = finalName.split('.')[0] + '.' + format;
+            }
+
+            console.log(`[docsAgentService] Triggering download with name: ${finalName}`);
             triggerBlobDownload(response.data, finalName);
             return { success: true };
         } catch (error) {
             console.error('Failed to download file:', error);
-            throw error;
+
+            // Handle Blob error response: convert blob to JSON
+            if (error.response?.data instanceof Blob) {
+                const blob = error.response.data;
+                const reader = new FileReader();
+                const errorData = await new Promise((resolve) => {
+                    reader.onload = () => {
+                        try {
+                            resolve(JSON.parse(reader.result));
+                        } catch (e) {
+                            resolve({ message: "Unknown download error" });
+                        }
+                    };
+                    reader.readAsText(blob);
+                });
+                throw new Error(errorData.message || "Failed to download file");
+            }
+
+            throw new Error(error.response?.data?.message || error.message || "Failed to download file");
         }
     },
 

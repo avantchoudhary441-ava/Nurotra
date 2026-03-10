@@ -26,17 +26,23 @@ const ProjectsDocs = ({
     const activeDoc = allDocs.find(d => String(d.id) === String(activeDocId));
 
     // ─── Cloud download handler ─────────────────────────────────────────────
-    const handleDownload = async (doc) => {
+    const handleDownload = async (doc, format = null) => {
         if (!doc) return;
         const docId = doc.id || doc._id;
         setDownloading(docId);
         setDownloadStatus(null);
         try {
-            await docsAgentService.downloadFile(docId, doc.name);
+            await docsAgentService.downloadFile(docId, doc.name, format);
             setDownloadStatus('success');
         } catch (e) {
             console.error('Download failed:', e);
-            setDownloadStatus('error');
+            const errorMsg = e.response?.data?.message || e.message;
+            if (errorMsg.includes("not supported")) {
+                alert(errorMsg);
+                setDownloadStatus(null);
+            } else {
+                setDownloadStatus('error');
+            }
         } finally {
             setDownloading(null);
             setTimeout(() => setDownloadStatus(null), 4000);
@@ -44,9 +50,10 @@ const ProjectsDocs = ({
     };
 
     // Legacy alias for format chips — always downloads the active doc
-    const handleExportWord = () => handleDownload(activeDoc);
-    const handleExportXLSX = () => handleDownload(activeDoc);
-    const handleExportPPT = () => handleDownload(activeDoc);
+    const handleExportWord = () => handleDownload(activeDoc, 'docx');
+    const handleExportXLSX = () => handleDownload(activeDoc, 'xlsx');
+    const handleExportPPT = () => handleDownload(activeDoc, 'pptx');
+    const handleExportPDF = () => handleDownload(activeDoc, 'pdf');
 
     // ─── Delete handler ─────────────────────────────────────────────────────
     const handleDelete = async (doc, e) => {
@@ -314,8 +321,8 @@ const ProjectsDocs = ({
                 )}
             </div>
 
-            {/* Export & Sync Actions — temporarily disabled */}
-            {false && (
+            {/* Export & Sync Actions */}
+            {activeDoc && (
                 <div className="export-sync-section">
                     <h3 className="section-title">export &amp; sync</h3>
 
@@ -333,7 +340,7 @@ const ProjectsDocs = ({
                     <div className="export-formats">
                         <span className="format-label">Export as:</span>
                         <div className="format-chips">
-                            <button className="format-chip">PDF</button>
+                            <button className="format-chip" onClick={handleExportPDF}>PDF</button>
                             <button
                                 className={`format-chip ${activeDoc?.type === 'word' ? 'active-action' : ''}`}
                                 onClick={handleExportWord}

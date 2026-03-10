@@ -25,7 +25,7 @@ const WorkspaceFileSchema = new mongoose.Schema({
     },
     fileType: {
         type: String,
-        enum: ['docx', 'xlsx', 'pptx'],
+        enum: ['docx', 'xlsx', 'pptx', 'pdf'],
         required: true
     },
     fileData: {
