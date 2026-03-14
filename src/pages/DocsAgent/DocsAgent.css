@@ -2871,3 +2871,20 @@
 .active-command svg {
     filter: drop-shadow(0 0 3px var(--accent-1));
 }
+
+/* Power BI Export Styling */
+.export-item-pbi {
+    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    margin-top: 4px !important;
+    padding-top: 8px !important;
+}
+
+.export-item-pbi:hover {
+    background: rgba(242, 200, 17, 0.15) !important;
+    border: 1px solid rgba(242, 200, 17, 0.4) !important;
+    box-shadow: 0 4px 15px rgba(242, 200, 17, 0.25);
+}
+
+.export-item-pbi:hover svg {
+    color: #f2c811;
+}

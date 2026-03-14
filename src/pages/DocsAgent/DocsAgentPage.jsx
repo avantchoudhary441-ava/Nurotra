@@ -4,6 +4,7 @@ import { generateWordDoc, generateExcelSheet, generatePresentation } from '../..
 import ProjectsDocs from './components/ProjectsDocs';
 import LiveExecution from './components/LiveExecution';
 import DocsChat from './components/DocsChat';
+import DashboardRenderer from '../../components/dashboard/DashboardRenderer';
 import './DocsAgent.css';
 
 const DocsAgentPage = () => {
@@ -416,8 +417,70 @@ const DocsAgentPage = () => {
         if (type === 'ppt') {
             let md = `# ${data.fileName}\n\n`;
             data.slides?.forEach((slide, i) => {
-                md += `--- Slide ${i + 1} ---\n# ${slide.title}\n`;
-                slide.bullets?.forEach(b => md += `* ${b}\n`);
+                md += `--- Slide ${i + 1} (${slide.layoutType || 'BULLETS'}) ---\n`;
+                if (slide.layoutType === 'TITLE_COVER') {
+                    md += `## ✨ ${slide.title}\n`;
+                } else if (slide.layoutType === 'DIAGONAL_SPLIT') {
+                    md += `## 🚀 ${slide.title} (High-Impact Split)\n`;
+                } else {
+                    md += `## ${slide.title}\n`;
+                }
+
+                if (slide.layoutType === 'BIG_FACT' && slide.bigFact) {
+                    md += `### 💥 ${slide.bigFact.value}\n> ${slide.bigFact.label}\n\n`;
+                }
+
+                if (slide.layoutType === 'THREE_COLUMNS' && slide.threeColumns) {
+                    md += `#### 🏛️ Three Pillars:\n`;
+                    slide.threeColumns.slice(0, 3).forEach(c => md += `* **${c.title}**: ${c.text}\n`);
+                    md += '\n';
+                }
+
+                if (slide.layoutType === 'DATA_GRID' && slide.dataGrid) {
+                    md += `#### 📊 Matrix / Grid:\n`;
+                    slide.dataGrid.slice(0, 6).forEach(i => md += `* **${i.label}**: ${i.value}\n`);
+                    md += '\n';
+                }
+
+                if (slide.layoutType === 'PROCESS_FLOW' && slide.processFlow) {
+                    md += `#### 🔄 Process Flow:\n`;
+                    slide.processFlow.forEach((step, idx) => md += `${idx + 1}. **${step.label}**\n`);
+                    md += '\n';
+                }
+
+                if (slide.layoutType === 'INFOGRAPHIC' && slide.infographic) {
+                    md += `#### 📊 Highlight: ${slide.infographic.metric}\n> Icon: ${slide.infographic.icon}\n\n`;
+                }
+
+                if (slide.layoutType === 'COMPARISON' && slide.comparison) {
+                    md += `#### ⚖️ Comparison:\n| Left | Right |\n| --- | --- |\n`;
+                    const left = slide.comparison.left || [];
+                    const right = slide.comparison.right || [];
+                    const maxRows = Math.max(left.length, right.length);
+                    for (let r = 0; r < maxRows; r++) {
+                        md += `| ${left[r] || ''} | ${right[r] || ''} |\n`;
+                    }
+                    md += '\n';
+                }
+
+                if (slide.bullets && slide.bullets.length > 0) {
+                    slide.bullets.forEach(b => md += `* ${b}\n`);
+                }
+
+                if (slide.imageQuery || slide.imageHint) {
+                    md += `\n> 🖼️ *Dynamic Visual:* ${slide.imageQuery || slide.imageHint}\n`;
+                }
+                md += '\n';
+            });
+            return md;
+        }
+        if (type === 'dashboard') {
+            let md = `# Dashboard: ${data.title}\n\n`;
+            data.widgets?.forEach(widget => {
+                md += `## ${widget.title}\n`;
+                if (widget.type === 'kpi') md += `> **Metric:** ${widget.value} (${widget.change})\n`;
+                if (widget.type === 'chart') md += `> **Visual:** ${widget.chartType} chart showing ${widget.description}\n`;
+                if (widget.type === 'table') md += `> **Data:** ${widget.rows.length} rows of tabular intelligence\n`;
                 md += '\n';
             });
             return md;
@@ -494,7 +557,7 @@ const DocsAgentPage = () => {
                 const content = convertToMarkdown(response.generation);
 
                 // Step 4: Logic Implementation
-                addLiveUpdate(isModify ? `Applying changes to: ${currentDoc.name}` : `Designing document: ${data.fileName}`);
+                addLiveUpdate(isModify ? `Applying changes to: ${currentDoc.name}` : `Designing document: ${data.title || data.fileName || 'Intelligence Board'}`);
                 setExecutionState(prev => ({ ...prev, currentStep: 4 }));
 
                 // Step 5: Final Persistence
@@ -523,10 +586,28 @@ const DocsAgentPage = () => {
                         ...p,
                         documents: (p.documents || []).map(d => String(d.id) === String(savedDoc.id) ? { ...d, ...savedDoc } : d)
                     })));
+                } else if (response.document) {
+                    // *** ALREADY SAVED BY BACKEND (e.g. Dashboards) ***
+                    savedDoc = response.document;
+
+                    // Update UI state
+                    if (savedDoc.projectId) {
+                        setProjects(prev => prev.map(p =>
+                            String(p.id) === String(savedDoc.projectId)
+                                ? {
+                                    ...p,
+                                    documents: [savedDoc, ...(p.documents || [])],
+                                    docCount: (p.docCount || 0) + 1
+                                }
+                                : p
+                        ));
+                    } else {
+                        setStandaloneDocs(prev => [savedDoc, ...prev]);
+                    }
                 } else {
-                    // *** CREATE NEW ***
+                    // *** CREATE NEW (Standard Doc types) ***
                     savedDoc = await docsAgentService.createDocument({
-                        name: data.fileName,
+                        name: data.fileName || data.title || 'New Document',
                         type: type,
                         content: content,
                         rawStructure: data,
@@ -622,6 +703,9 @@ const DocsAgentPage = () => {
 
     // Intent Management (The Brain)
     const handleAgentIntent = async (intentData) => {
+        // Clear any stale analysis view if a new generation/edit intent is coming in
+        if (analyticsData) setAnalyticsData(null);
+
         // 1. Give IMMEDIATE feedback
         setAgentStatus('Analyzing...');
         setExecutionState(prev => ({

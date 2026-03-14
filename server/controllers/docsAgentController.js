@@ -47,16 +47,33 @@ const processQuery = async (req, res) => {
         let categoryOverride = null;
 
         // --- LLM SHIFT: Always verify intent via LLM if it's a critical request or confidence is not absolute ---
-        if (intentInfo.confidence < 0.95 || selectedDocCount > 0) {
+        if (intentInfo.intent !== 'CREATE' && (intentInfo.confidence < 0.95 || selectedDocCount > 0)) {
             console.log(`[LLM Shift] Verifying intent via Gemini...`);
             try {
                 const rescue = await aiService.extractIntentWithLLM(prompt);
                 if (rescue) {
+                    // Check for clarification need first
+                    if (rescue.needs_clarification) {
+                        console.log(`[LLM Shift] Clarification needed: ${rescue.clarification_question}`);
+                        return res.json({
+                            intent: "CLARIFY",
+                            text: rescue.clarification_question,
+                            needs_clarification: true
+                        });
+                    }
+
                     // Only override if rescue is definitive and not conflicting with open doc logic
                     if (!hasOpenDoc || rescue.intent !== 'QUERY') {
                         intentInfo.intent = rescue.intent;
                     }
                     categoryOverride = rescue.category;
+
+                    // Update metadata if docType was inferred
+                    if (rescue.docType) {
+                        console.log(`[LLM Shift] Inferred docType: ${rescue.docType}`);
+                        intentInfo.inferredDocType = rescue.docType;
+                    }
+
                     intentInfo.confidence = 1.0;
                     console.log(`[LLM Shift] Intent updated to: ${intentInfo.intent} (${categoryOverride})`);
                 }
@@ -75,7 +92,7 @@ const processQuery = async (req, res) => {
         }
 
         // 3. Metadata Generation (Hybrid)
-        const metadata = intentEngine.generateMetadata(prompt, intentInfo.intent, categoryOverride);
+        const metadata = intentEngine.generateMetadata(prompt, intentInfo.intent, categoryOverride, intentInfo.inferredDocType);
 
         // 4. Narrative Execution (AI Personality + Advanced Ops injection)
         const response = await aiService.processDocsAgentQuery(prompt, userContext, history, {
@@ -87,6 +104,46 @@ const processQuery = async (req, res) => {
             docIds, // Add this
             hasOpenDoc  // ← tells AI to use MODIFY system prompt
         });
+
+        // 5. Post-Generation Persistence for Dashboards
+        if (response.generation?.type === 'dashboard') {
+            if (intentInfo.intent === 'MODIFY' && hasOpenDoc) {
+                // Update existing document
+                const docId = currentDoc.id || currentDoc._id;
+                const updatedDoc = await Document.findOneAndUpdate(
+                    { _id: docId, userId: req.user._id },
+                    {
+                        rawStructure: response.generation.data,
+                        content: prompt, // Keep track of latest prompt used
+                        updatedAt: new Date()
+                    },
+                    { new: true }
+                );
+                if (updatedDoc) {
+                    response.document = { ...updatedDoc._doc, id: updatedDoc._id };
+                }
+            } else {
+                // Create new document
+                const document = new Document({
+                    name: response.generation.data?.fileName || metadata.name || 'Intelligence_Board.json',
+                    type: 'dashboard',
+                    content: prompt,
+                    rawStructure: response.generation.data,
+                    projectId: req.body.projectId || null,
+                    metadata: {
+                        purpose: metadata.purpose || 'Strategic Intelligence',
+                        category: metadata.category || 'General',
+                        entities: metadata.entities || [],
+                        confidenceScore: metadata.confidenceScore || 0.95
+                    },
+                    userId: req.user._id,
+                    status: 'draft'
+                });
+                await document.save();
+                response.document = { ...document._doc, id: document._id };
+            }
+        }
+
         res.json(response);
     } catch (error) {
         console.error("Docs Agent Controller Error:", error);

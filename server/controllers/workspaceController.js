@@ -87,7 +87,7 @@ const downloadFile = async (req, res) => {
 
             if ((isExcel && format !== 'xlsx') ||
                 (isPPT && format !== 'pptx') ||
-                (isWord && format !== 'docx')) {
+                (isWord && format !== 'docx' && format !== 'pbi')) {
                 return res.status(400).json({
                     message: "File Export not supported in this format, select the correct file type for smooth export."
                 });
@@ -103,7 +103,8 @@ const downloadFile = async (req, res) => {
             finalMimeType = mimeMap[wsFile.fileType] || 'application/octet-stream';
         } else {
             // Generate on-the-fly
-            const formatToUse = format || (doc.type === 'excel' ? 'xlsx' : doc.type === 'ppt' ? 'pptx' : 'docx');
+            // Map PBI to xlsx so cloudExportService generates proper Excel for Power BI
+            const formatToUse = format === 'pbi' ? 'xlsx' : (format || (doc.type === 'excel' ? 'xlsx' : doc.type === 'ppt' ? 'pptx' : 'docx'));
 
             const { buffer, ext, mimeType, fileName } = await cloudExportService.generateBuffer(
                 { name: doc.name, type: doc.type, content: doc.content, rawStructure: doc.rawStructure },

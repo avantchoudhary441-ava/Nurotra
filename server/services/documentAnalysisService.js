@@ -58,14 +58,15 @@ const callPythonAnalysisEngine = async (documents, prompt, analysisType) => {
 const detectAnalysisIntent = async (prompt, docCount) => {
     const p = prompt.toLowerCase();
 
-    const isCreate = /\b(create|write|generate|draft|make a new|compose|build|draw|use|read|from)\b/.test(p);
+    const isCreate = /\b(create|write|generate|draft|make a new|compose|build|draw|use|read|from|ppt|powerpoint|excel|word)\b/.test(p);
     const isQuestion = /\b(what|how|who|where|why|search|lookup|research|explain)\b/.test(p);
     const isEdit = /\b(edit|change|update|fix|modify|add|remove|shorten|expand|adjust|refine)\b/.test(p);
-    const isAnalyze = /\b(analyze|summarize|insight|point|trend|extract|summary|report|compare|versus|vs|contrast)\b/.test(p);
+    const isAnalyze = /\b(analyze|summarize|insight|point|trend|extract|summary|compare|versus|vs|contrast)\b/.test(p);
 
-    // If there's an explicit "Create" command even with files, it's NOT a document analysis request.
+    // If there's an explicit "Create" command even with files, it's MOST LIKELY not a document analysis request.
     // It's a "File as input/instruction" request.
-    if (isCreate && !isAnalyze) {
+    // We allow "report" if "create" is present to stay in the creation flow.
+    if (isCreate) {
         return { isAnalysisRequest: false };
     }
 

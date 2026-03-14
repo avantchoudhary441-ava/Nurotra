@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap, ChevronDown } from 'lucide-react';
+import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap, ChevronDown, AlertTriangle } from 'lucide-react';
 import EntryPoint from './EntryPoint';
 import DynamicGraph from './DynamicGraph';
 import AnalyticsHub from './AnalyticsHub';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
 import { docsAgentService } from '../../../services/docsAgentService';
+import DashboardRenderer from '../../../components/dashboard/DashboardRenderer';
 
 const LiveExecution = ({
     projects,
@@ -24,10 +25,20 @@ const LiveExecution = ({
     // ... (existing state)
     const [editMode, setEditMode] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showPbiAlert, setShowPbiAlert] = useState(false);
 
-    const handleExport = async (format) => {
+    const handleExport = async (format, force = false) => {
         if (!currentDoc) return;
+
+        // Intercept Power BI to show Attention alert first
+        if (format === 'pbi' && !force) {
+            setShowExportMenu(false);
+            setShowPbiAlert(true);
+            return;
+        }
+
         setShowExportMenu(false);
+        setShowPbiAlert(false);
         setSyncStatus('syncing');
 
         try {
@@ -70,15 +81,6 @@ const LiveExecution = ({
             setTimeout(() => setSyncStatus(null), 4000);
         }
     };
-
-    // 0. Analytics / Comparison View (Synthesized Results)
-    if (analyticsData) {
-        return (
-            <div className="live-execution-panel analytics-mode">
-                <AnalyticsHub data={analyticsData} />
-            </div>
-        );
-    }
 
     // 0. Analysis Report View — shown when document analysis completes
     if (analyticsData) {
@@ -231,7 +233,9 @@ const LiveExecution = ({
                             <span>Live Preview</span>
                         </div>
                         <div className="preview-snippet">
-                            {currentDoc?.content ? (
+                            {currentDoc?.type === 'dashboard' ? (
+                                <p>Optimizing visual intelligence board...</p>
+                            ) : currentDoc?.content ? (
                                 <pre>{currentDoc.content}</pre>
                             ) : (
                                 <p>Building real-time content...</p>
@@ -248,7 +252,7 @@ const LiveExecution = ({
         return (
             <div className="working-context-glow">
                 <div className="live-execution-panel editor-mode">
-                    <div className="editor-toolbar">
+                    <div className="editor-toolbar" style={{ position: 'relative', zIndex: 500 }}>
                         <div className="doc-detail-meta">
                             <FileText size={16} />
                             <span className="doc-name-display">{currentDoc.name}</span>
@@ -272,7 +276,7 @@ const LiveExecution = ({
                                         border: '1px solid rgba(255,255,255,0.15)',
                                         borderRadius: '8px',
                                         padding: '0.5rem',
-                                        zIndex: 50,
+                                        zIndex: 1000,
                                         minWidth: '160px',
                                         display: 'flex',
                                         flexDirection: 'column',
@@ -302,6 +306,12 @@ const LiveExecution = ({
                                             onClick={() => handleExport('pdf')}
                                         >
                                             <FileText size={14} /> As PDF (.pdf)
+                                        </button>
+                                        <button
+                                            className="export-dropdown-item export-item-pbi"
+                                            onClick={() => handleExport('pbi')}
+                                        >
+                                            <Zap size={14} /> Power BI Source (.xlsx)
                                         </button>
                                     </div>
                                 )}
@@ -361,7 +371,12 @@ const LiveExecution = ({
                             />
                         ) : (
                             <div className="markdown-preview">
-                                {currentDoc.content ? (
+                                {currentDoc.type === 'dashboard' ? (
+                                    <DashboardRenderer
+                                        dashboard={currentDoc.rawStructure}
+                                        onUpdateWidget={() => { }}
+                                    />
+                                ) : currentDoc.content ? (
                                     <div className="preview-container">
                                         {/* Visual Add-ons */}
                                         {currentDoc.rawStructure?.image_url && (
@@ -391,7 +406,57 @@ const LiveExecution = ({
                         )}
                     </div>
                 </div>
-            </div>
+
+                {/* Power BI Attention Modal */}
+                {showPbiAlert && (
+                    <div className="pbi-alert-overlay" style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        width: '100%', height: '100%',
+                        background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+                        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '2rem'
+                    }}>
+                        <div className="pbi-alert-card" style={{
+                            background: '#111111', border: '1px solid rgba(185, 28, 28, 0.4)',
+                            borderRadius: '16px', padding: '2.5rem', maxWidth: '450px', width: '90%',
+                            textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
+                            position: 'relative', zIndex: 10000
+                        }}>
+                            <div style={{
+                                width: '64px', height: '64px', borderRadius: '50%',
+                                background: 'rgba(185, 28, 28, 0.1)', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem'
+                            }}>
+                                <AlertTriangle size={32} style={{ color: '#b91c1c' }} />
+                            </div>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#FFFFFF', marginBottom: '1rem' }}>Attention</h2>
+                            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+                                Nurotra generates a high-fidelity **Power BI Data Model (.xlsx)** with separate sheets for KPIs, Charts, and Maps. To use it, simply open Power BI Desktop and select **Get Data → Excel**.
+                            </p>
+                            <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', marginTop: '-0.5rem', marginBottom: '2rem' }}>
+                                (Note: Native .pbix files are proprietary binary packages; the .xlsx source is the standard professional workflow for data automation.)
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                                <button
+                                    className="plan-btn secondary"
+                                    onClick={() => setShowPbiAlert(false)}
+                                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF', padding: '0.75rem 1.5rem', borderRadius: '8px', cursor: 'pointer' }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className="plan-btn primary"
+                                    onClick={() => handleExport('pbi', true)}
+                                    style={{ background: '#b91c1c', border: 'none', color: '#ffffff', padding: '0.75rem 2rem', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer', boxShadow: 'none' }}
+                                >
+                                    Export Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+                }
+            </div >
         );
     }
 

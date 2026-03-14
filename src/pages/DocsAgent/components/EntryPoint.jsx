@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutGrid, FilePlus, Sparkles, Target, Zap, ArrowRight } from 'lucide-react';
+import { LayoutGrid, FilePlus, Sparkles, Target, Zap, ArrowRight, Activity } from 'lucide-react';
 
 const EntryPoint = ({ onCreateProject, onCreateSingleDoc }) => {
     const [view, setView] = useState('selection'); // selection, project-form
@@ -99,6 +99,7 @@ const EntryPoint = ({ onCreateProject, onCreateSingleDoc }) => {
                         <ArrowRight size={16} />
                     </div>
                 </div>
+
             </div>
 
             <div className="execution-philosophy">

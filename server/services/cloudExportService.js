@@ -17,10 +17,22 @@ const https = require("https");
 const http = require("http");
 const pptxgen = require("pptxgenjs");
 const ExcelJS = require('exceljs');
+// dashboardExportService is now required inside generateBuffer to avoid circular dependency
+// const dashboardExportService = require('./dashboardExportService');
 
 // ==========================================
 // HELPERS
 // ==========================================
+
+const getLuminance = (hex) => {
+    const rgb = hex.replace('#', '');
+    const r = parseInt(rgb.substring(0, 2), 16);
+    const g = parseInt(rgb.substring(2, 4), 16);
+    const b = parseInt(rgb.substring(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+};
+
+const getContrastColor = (hex) => getLuminance(hex) > 0.6 ? '333333' : 'FFFFFF';
 
 // Returns an array of TextRun objects with placeholders highlighted yellow
 // Also applies inline bold/italic/underline styles to matching substrings
@@ -269,9 +281,23 @@ const rescueToFormat = (docData, ext) => {
         }
     }
     if (ext === '.xlsx' && (!rescued.sheets || rescued.sheets.length === 0)) {
+        // Create a more structured "Document Model" for non-dashboard exports
+        // This ensures Power BI always sees a high-quality tabular structure
+        const summaryRows = [];
+        if (rescued.title || docData.name) summaryRows.push(["Title", rescued.title || docData.name]);
+        if (type) summaryRows.push(["Document Type", type]);
+
+        const contentRows = content ? String(content).split('\n')
+            .filter(l => l.trim())
+            .map(l => {
+                const clean = l.trim().replace(/^[-*#\d.]+\s+/, '');
+                return ["Content Node", clean];
+            }) : [["Info", "No content available"]];
+
         rescued.sheets = [{
-            name: "Sheet 1",
-            rows: content ? String(content).split('\n').map(l => [l]) : [["No content"]]
+            name: "Document Data Model",
+            headers: ["Context", "DataValue"],
+            rows: [...summaryRows, ...contentRows]
         }];
     }
     if (ext === '.pptx' && (!rescued.slides || rescued.slides.length === 0)) {
@@ -478,6 +504,34 @@ const generateWordBuffer = async (data) => {
                                 docChildren.push(new Paragraph({ children: [new PageBreak()] }));
                                 break;
                             }
+                            case 'chart':
+                            case 'graph': {
+                                const titleText = `📊 Chart: ${block.title || data.graph_config?.title || 'Data Visualization'}`;
+                                docChildren.push(new Paragraph({
+                                    children: [new TextRun({ text: titleText, bold: true, size: 24, color: "2F4F8F" })],
+                                    spacing: { before: 240, after: 120 }
+                                }));
+
+                                const graphData = block.data || data.graph_config?.data;
+                                if (graphData && Array.isArray(graphData)) {
+                                    const borders = buildBorders("CCCCCC");
+                                    const headerRow = new TableRow({
+                                        children: [
+                                            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: block.type || 'Category', bold: true, size: 20 })] })], shading: { fill: "E0E6ED" }, borders: borders }),
+                                            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'Value', bold: true, size: 20 })] })], shading: { fill: "E0E6ED" }, borders: borders })
+                                        ]
+                                    });
+                                    const dataRows = graphData.map(d => new TableRow({
+                                        children: [
+                                            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(d.name || ''), size: 20 })] })], borders: borders }),
+                                            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: String(d.value || ''), size: 20 })] })], borders: borders })
+                                        ]
+                                    }));
+                                    docChildren.push(new Table({ rows: [headerRow, ...dataRows], width: { size: 100, type: WidthType.PERCENTAGE } }));
+                                    docChildren.push(new Paragraph({ text: "", spacing: { after: 240 } }));
+                                }
+                                break;
+                            }
                             case 'image': {
                                 const imgUrl = block.url || data.image_url;
                                 const isExampleUrl = imgUrl && (imgUrl.includes('example.com') || imgUrl.includes('placeholder') || imgUrl.includes('localhost') || imgUrl.includes('nurotra.com'));
@@ -543,48 +597,82 @@ const generateWordBuffer = async (data) => {
 
 const generateExcelBuffer = async (data) => {
     const workbook = new ExcelJS.Workbook();
-    const sheets = data.sheets || [{ name: 'Sheet 1', rows: [["No content"]] }];
+    const sheets = data.sheets || [{ name: 'Data', rows: [["No content"]] }];
+    const usedSheetNames = new Set();
 
-    sheets.forEach(s => {
-        const sheet = workbook.addWorksheet(String(s.name || 'Sheet').substring(0, 31));
-
-        if (s.headers && Array.isArray(s.headers)) {
-            const headerRow = sheet.addRow(s.headers);
-            headerRow.font = { bold: true };
+    for (const s of sheets) {
+        // 1. Sanitize & Ensure Unique Sheet Name
+        let baseName = String(s.name || 'Sheet').substring(0, 31).replace(/[\[\]\?\*\/\\\:]/g, '');
+        let sheetName = baseName;
+        let counter = 1;
+        while (usedSheetNames.has(sheetName)) {
+            sheetName = (baseName.substring(0, 26) + ` (${counter++})`).replace(/[\[\]\?\*\/\\\:]/g, '');
         }
+        usedSheetNames.add(sheetName);
 
-        if (s.rows && Array.isArray(s.rows)) {
-            s.rows.forEach((rowObj) => {
-                const cells = rowObj.cells || (Array.isArray(rowObj) ? rowObj : Object.values(rowObj));
-                const row = sheet.addRow([]);
-                cells.forEach((cell, colIdx) => {
-                    const excelCell = row.getCell(colIdx + 1);
-                    const val = typeof cell === 'object' ? (cell.value ?? '') : cell;
-                    const formula = typeof cell === 'object' ? cell.formula : null;
+        const sheet = workbook.addWorksheet(sheetName);
 
-                    if (!isNaN(val) && val !== '' && typeof val !== 'boolean') {
-                        excelCell.value = parseFloat(val);
-                    } else {
-                        excelCell.value = val;
-                    }
+        // 2. Prepare Headers and Rows
+        const headers = (s.headers && Array.isArray(s.headers) && s.headers.length > 0) ? s.headers : ['Data'];
+        const rows = (s.rows && Array.isArray(s.rows) && s.rows.length > 0)
+            ? s.rows.map(r => Array.isArray(r) ? r : Object.values(r))
+            : [['No data available']];
 
-                    if (formula) {
-                        let cleanFormula = formula.startsWith('=') ? formula.substring(1) : formula;
-                        excelCell.value = { formula: cleanFormula, result: excelCell.value };
-                    }
-                });
+        // Ensure all rows match header length
+        const sanitizedRows = rows.map(r => {
+            const arr = Array.isArray(r) ? r : [String(r)];
+            while (arr.length < headers.length) arr.push('');
+            return arr.slice(0, headers.length);
+        });
+
+        // 3. Create a formal Excel Table (ListObject) - Power BI LOVES this
+        // Table names must be alphanumeric and unique in the workbook
+        const tableName = `Table_${sheetName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        try {
+            sheet.addTable({
+                name: tableName,
+                ref: 'A1',
+                headerRow: true,
+                totalsRow: false,
+                style: {
+                    theme: 'TableStyleMedium2',
+                    showRowStripes: true,
+                },
+                columns: headers.map(h => ({ name: String(h || 'Column') })),
+                rows: sanitizedRows,
             });
+
+            // Auto-fit column widths (heuristic)
+            sheet.columns.forEach(column => {
+                let maxLen = 10;
+                column.eachCell({ includeEmpty: true }, (cell) => {
+                    const len = cell.value ? String(cell.value).length : 0;
+                    if (len > maxLen) maxLen = len;
+                });
+                column.width = Math.min(maxLen + 2, 50);
+            });
+
+        } catch (tableErr) {
+            console.warn(`[Excel Export] Table generation failed for ${sheetName}, falling back to raw cells:`, tableErr.message);
+            // Fallback to raw cell population if table logic fails
+            const headerRow = sheet.addRow(headers);
+            headerRow.font = { bold: true };
+            sanitizedRows.forEach(r => sheet.addRow(r));
         }
-    });
+    }
+
     return await workbook.xlsx.writeBuffer();
 };
 
 const getPPTTheme = (themeName) => {
     const themes = {
-        'Modern': { color: '2D3436', accent: '0984E3', font: 'Helvetica', bg: 'FFFFFF' },
-        'Corporate': { color: '2C3E50', accent: '2980B9', font: 'Arial', bg: 'F4F7F6' },
-        'Dark': { color: 'DFE6E9', accent: '00CEC9', font: 'Verdana', bg: '2D3436' },
-        'Creative': { color: '2D3436', accent: '6C5CE7', font: 'Georgia', bg: 'FAFAFA' }
+        'Modern': { color: '1A1A1A', accent: '00D2D3', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F5F6FA' },
+        'Corporate': { color: '2D3436', accent: '0984E3', font: 'Helvetica', bg: 'FFFFFF', altBg: 'ECF0F1' },
+        'Dark': { color: 'FFFFFF', accent: '00CEC9', font: 'Open Sans', bg: '2D3436', altBg: '1E272E' },
+        'Creative': { color: '2D3436', accent: '6C5CE7', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F8F9FA' },
+        'Luxury': { color: 'D4AF37', accent: 'D4AF37', font: 'Garamond', bg: '1A1A1A', altBg: '2D3436' },
+        'Vibrant': { color: 'FFFFFF', accent: 'FF007F', font: 'Montserrat', bg: '4834D4', altBg: '686DE0' }
     };
     return themes[themeName] || themes['Modern'];
 };
@@ -592,39 +680,172 @@ const getPPTTheme = (themeName) => {
 const generatePPTBuffer = async (data) => {
     const pres = new pptxgen();
     const theme = getPPTTheme(data.theme);
+    const accent = (data.accentColor || theme.accent).replace('#', '');
+    const bg = (data.backgroundColor || theme.bg).replace('#', '');
+    const bgGradient = data.bgGradient ? data.bgGradient.replace('#', '') : null;
+    const font = data.fontFace || theme.font;
 
     if (data.slides) {
         data.slides.forEach(s => {
             const slide = pres.addSlide();
-            slide.background = { fill: theme.bg };
 
-            // Title Bar Accent
-            slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: 1.1, fill: theme.accent });
-
-            // Title
-            slide.addText(String(s.title || "Slide"), {
-                x: 0.5, y: 0.3, w: '90%', h: 0.6,
-                fontSize: 32, bold: true, color: 'FFFFFF',
-                fontFace: theme.font, align: 'left',
-                valign: 'middle'
-            });
-
-            // Content Area (y: 1.6 to avoid overlap)
-            if (s.bullets && s.bullets.length > 0) {
-                slide.addText(
-                    s.bullets.map(b => ({ text: String(b), options: { bullet: true, indent: 20, margin: 10 } })),
-                    {
-                        x: 0.5, y: 1.6, w: '90%', h: 5.0,
-                        fontSize: 18, color: theme.color,
-                        fontFace: theme.font,
-                        lineSpacing: 28,
-                        valign: 'top'
-                    }
-                );
+            // 1. DYNAMIC BACKGROUND ENGINE
+            if (bgGradient) {
+                slide.background = { fill: bg, type: 'gradient', color: bg, rot: 90, stop: bgGradient };
+            } else {
+                slide.background = { fill: bg };
             }
 
-            // Branding
-            slide.addText("Nurotra Intelligence", { x: 8.0, y: 7.2, fontSize: 10, color: theme.accent, italic: true });
+            // Subtle Texture (Geometric Overlay)
+            slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: '100%', fill: { color: accent, alpha: 5 } });
+            slide.addShape(pres.ShapeType.ellipse, { x: -1, y: -1, w: 4, h: 4, fill: { color: accent, alpha: 10 } });
+
+            const layout = s.layoutType || 'BULLETS';
+            const contrastTextColor = getContrastColor('#' + bg);
+            const contrastAccentColor = getContrastColor('#' + accent);
+
+            // 1.5 LIVE IMAGE FETCHING (Phase 3)
+            const imgQuery = s.imageQuery || s.imageHint || "";
+            if (imgQuery && (layout.includes('IMAGE') || layout === 'TITLE_COVER' || layout === 'DIAGONAL_SPLIT')) {
+                const stockUrl = `https://loremflickr.com/1280/720/${encodeURIComponent(imgQuery.split(' ')[0])}`;
+                slide.addImage({ url: stockUrl, x: 0, y: 0, w: '100%', h: '100%', opacity: 20 });
+            }
+
+            // 2. LAYOUT ENGINE
+            switch (layout) {
+                case 'TITLE_COVER':
+                    // Background Split
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '40%', h: '100%', fill: accent });
+                    slide.addShape(pres.ShapeType.rect, { x: '40%', y: 0, w: '60%', h: '100%', fill: bg });
+
+                    slide.addText(String(s.title || "Untitled"), {
+                        x: '45%', y: '35%', w: '50%', h: '20%',
+                        fontSize: 54, bold: true, color: accent,
+                        fontFace: font, align: 'left', valign: 'middle'
+                    });
+                    slide.addText("PROJECT PROPOSAL", {
+                        x: '45%', y: '30%', w: '50%', fontSize: 14, color: contrastTextColor, fontFace: font, italic: true
+                    });
+                    slide.addShape(pres.ShapeType.rect, { x: '45%', y: '55%', w: 2.0, h: 0.1, fill: accent });
+                    break;
+
+                case 'DIAGONAL_SPLIT':
+                    // High-impact Diagonal Design
+                    slide.addShape(pres.ShapeType.rtTriangle, { x: 0, y: 0, w: '100%', h: '100%', fill: accent, flipH: true });
+                    slide.addText(String(s.title || ""), {
+                        x: 0.5, y: '70%', w: '90%', fontSize: 44, bold: true, color: 'FFFFFF', fontFace: font
+                    });
+                    if (s.bullets) {
+                        slide.addText(s.bullets[0] || "", { x: 0.5, y: '85%', w: '90%', fontSize: 20, color: 'FFFFFF', fontFace: font, italic: true });
+                    }
+                    break;
+
+                case 'THREE_COLUMNS':
+                    slide.addText(String(s.title || "Key Pillars"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
+                    if (s.threeColumns) {
+                        s.threeColumns.slice(0, 3).forEach((col, idx) => {
+                            const x = 0.5 + (idx * 3.1);
+                            slide.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.8, h: 4.5, fill: 'FFFFFF', line: { color: accent, width: 1 } });
+                            slide.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.8, h: 0.1, fill: accent });
+                            slide.addText(String(col.title || ""), { x: x + 0.1, y: 1.7, w: 2.6, fontSize: 18, bold: true, color: accent, align: 'center', fontFace: font });
+                            slide.addText(String(col.text || ""), { x: x + 0.1, y: 2.2, w: 2.6, fontSize: 14, color: contrastTextColor, align: 'center', fontFace: font });
+                        });
+                    }
+                    break;
+
+                case 'DATA_GRID':
+                    slide.addText(String(s.title || "Data Analysis"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
+                    if (s.dataGrid) {
+                        s.dataGrid.slice(0, 6).forEach((item, idx) => {
+                            const row = Math.floor(idx / 3);
+                            const col = idx % 3;
+                            const x = 0.5 + (col * 3.1);
+                            const y = 1.5 + (row * 2.2);
+                            slide.addShape(pres.ShapeType.rect, { x: x, y: y, w: 2.8, h: 1.8, fill: 'F8F9FA', line: { color: 'CCCCCC', width: 1 } });
+                            slide.addText(String(item.label || ""), { x: x + 0.1, y: y + 0.2, w: 2.6, fontSize: 14, bold: true, color: accent, fontFace: font });
+                            slide.addText(String(item.value || ""), { x: x + 0.1, y: y + 0.7, w: 2.6, fontSize: 24, bold: true, color: contrastTextColor, fontFace: font });
+                        });
+                    }
+                    break;
+
+                case 'BIG_FACT':
+                    if (s.bigFact) {
+                        slide.addText(String(s.bigFact.value || "0%"), {
+                            x: 0, y: '30%', w: '100%', h: 1.5,
+                            fontSize: 110, bold: true, color: accent,
+                            fontFace: font, align: 'center'
+                        });
+                        slide.addText(String(s.bigFact.label || "Key Metric"), {
+                            x: 0, y: '55%', w: '100%', h: 0.5,
+                            fontSize: 28, color: contrastTextColor,
+                            fontFace: font, align: 'center'
+                        });
+                    }
+                    break;
+
+                case 'PROCESS_FLOW':
+                    slide.addText(String(s.title || "Process"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
+                    if (s.processFlow) {
+                        s.processFlow.slice(0, 4).forEach((step, idx) => {
+                            const x = 0.5 + (idx * 2.3);
+                            slide.addShape(pres.ShapeType.roundRect, { x: x, y: 2.5, w: 2.1, h: 2.5, fill: 'FFFFFF', line: { color: accent, width: 2 }, rectRadius: 0.2 });
+                            slide.addText(String(step.label || ""), { x: x + 0.1, y: 2.6, w: 1.9, fontSize: 16, bold: true, color: accent, align: 'center', fontFace: font });
+                            if (idx < 3) slide.addShape(pres.ShapeType.rightArrow, { x: x + 2.15, y: 3.5, w: 0.3, h: 0.3, fill: accent });
+                        });
+                    }
+                    break;
+
+                case 'INFOGRAPHIC':
+                    slide.addText(String(s.title || "Insights"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
+                    if (s.infographic) {
+                        slide.addShape(pres.ShapeType.ellipse, { x: 1.0, y: 2.0, w: 3.0, h: 3.0, fill: accent });
+                        slide.addText(String(s.infographic.metric || ""), { x: 1.0, y: 2.7, w: 3.0, fontSize: 36, bold: true, color: contrastAccentColor, align: 'center', fontFace: font });
+                        slide.addText(String(s.infographic.icon || "Feature"), { x: 5.0, y: 2.5, w: 4.0, fontSize: 24, italic: true, color: contrastTextColor, fontFace: font });
+                    }
+                    break;
+
+                case 'COMPARISON':
+                    slide.addText(String(s.title || "Comparison"), { x: 0.5, y: 0.3, w: '90%', fontSize: 28, bold: true, color: accent, fontFace: font });
+                    slide.addShape(pres.ShapeType.rect, { x: 5.0, y: 1.2, w: 0.02, h: 5.0, fill: 'CCCCCC' });
+                    if (s.comparison) {
+                        if (s.comparison.left) slide.addText(s.comparison.left.map(b => ({ text: String(b), options: { bullet: true } })), { x: 0.5, y: 1.5, w: 4.2, h: 5.0, fontSize: 18, color: contrastTextColor, fontFace: font, lineSpacing: 32 });
+                        if (s.comparison.right) slide.addText(s.comparison.right.map(b => ({ text: String(b), options: { bullet: true } })), { x: 5.3, y: 1.5, w: 4.2, h: 5.0, fontSize: 18, color: contrastTextColor, fontFace: font, lineSpacing: 32 });
+                    }
+                    break;
+
+                case 'IMAGE_FULL':
+                    slide.addText(String(s.title || ""), {
+                        x: 0, y: '80%', w: '100%', h: 1.0,
+                        fontSize: 40, bold: true, color: 'FFFFFF',
+                        fontFace: font, align: 'center', fill: { color: '000000', alpha: 40 }
+                    });
+                    if (s.imageHint) slide.addText(`[Visual: ${s.imageHint}]`, { x: 0.5, y: 0.5, fontSize: 12, color: accent, italic: true });
+                    break;
+
+                default: // BULLETS
+                    // Stylish side accent
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 0.1, h: '100%', fill: accent });
+
+                    // Title with subtle underline
+                    slide.addText(String(s.title || "Slide"), {
+                        x: 0.5, y: 0.4, w: '90%', h: 0.6,
+                        fontSize: 36, bold: true, color: accent,
+                        fontFace: font, align: 'left', valign: 'top'
+                    });
+                    slide.addShape(pres.ShapeType.rect, { x: 0.5, y: 1.1, w: 3.0, h: 0.05, fill: { color: accent, alpha: 30 } });
+
+                    if (s.bullets) {
+                        slide.addText(s.bullets.map(b => ({ text: String(b), options: { bullet: true, margin: 15, indent: 20 } })), {
+                            x: 0.5, y: 1.5, w: '90%', h: 5.0,
+                            fontSize: 20, color: contrastTextColor,
+                            fontFace: font, lineSpacing: 36, valign: 'top'
+                        });
+                    }
+                    break;
+            }
+
+            // Branding Footer
+            slide.addText("Nurotra Executive Suite", { x: 7.5, y: 7.1, w: 2.0, fontSize: 10, color: accent, italic: true, align: 'right' });
         });
     }
     return await pres.write('nodebuffer');
@@ -807,8 +1028,13 @@ const generatePDFBuffer = async (data) => {
  */
 const generateBuffer = async (docData, formatOverride) => {
     const type = docData.type || 'docx';
-    const finalFormat = formatOverride || (type === 'excel' ? 'xlsx' : type === 'ppt' ? 'pptx' : 'docx');
-    const ext = finalFormat.startsWith('.') ? finalFormat : '.' + finalFormat;
+    // Normalize format input
+    let normalizedFormat = formatOverride ? formatOverride.toLowerCase().replace('.', '') : null;
+    if (normalizedFormat === 'pbi') normalizedFormat = 'xlsx';
+
+    // Choose final format based on override or document default
+    const finalFormat = normalizedFormat || (type === 'excel' ? 'xlsx' : type === 'ppt' ? 'pptx' : type === 'dashboard' ? 'xlsx' : 'docx');
+    const ext = '.' + finalFormat;
 
     const mimeMap = {
         '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -820,6 +1046,14 @@ const generateBuffer = async (docData, formatOverride) => {
     const mimeType = mimeMap[ext] || 'application/octet-stream';
     const baseName = String(docData.name || "Document").replace(/[<>:"/\\|?*]/g, '_').trim();
     const fileName = `${baseName}${ext}`;
+
+    // Handle Dashboard specialized export
+    if (type === 'dashboard') {
+        const dashboardExportService = require('./dashboardExportService');
+        const dashboardStructure = typeof docData.rawStructure === 'string' ? JSON.parse(docData.rawStructure) : docData.rawStructure;
+        const buffer = await dashboardExportService.exportDashboard(dashboardStructure, finalFormat.replace('.', ''));
+        return { buffer, ext, mimeType, fileName };
+    }
 
     const structure = rescueToFormat(docData, ext);
     normalizeContent(structure);
@@ -833,4 +1067,10 @@ const generateBuffer = async (docData, formatOverride) => {
     return { buffer, ext, mimeType, fileName };
 };
 
-module.exports = { generateBuffer };
+module.exports = {
+    generateBuffer,
+    generateWordBuffer,
+    generateExcelBuffer,
+    generatePPTBuffer,
+    generatePDFBuffer
+};

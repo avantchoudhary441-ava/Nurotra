@@ -221,12 +221,31 @@ const generateImageWithOpenAI = async (imagePrompt) => {
  */
 const searchImageFromUnsplash = async (query) => {
     try {
-        const encodedQuery = encodeURIComponent(query);
-        // Using a high-quality deterministic proxy for demonstration if key is missing
-        // In production, this would use process.env.UNSPLASH_ACCESS_KEY
-        return `https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=1000&auto=format&fit=crop&sig=${encodedQuery}`;
+        const accessKey = process.env.UNSPLASH_ACCESS_KEY;
+        if (!accessKey) {
+            console.warn("[AI Service] Unsplash Access Key not configured, falling back to proxy.");
+            return `https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=1000&auto=format&fit=crop&sig=${encodeURIComponent(query)}`;
+        }
+
+        const response = await axios.get("https://api.unsplash.com/search/photos", {
+            params: {
+                query,
+                per_page: 1,
+                orientation: "landscape"
+            },
+            headers: {
+                Authorization: `Client-ID ${accessKey}`
+            }
+        });
+
+        if (response.data?.results?.length > 0) {
+            return response.data.results[0].urls.regular;
+        }
+
+        console.warn("[AI Service] No Unsplash results for:", query);
+        return null;
     } catch (error) {
-        console.error("Unsplash Search Failed:", error.message);
+        console.error("Unsplash Search Failed:", error.response?.data?.errors?.[0] || error.message);
         return null;
     }
 };
@@ -473,10 +492,29 @@ const extractIntentWithLLM = async (prompt) => {
     try {
         const systemPrompt = `You are the Nurotra Intent Analyst. 
         Determine the user intent for the Document Agent.
+        
+        INTELLIGENCE RULES:
+        1. INFER DOC TYPE (DETERMINISTIC): 
+           - "Word": Mention of reports, SOPs, contracts, articles, news, articles, proposals.
+           - "PPT": Mention of slides, pitch, deck, presentation, bullet points.
+           - "Excel": Mention of spreadsheet, calculations, formulas, budget tables.
+        
+        2. SMART INFERENCE (HEURISTIC):
+           - "Dashboard": ONLY assume "dashboard" if the user explicitly asks for visual trends, "performance monitor", "kpi board", "visualize", "charts", or "graphs". 
+           - If the user asks analytical questions (e.g., "Which products are profitable?") without mentioning visualization, default to "word" for a detailed text report unless context strongly implies a live monitor.
+           - If the user provides raw data and says "Analyse this", default to "word" unless they ask for a visual board.
+        
+        3. CLARIFICATION:
+           - If the prompt is ambiguous between a Report and a Dashboard, pick "word" (Report) as the safer, more detailed default.
+           - ONLY set "needs_clarification" to true if the intent itself is unclear or the prompt is too vague (e.g., "Do something").
+
         Output STRICT JSON:
         {
-          "intent": "CREATE" | "MODIFY" | "QUERY" | "DATA_OP" | "CONVERT",
+          "intent": "CREATE" | "MODIFY" | "QUERY" | "DATA_OP" | "CONVERT" | "ANALYZE" | "COMPARE",
           "category": "Marketing|Legal|Technical|Education|Financial|General",
+          "docType": "word" | "ppt" | "excel" | "dashboard" | null,
+          "needs_clarification": boolean,
+          "clarification_question": "Only if needs_clarification is true",
           "reasoning": "1-sentence explanation"
         }`;
 
@@ -485,7 +523,7 @@ const extractIntentWithLLM = async (prompt) => {
         return JSON.parse(text);
     } catch (error) {
         console.error("Intent Rescue Failure:", error.message);
-        return { intent: "QUERY", category: "General", reasoning: "Fallback due to error" };
+        return { intent: "QUERY", category: "General", docType: null, needs_clarification: false, reasoning: "Fallback due to error" };
     }
 };
 
@@ -565,7 +603,14 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
         }
 
         const { detectDocType, detectLength } = require('./intentEngine');
-        const { type: docType } = detectDocType(prompt);
+        const { type: detectedType } = detectDocType(prompt);
+        let docType = metadata.docType || (currentDoc ? currentDoc.type : detectedType);
+
+        // FORCE Dashboard type if user mentions Power BI or Dashboard specifically
+        if (prompt.toLowerCase().includes('power bi') || prompt.toLowerCase().includes('dashboard')) {
+            docType = 'dashboard';
+        }
+
         const lengthPref = detectLength(prompt);
 
         // =====================================================================
@@ -694,33 +739,101 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
         - ALWAYS use formulas for calculations (e.g., "=SUM(B2:B10)").
         - Add "conditionalFormatting" for high-impact data visualization.
 `;
+        } else if (docType === 'dashboard') {
+            formatInstructions = `
+        DASHBOARD FORMATTING & EXPERT DESIGN RULES:
+        - MISSION: Create a high-end, executive-level visual intelligence board.
+        
+        CRITICAL RULES (MUST FOLLOW):
+        1. "theme" field is MANDATORY. Pick one: "Midnight Gold", "Cyber Teal", "Executive Blue", "Modern", "Luxury", or "Vibrant".
+        2. Geographic data (countries/cities/regions) MUST use type:"map" (NOT type:"chart"). Map is its OWN widget type.
+        3. When comparing two metrics (e.g., Revenue vs Profit%), use chartType:"composed" with BOTH "value" AND "valueSecondary" in each data item.
+        
+        SCHEMA:
+        {
+          "fileName": "Contextual_Name.json",
+          "title": "Dashboard Title",
+          "theme": "Midnight Gold",
+          "widgets": [
+            { "type": "kpi", "title": "...", "value": "...", "change": "...", "trend": "up|down", "icon": "DollarSign|TrendingUp|Package|AlertTriangle|Truck|Users" },
+            { "type": "chart", "chartType": "bar|line|pie|area|radar|composed", "title": "...", "description": "...", "data": [{ "name": "...", "value": 0, "valueSecondary": 0 }] },
+            { "type": "map", "title": "...", "description": "...", "data": [{ "region": "USA", "value": 5200000, "label": "$5.2M" }] },
+            { "type": "table", "title": "...", "headers": ["Header 1", "Header 2"], "rows": [["Row 1 Val", "Row 2 Val"]] }
+          ]
+        }
+        
+        SMART VISUALIZATION GUIDELINES:
+          * RADAR: Comparisons across 5+ axes (Speed, Quality, Cost, etc.).
+          * AREA: Cumulative growth or volume trends over time.
+          * COMPOSED: Two metrics on same axis. MUST include "valueSecondary" in data items.
+          * MAP: Geographic data. type MUST be "map" (NOT "chart"). Data uses "region" key.
+          * LINE: Time-series. BAR: Discrete comparisons. PIE: Distribution.
+        - STRICT DATA PRIORITY: Extract REAL data from the user prompt. Only synthesize if no data given.
+        - VARIETY: Use at least 3 DIFFERENT widget types. Avoid repeating chartType consecutively.`;
         } else {
             formatInstructions = `
-        POWERPOINT PRESENTATION RULES:
-        1. NARRATIVE FLOW: Ensure a logical progression from "Executive Overview" to "Strategic Implementation".
-        2. SMART CONTENT DISTRIBUTION:
-           - Limit slides to 4-6 high-impact bullets.
-           - If a topic is complex, split it into two slides (e.g., "AI Basics" and "AI Advanced").
-           - Summarize long text; NEVER put paragraphs on slides.
-        3. PROFESSIONAL STYLING:
-           - Each slide MUST have a "title" and a "bullets" array.
-           - Optional: "theme" (Modern | Corporate | Dark | Creative).
-           - Optional: "accentColor" (Hex code).
+        POWERPOINT PRESENTATION RULES (EXECUTIVE DESIGN):
+        You are Nurotra's Creative Director. Create "Wow-Factor" slide decks that look like they cost $50,000.
+
+        1. NARRATIVE & DESIGN FLOW:
+           - Ensure logical progression (Title -> Problem -> Solution -> Data -> Future).
+           - Support "PREMIUM_DESIGN" aesthetic: minimalist, high-contrast, or vibrant.
+           - Support modern typography (Montserrat, Open Sans, Helvetica).
+
+        2. MULTI-LAYOUT SUITE (MANDATORY VARIETY):
+           - NEVER use "BULLETS" for more than 2 consecutive slides.
+           - FORCE at least 3 different layout types in every deck.
+           - "TITLE_COVER": High-impact first slide. 
+           - "BULLETS": Use only for simple lists.
+           - "THREE_COLUMNS": Use for features, benefits, or three distinct pillars.
+           - "DIAGONAL_SPLIT": Dynamic, edgy split for high-impact narrative.
+           - "DATA_GRID": Sophisticated 2x2 or 3x2 grid for modular info.
+           - "COMPARISON": Use for Pros/Cons or Before/After.
+           - "QUADRANT": Use for SWOT or focus areas.
+           - "BIG_FACT": Focus on one giant metric + label.
+           - "IMAGE_RIGHT" | "IMAGE_LEFT": Balanced text + visual.
+           - "IMAGE_FULL": Emotional or high-impact statement.
+           - "TIMELINE" | "PROCESS_FLOW": Step-based or chronological content.
+           - "INFOGRAPHIC": High-density modular data.
+
+        3. DYNAMIC STYLE & IMAGE ENGINE:
+           - "theme": "Modern" | "Corporate" | "Dark" | "Creative" | "Luxury" | "Vibrant".
+           - "accentColor": topic-matched HEX.
+           - "backgroundColor": topic-matched HEX.
+           - "bgGradient": topic-matched HEX.
+           - "imageQuery": A short, descriptive string for stock photos (e.g., "clean energy", "cybersecurity lab").
+           - "fontFace": "Montserrat" | "Open Sans" | "Helvetica" | "Verdana".
+
         4. SCHEMA:
         {
           "intent": "${intent}",
-          "text": "Generated a professional ${lengthPref} presentation.",
+          "text": "Executive Narrative about the deck.",
           "generation": {
             "type": "ppt",
             "data": {
-              "fileName": "Presentation.pptx",
-              "title": "Presentation Main Title",
+              "fileName": "Project_Presentation.pptx",
+              "title": "Presentation Header",
               "theme": "Modern",
+              "accentColor": "#00CEC9",
+              "backgroundColor": "#2D3436",
+              "bgGradient": "#0F2027",
+              "fontFace": "Montserrat",
               "slides": [
                 { 
-                  "title": "Slide Title", 
-                  "bullets": ["Synthesized point 1", "Synthesized point 2"],
-                  "speakerNotes": "Context for the presenter..." 
+                  "title": "Slide Title",
+                  "layoutType": "TITLE_COVER" | "THREE_COLUMNS" | "DIAGONAL_SPLIT" | "DATA_GRID" | "BULLETS" | "BIG_FACT" | "TIMELINE",
+                  "bullets": ["Point 1", "Point 2"],
+                  "threeColumns": [
+                    { "title": "Column 1", "text": "Detail" },
+                    { "title": "Column 2", "text": "Detail" },
+                    { "title": "Column 3", "text": "Detail" }
+                  ],
+                  "dataGrid": [
+                    { "label": "Label 1", "value": "Value 1" },
+                    { "label": "Label 2", "value": "Value 2" }
+                  ],
+                  "imageQuery": "business strategy meeting",
+                  "speakerNotes": "Details for the presenter..." 
                 }
               ]
             }
@@ -742,52 +855,90 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
         {
           "intent": "${intent}",
           "text": "Executive Narrative (markdown)",
-          "documentSummaries": [
-             { 
-               "name": "Doc Name", 
-               "short": "5-6 lines concise summary", 
-               "detailed": ["Bullet 1", "Bullet 2", "Bullet 3"] 
-             }
-          ],
-          "keyInsights": {
-             "keywords": ["key1", "key2"],
-             "topicClustering": ["Topic A", "Topic B"],
-             "sentiment": "Positive|Negative|Neutral",
-             "importantSections": ["Highlighted text or section names"]
-          },
-          "comparativeAnalysis": {
-             "similarities": ["Sim 1", "Sim 2"],
-             "differences": ["Diff 1", "Diff 2"],
-             "comparisonTable": {
-                "headers": ["Aspect", "Doc 1", "Doc 2"],
-                "rows": [["Pricing", "$10", "$12"], ["SLA", "99%", "95%"]]
-             }
-          },
-          "dataTrends": {
-             "metrics": { "Label": "Value" },
-             "trends": ["Trend 1", "Trend 2"],
-             "themes": ["Theme A"]
-          },
+          "documentSummaries": [ { "name": "Doc Name", "short": "5-6 lines concise summary", "detailed": ["Bullet 1", "Bullet 2", "Bullet 3"] } ],
+          "keyInsights": { "keywords": ["key1", "key2"], "topicClustering": ["Topic A", "Topic B"], "sentiment": "Positive|Negative|Neutral", "importantSections": ["Highlighted text or section names"] },
+          "comparativeAnalysis": { "similarities": ["Sim 1", "Sim 2"], "differences": ["Diff 1", "Diff 2"], "comparisonTable": { "headers": ["Aspect", "Doc 1", "Doc 2"], "rows": [["Pricing", "$10", "$12"], ["SLA", "99%", "95%"]] } },
+          "dataTrends": { "metrics": { "Label": "Value" }, "trends": ["Trend 1", "Trend 2"], "themes": ["Theme A"] },
           "generation": {
              "type": "generic",
              "visual_intent": "ANALYTICS_DASHBOARD",
-             "graph_config": {
-                "type": "bar|line|pie",
-                "title": "Data Visualization",
-                "data": [{ "name": "Label", "value": 100 }, ...],
-                "xAxisName": "Metric",
-                "yAxisName": "Count"
-             }
+             "graph_config": { "type": "bar|line|pie", "title": "Data Visualization", "data": [{ "name": "Label", "value": 100 }, ...], "xAxisName": "Metric", "yAxisName": "Count" }
           },
           "finalOutcome": {
-             "verdict": "Strategic conclusion",
-             "bestOption": "Most important insight or best-performing data point"
-          }
-        }`;
+        CRITICAL: Output ONLY valid JSON.Ensure every widget directly maps to a goal or question in the user's prompt.`;
 
-        // ── MODIFY path: targeted edit of existing document ──────────────────
+        // ── Selection of System Prompt ────────────────────────────────────────
         let systemPrompt;
-        if (intent === 'ANALYZE' || intent === 'COMPARE') {
+        if (docType === 'dashboard') {
+            // Dashboard always uses Architect prompt for high-end visual structure
+            systemPrompt = `You are the Nurotra Dashboard Architect.
+            MISSION: Generate a high-end, responsive Dashboard JSON structure specifically tailored to the user's prompt and any provided context/data.
+        
+        INTELLIGENCE RULES:
+        1. CONTEXTUAL DESIGN: Analyze the specific questions, categories, and data in the prompt and conversation history. The dashboard title, fileName, and widgets MUST directly address these items.
+        2. SMART REPRESENTATION (CHART SELECTION):
+           * Line Charts: Time-series, trends, or growth over months/years.
+           * Bar Graphs: Categorical comparisons (e.g., Performance across regions).
+           * Pie Charts: Distributions or market shares.
+           * Area Charts: Cumulative volume or growth trends.
+           * Radar Charts: Multi-axis comparisons (5+ axes like Speed, Quality, Cost).
+           * Composed Charts: Comparing two metrics on same axis — use "value" AND "valueSecondary".
+           * KPI Cards: High-level "North Star" metrics (e.g., Net Profit).
+           * Map Widgets: Geographic data (countries/cities/regions) — type MUST be "map" (NOT "chart").
+           * Tables: Multi-attribute listings (e.g., Top 10 Suppliers).
+        3. "theme" field is MANDATORY. Pick one: "Midnight Gold", "Cyber Teal", "Executive Blue", "Modern", "Luxury", or "Vibrant".
+        4. REALISTIC DATA: Extract REAL data from the prompt. If none available, mock realistic industry-specific values.
+        5. Ensure charts have enough data points (6-12) to look professional.
+        6. Use at least 3 DIFFERENT widget types per dashboard.
+        
+        DASHBOARD SCHEMA:
+        {
+          "intent": "${intent}",
+          "generation": {
+            "type": "dashboard",
+            "data": {
+              "fileName": "[Specific_Domain_Name].json",
+              "title": "[High_End_Analytical_Title]",
+              "theme": "[Selected_Theme]",
+              "layout": "grid",
+              "widgets": [
+                {
+                  "type": "kpi",
+                  "title": "[Metric_Name]",
+                  "value": "[Calculated_Value]", 
+                  "change": "[Percent_Change]",
+                  "trend": "up|down",
+                  "icon": "DollarSign|TrendingUp|Package|AlertTriangle|Truck|Users"
+                },
+                {
+                  "type": "chart",
+                  "chartType": "bar|line|pie|area|radar|composed",
+                  "title": "[Chart_Title]",
+                  "description": "[Insight]",
+                  "data": [{ "name": "[Label]", "value": 0, "valueSecondary": 0 }]
+                },
+                {
+                  "type": "map",
+                  "title": "[Geographic_Title]",
+                  "description": "[Geographic_Insight]",
+                  "data": [{ "region": "[Country/City]", "value": 0, "label": "[Formatted_Value]" }]
+                },
+                {
+                  "type": "table",
+                  "title": "[Table_Title]",
+                  "headers": ["[Header_1]", "[Header_2]"],
+                  "rows": [["[Value_1]", "[Value_2]"]]
+                }
+              ]
+            }
+          }
+        }
+        
+        CRITICAL: Output ONLY valid JSON. 
+        NEVER use placeholder text like "Metric Name" or "Chart Title". 
+        EVERY widget MUST handle a specific question or data point found in the prompt or history.
+        GENERATE 8-12 unique data points per chart to make it look professional.`;
+        } else if (intent === 'ANALYZE' || intent === 'COMPARE') {
             systemPrompt = analystPrompt;
         } else if (currentDoc && (intent === 'MODIFY' || preParsed?.hasOpenDoc)) {
             const existingStructure = currentDoc.rawStructure ? JSON.stringify(currentDoc.rawStructure) : null;
@@ -801,15 +952,15 @@ ${existingContent}
 ${existingStructure ? `\nEXISTING STRUCTURE (JSON):\n${existingStructure}` : ''}
 
 YOUR TASK:
-- Apply ONLY the changes the user requested. Do NOT regenerate the whole document from scratch.
-- Preserve all existing sections, text, and structure that were NOT mentioned in the request.
-- If the user says "add a section about X", add it. If they say "rename the title", rename only the title. If they say "make it shorter", condense — do not change unrelated sections.
+- Apply ONLY the changes requested based on the prompt and conversation history.
+- Preserve all existing sections, text, and structure that were NOT mentioned.
+- If modifying a dashboard, focus on adding/updating widgets that answer the current query.
 - Return the COMPLETE updated document wrapped in the required JSON envelope.
 
 REQUIRED JSON ENVELOPE:
 {
   "intent": "MODIFY",
-  "text": "Brief summary of what was changed (e.g. 'Added a new section about marketing goals')",
+  "text": "Summary of changes",
   "generation": {
     "type": "${docType}",
     "data": { ... your updated document data ... }
@@ -817,11 +968,11 @@ REQUIRED JSON ENVELOPE:
 }
 
 CRITICAL RULES:
-- Output ONLY valid JSON. No markdown fences.
+        - Output ONLY valid JSON.No markdown fences.
 - Use the SAME fileName as the original: "${currentDoc.name || 'document.docx'}"
-- Keep all existing sections intact unless explicitly asked to change them.
+            - Keep all existing sections intact unless explicitly asked to change them.
 
-${formatInstructions}`;
+                ${formatInstructions} `;
         } else {
             // ── CREATE path: generate a brand new document ────────────────────
             systemPrompt = `You are the Nurotra Content Architect.
@@ -831,13 +982,16 @@ ${formatInstructions}`;
 
         CRITICAL RULES:
         - Output ONLY valid JSON.
-        - GENERATE COMPLETE, PROFESSIONAL CONTENT. Avoid saying "[Insert content here]".
-        - If a section is requested, write the full content for it.
-
+        - GENERATE COMPLETE, PROFESSIONAL CONTENT.
         ${formatInstructions}`;
         }
 
-        const userPrompt = `Request: "${prompt}"`;
+        // Build User Prompt with full History Context
+        const historyContext = history && history.length > 0
+            ? `\nCONVERSATION HISTORY (FOR CONTEXT):\n${history.map(h => `${h.role.toUpperCase()}: ${h.content}`).join('\n')}\n`
+            : "";
+
+        const userPrompt = `${historyContext}\nCURRENT REQUEST: "${prompt}"\n\nCRITICAL: If the current request refers to "given data" or "previous information", use the CONVERSATION HISTORY above to extract that data.`;
         let rawResponse = await generateWithFallback(userPrompt, systemPrompt);
 
         let cleanJson = rawResponse.replace(/```json/gi, "").replace(/```/g, "").replace(/^[^[{]*/, "").replace(/[^\]}]*$/, "").trim();
@@ -852,7 +1006,7 @@ ${formatInstructions}`;
         if (parsed?.generation?.type === 'word' && parsed.generation.data?.sections) {
             parsed.generation.data.sections.forEach(sec => {
                 if (!sec.blocks || sec.blocks.length === 0) {
-                    sec.blocks = [{ type: 'paragraph', text: `Detailed analysis of ${sec.heading} will follow standard professional guidelines.`, style: { italic: true } }];
+                    sec.blocks = [{ type: 'paragraph', text: `Detailed analysis of ${sec.heading}.`, style: { italic: true } }];
                 }
             });
         }
@@ -861,56 +1015,37 @@ ${formatInstructions}`;
             parsed.generation.data.slides.forEach((slide, idx) => {
                 if (!slide.title) slide.title = `Slide ${idx + 1}`;
                 if (!slide.bullets || slide.bullets.length === 0) {
-                    slide.bullets = ["Professional synthesis of key narrative points.", "Supporting evidence and strategic alignment."];
+                    slide.bullets = ["Professional synthesis of key narrative points."];
                 }
             });
         }
 
         // =====================================================================
-        // ROBUST IMAGE SOURCING: Scan all sections/blocks for missing URLs
+        // ROBUST IMAGE SOURCING
         // =====================================================================
         if (parsed?.generation?.data?.sections || parsed?.generation?.data?.slides) {
             const visualItems = [];
-
-            // Collect blocks needing images
             if (parsed.generation.data.sections) {
                 parsed.generation.data.sections.forEach(sec => {
                     if (sec.blocks) {
                         sec.blocks.forEach(block => {
-                            if (block.type === 'image') {
-                                const isPlaceholder = !block.url || block.url.includes('nurotra.com') || block.url.includes('example.com') || block.url.includes('placeholder');
-                                if (isPlaceholder) {
-                                    visualItems.push({ block, query: block.caption || sec.heading || "Professional background" });
-                                }
+                            if (block.type === 'image' && (!block.url || block.url.includes('placeholder'))) {
+                                visualItems.push({ block, query: block.caption || sec.heading || "Professional background" });
                             }
                         });
                     }
                 });
             }
-
-            // Collect slides needing images
             if (parsed.generation.data.slides) {
                 parsed.generation.data.slides.forEach(slide => {
-                    const isPlaceholder = !slide.image_url || slide.image_url.includes('nurotra.com') || slide.image_url.includes('example.com') || slide.image_url.includes('placeholder');
-                    if (isPlaceholder || slide.title.toLowerCase().includes('image')) {
+                    if (!slide.image_url || slide.image_url.includes('placeholder')) {
                         visualItems.push({ slide, query: slide.title || "Business presentation" });
                     }
                 });
             }
 
-            // Source images for identified items
-            if (visualItems.length > 0 || parsed.visual_intent === 'IMAGE_GEN') {
+            if (visualItems.length > 0) {
                 try {
-                    console.log(`[DocsAgent] Found ${visualItems.length} items needing images.`);
-
-                    // Main image query (from top level or first identified item)
-                    const mainQuery = parsed.generation.image_query || parsed.generation.image_prompt || (visualItems.length > 0 ? visualItems[0].query : prompt);
-
-                    // A. Source main image for top-level generation data
-                    const mainUrl = await searchImageFromUnsplash(mainQuery);
-                    if (mainUrl) parsed.generation.image_url = mainUrl;
-
-                    // B. Fill missing/placeholder URLs in blocks (Awaited concurrently)
                     await Promise.all(visualItems.map(async item => {
                         const itemUrl = await searchImageFromUnsplash(item.query);
                         if (itemUrl) {
@@ -927,7 +1062,7 @@ ${formatInstructions}`;
         return parsed;
     } catch (error) {
         console.error("Docs Agent Execution Error:", error.message);
-        return { intent: "QUERY", text: "I encountered an issue processing your request. Please try again or rephrase your prompt." };
+        return { intent: "QUERY", text: "I encountered an issue. Please try again." };
     }
 };
 

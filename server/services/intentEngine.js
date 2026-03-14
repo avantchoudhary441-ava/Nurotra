@@ -7,10 +7,11 @@ const INTENT_WEIGHTS = {
     CREATE: { keywords: ['create', 'make', 'generate', 'build', 'new', 'start', 'prepare', 'write', 'draft', 'compose', 'structure', 'arrange'], weight: 1.0 },
     MODIFY: { keywords: ['edit', 'change', 'update', 'fix', 'refine', 'revise', 'modify', 'calculate', 'sum', 'average', 'addition', 'math', 'total', 'arithmetic', 'correct', 'improve', 'enhance', 'add', 'include', 'insert', 'append', 'remove section', 'rename', 'replace', 'rewrite section', 'expand', 'shorten', 'make it', 'adjust'], weight: 0.9 },
     QUERY: { keywords: ['what', 'how', 'who', 'analyze', 'explain', 'search', 'tell me', 'find', 'lookup', 'research'], weight: 0.8 },
-    ANALYZE: { keywords: ['analyze', 'summarize', 'extract', 'insights', 'points', 'statistics', 'key concepts', 'summary', 'report', 'detailed summary', 'short summary', 'intelligence'], weight: 1.2 },
+    ANALYZE: { keywords: ['analyze', 'summarize', 'extract', 'insights', 'points', 'statistics', 'key concepts', 'summary', 'report', 'detailed summary', 'short summary'], weight: 0.8 },
     COMPARE: { keywords: ['compare', 'similarities', 'differences', 'trends', 'relationships', 'versus', 'vs', 'contrast', 'comparison', 'cross-reference', 'side by side'], weight: 1.5 },
     DATA_OP: { keywords: ['merge', 'sort', 'filter', 'calculate', 'clean', 'duplicate', 'sum', 'average', 'tally'], weight: 1.0 },
     CONVERT: { keywords: ['turn into', 'convert', 'summarize to', 'transform', 'translate', 'export'], weight: 1.0 },
+    DASHBOARD: { keywords: ['dashboard', 'kpi', 'monitor', 'report card', 'metrics', 'visualization', 'power bi', 'analytics board', 'trends', 'performance', 'stats', 'widgets', 'data board', 'insights board'], weight: 1.5 },
 };
 
 const CATEGORY_MAP = {
@@ -66,6 +67,14 @@ const ADVANCED_OPS_MAP = {
         'graph', 'chart', 'plot', 'bar chart', 'pie chart', 'line graph',
         'visualize data', 'create a chart', 'draw a graph', 'show statistics'
     ],
+    PREMIUM_DESIGN: [
+        'premium', 'luxury', 'modern design', 'minimalist', 'vibrant', 'corporate',
+        'creative', 'sleek', 'elegant', 'professional look', 'high-end', 'beautiful'
+    ],
+    ADVANCED_LAYOUTS: [
+        'comparison', 'side by side', 'quadrant', 'swot', 'timeline', 'milestone',
+        'big fact', 'metric highlight', 'title slide', 'cover slide'
+    ],
 };
 
 /**
@@ -79,6 +88,7 @@ const detectDocType = (prompt) => {
         word: ['word document', 'word file', 'docx', '.doc', 'word doc', 'annual report', 'company overview', 'policy document', 'standard operating procedure'],
         ppt: ['powerpoint', 'presentation', 'slide deck', 'pptx', ' ppt '],
         excel: ['excel', 'spreadsheet', 'xlsx', 'csv file', 'workbook'],
+        dashboard: ['dashboard', 'power bi', 'analytics board', 'report card', 'kpi board', 'metrics', 'visualization', 'measure performance', 'track growth', 'business health', 'sales analytics', 'inventory monitor', 'logistics board', 'financial risk board', 'profitability board', 'performance metrics', 'power bi source', 'pbi model', 'dashboard source', 'analytical board'],
     };
     for (const [t, keywords] of Object.entries(explicitMap)) {
         if (keywords.some(kw => lowerPrompt.includes(kw))) {
@@ -110,7 +120,7 @@ const detectDocType = (prompt) => {
         return { type: 'excel', confidence: 0.9 };
     }
 
-    return { type: 'word', confidence: 0.5 };
+    return { type: 'word', confidence: 0.4 };
 };
 
 /**
@@ -145,12 +155,13 @@ const detectRisk = (prompt) => {
 /**
  * Generate smart filename and category
  */
-const generateMetadata = (prompt, overrideIntent = null, overrideCategory = null) => {
+const generateMetadata = (prompt, overrideIntent = null, overrideCategory = null, overrideDocType = null) => {
     const lowerPrompt = prompt.toLowerCase();
 
     const { intent: baseIntent, confidence } = classifyIntent(prompt);
     const intent = overrideIntent || baseIntent;
-    const { type } = detectDocType(prompt);
+    const { type: baseType } = detectDocType(prompt);
+    const type = overrideDocType || baseType;
 
     // Detect Category
     let category = overrideCategory || 'General';
@@ -186,7 +197,7 @@ const generateMetadata = (prompt, overrideIntent = null, overrideCategory = null
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     nameParts.push(`${months[now.getMonth()]}${now.getDate()}`);
 
-    const ext = type === 'ppt' ? '.pptx' : (type === 'excel' ? '.xlsx' : '.docx');
+    const ext = type === 'ppt' ? '.pptx' : (type === 'excel' ? '.xlsx' : (type === 'dashboard' ? '.json' : '.docx'));
 
     return {
         name: `${nameParts.join('_')}${ext}`,
@@ -283,19 +294,24 @@ const classifyIntent = (prompt) => {
 const contextualClassifyIntent = (prompt, hasOpenDoc = false, selectedDocCount = 0) => {
     const result = classifyIntent(prompt);
 
+    // Explicit CREATE signals should always override background context
+    const strongCreateSignals = ['create', 'make', 'generate', 'build', 'new', 'start', 'prepare', 'draft', 'compose', 'ppt', 'powerpoint', 'excel', 'word', 'presentation'];
+    const lowerPrompt = prompt.toLowerCase();
+    const hasStrongCreate = strongCreateSignals.some(kw => lowerPrompt.includes(kw));
+
+    if (hasStrongCreate) {
+        return { intent: 'CREATE', confidence: 1.0 };
+    }
+
     // If multiple documents are selected, strongly suggest COMPARE or ANALYZE
-    if (selectedDocCount > 1) {
+    // but only if NO strong CREATE signal is present
+    if (selectedDocCount > 1 && !hasStrongCreate) {
         if (result.intent === 'MODIFY' || result.intent === 'CREATE' || result.intent === 'QUERY') {
             const compareSignals = INTENT_WEIGHTS.COMPARE.keywords.some(kw => prompt.toLowerCase().includes(kw));
             if (compareSignals) return { intent: 'COMPARE', confidence: 0.95 };
             return { intent: 'ANALYZE', confidence: 0.9 };
         }
     }
-
-    // Strong CREATE signals — user explicitly wants something new
-    const strongCreateSignals = ['create', 'make', 'generate', 'build', 'new', 'start', 'prepare', 'draft', 'compose'];
-    const lowerPrompt = prompt.toLowerCase();
-    const hasStrongCreate = strongCreateSignals.some(kw => lowerPrompt.includes(kw));
 
     // If a doc is open and there's no explicit "create new" signal, treat as MODIFY
     if (hasOpenDoc && !hasStrongCreate && result.intent !== 'QUERY') {

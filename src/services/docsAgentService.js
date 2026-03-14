@@ -250,7 +250,9 @@ export const docsAgentService = {
                 }
             } else if (format && !finalName.toLowerCase().endsWith('.' + format)) {
                 // Heuristic: if header is missing, at least try to append correct extension
-                finalName = finalName.split('.')[0] + '.' + format;
+                const extensionMap = { pbi: 'xlsx' };
+                const ext = extensionMap[format] || format;
+                finalName = finalName.split('.')[0] + '.' + ext;
             }
 
             console.log(`[docsAgentService] Triggering download with name: ${finalName}`);

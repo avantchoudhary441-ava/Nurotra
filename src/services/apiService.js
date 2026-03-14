@@ -8,6 +8,7 @@ const API_URL = `${BASE_URL}/api/auth`;
 // Create axios instance
 const api = axios.create({
     baseURL: `${BASE_URL}/api`,
+    timeout: 600000, // 10 minutes for long AI generation tasks
 });
 
 // Add token to headers if it exists
