@@ -1,0 +1,183 @@
+﻿
+> server@1.0.0 dev
+> nodemon server.js
+
+[33m[nodemon] 3.1.11[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node server.js`[39m
+[dotenv@17.2.3] injecting env (18) from .env -- tip: ΓÜÖ∩╕Å  override existing env vars with { override: true }
+node.exe : node:interna
+l/modules/cjs/loader:14
+24
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+~~
+    + CategoryInfo     
+         : 
+NotSpecified: (node:in 
+   ternal/modules/cjs/l
+oade    r:1424:String) 
+[], Remot    eException
+    + 
+FullyQualifiedErrorId  
+   : NativeCommandError
+ 
+  throw err;
+  ^
+
+Error: Cannot find 
+module 'pdf-parse'
+Require stack:
+- C:\Users\Avant\OneDri
+ve\Desktop\Nurotra\serv
+er\utils\documentParser
+.js
+- C:\Users\Avant\OneDri
+ve\Desktop\Nurotra\serv
+er\routes\uploadRoutes.
+js
+- C:\Users\Avant\OneDri
+ve\Desktop\Nurotra\serv
+er\server.js
+    at Module._resolveF
+ilename (node:internal/
+modules/cjs/loader:1421
+:15)
+    at 
+defaultResolveImpl (nod
+e:internal/modules/cjs/
+loader:1059:19)
+    at 
+resolveForCJSWithHooks 
+(node:internal/modules/
+cjs/loader:1064:22)
+    at Module._load (no
+de:internal/modules/cjs
+/loader:1227:37)
+    at TracingChannel.t
+raceSync (node:diagnost
+ics_channel:328:14)
+    at wrapModuleLoad (
+node:internal/modules/c
+js/loader:245:24)
+    at Module.require (
+node:internal/modules/c
+js/loader:1504:12)
+    at require (node:in
+ternal/modules/helpers:
+152:16)
+    at 
+Object.<anonymous> (C:\
+Users\Avant\OneDrive\De
+sktop\Nurotra\server\ut
+ils\documentParser.js:1
+:13)
+    at Module._compile 
+(node:internal/modules/
+cjs/loader:1761:14) {
+  code: 
+'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\Avant\\
+OneDrive\\Desktop\\Nuro
+tra\\server\\utils\\doc
+umentParser.js',
+    'C:\\Users\\Avant\\
+OneDrive\\Desktop\\Nuro
+tra\\server\\routes\\up
+loadRoutes.js',
+    'C:\\Users\\Avant\\
+OneDrive\\Desktop\\Nuro
+tra\\server\\server.js'
+  ]
+}
+
+Node.js v24.12.0
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting child process[39m
+[32m[nodemon] starting `node server.js`[39m
+[dotenv@17.2.3] injecting env (18) from .env -- tip: ΓÜÖ∩╕Å  write to custom object with { processEnv: myObject }
+node:internal/modules/c
+js/loader:1424
+  throw err;
+  ^
+
+Error: Cannot find 
+module 'pdf-parse'
+Require stack:
+- C:\Users\Avant\OneDri
+ve\Desktop\Nurotra\serv
+er\utils\documentParser
+.js
+- C:\Users\Avant\OneDri
+ve\Desktop\Nurotra\serv
+er\routes\uploadRoutes.
+js
+- C:\Users\Avant\OneDri
+ve\Desktop\Nurotra\serv
+er\server.js
+    at Module._resolveF
+ilename (node:internal/
+modules/cjs/loader:1421
+:15)
+    at 
+defaultResolveImpl (nod
+e:internal/modules/cjs/
+loader:1059:19)
+    at 
+resolveForCJSWithHooks 
+(node:internal/modules/
+cjs/loader:1064:22)
+    at Module._load (no
+de:internal/modules/cjs
+/loader:1227:37)
+    at TracingChannel.t
+raceSync (node:diagnost
+ics_channel:328:14)
+    at wrapModuleLoad (
+node:internal/modules/c
+js/loader:245:24)
+    at Module.require (
+node:internal/modules/c
+js/loader:1504:12)
+    at require (node:in
+ternal/modules/helpers:
+152:16)
+    at 
+Object.<anonymous> (C:\
+Users\Avant\OneDrive\De
+sktop\Nurotra\server\ut
+ils\documentParser.js:1
+:13)
+    at Module._compile 
+(node:internal/modules/
+cjs/loader:1761:14) {
+  code: 
+'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\Avant\\
+OneDrive\\Desktop\\Nuro
+tra\\server\\utils\\doc
+umentParser.js',
+    'C:\\Users\\Avant\\
+OneDrive\\Desktop\\Nuro
+tra\\server\\routes\\up
+loadRoutes.js',
+    'C:\\Users\\Avant\\
+OneDrive\\Desktop\\Nuro
+tra\\server\\server.js'
+  ]
+}
+
+Node.js v24.12.0
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+^C

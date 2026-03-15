@@ -1,0 +1,96 @@
+{
+  "intent": "CREATE",
+  "text": "This presentation explores the significance of critical thinking in the digital age, addressing challenges and offering strategies for improvement.",
+  "generation": {
+    "type": "ppt",
+    "data": {
+      "fileName": "Critical_Thinking_Digital_Age.pptx",
+      "title": "The Importance of Critical Thinking in the Digital Age",
+      "theme": "Modern",
+      "accentColor": "#FF5733",
+      "backgroundColor": "#1A1A1A",
+      "bgGradient": "#333333",
+      "fontFace": "Montserrat",
+      "slides": [
+        {
+          "title": "The Importance of Critical Thinking in the Digital Age",
+          "layoutType": "TITLE_COVER",
+          "bullets": [],
+          "imageQuery": "digital age concept",
+          "speakerNotes": "Introduce the topic and set the stage for the presentation."
+        },
+        {
+          "title": "Introduction to Critical Thinking",
+          "layoutType": "THREE_COLUMNS",
+          "threeColumns": [
+            {
+              "title": "Definition",
+              "text": "Analyzing facts"
+            },
+            {
+              "title": "Relevance",
+              "text": "Essential today"
+            },
+            {
+              "title": "Skills",
+              "text": "Evaluation, reasoning"
+            }
+          ],
+          "imageQuery": "critical thinking concept",
+          "speakerNotes": "Explain what critical thinking is and its importance in today's world."
+        },
+        {
+          "title": "Key Problems in the Digital Age",
+          "layoutType": "DIAGONAL_SPLIT",
+          "bullets": [
+            "Misinformation",
+            "Information overload",
+            "AI content"
+          ],
+          "imageQuery": "digital challenges",
+          "speakerNotes": "Discuss the challenges posed by the digital age that necessitate critical thinking."
+        },
+        {
+          "title": "Benefits of Critical Thinking",
+          "layoutType": "BIG_FACT",
+          "bullets": [
+            "Better decisions",
+            "Enhanced learning",
+            "Fosters innovation"
+          ],
+          "imageQuery": "benefits of critical thinking",
+          "speakerNotes": "Highlight the advantages of applying critical thinking skills."
+        },
+        {
+          "title": "Practical Strategies",
+          "layoutType": "PROCESS_FLOW",
+          "processFlow": [
+            {
+              "label": "Question assumptions",
+              "detail": "Challenge norms"
+            },
+            {
+              "label": "Analyze information",
+              "detail": "Evaluate sources"
+            },
+            {
+              "label": "Reflect",
+              "detail": "Consider perspectives"
+            }
+          ],
+          "imageQuery": "strategies for critical thinking",
+          "speakerNotes": "Provide actionable strategies to develop critical thinking skills."
+        },
+        {
+          "title": "Conclusion",
+          "layoutType": "QUOTE",
+          "bullets": [
+            "Think critically, act wisely"
+          ],
+          "imageQuery": "summary of critical thinking",
+          "speakerNotes": "Summarize the key takeaways and reinforce the importance of critical thinking."
+        }
+      ]
+    }
+  }
+}
