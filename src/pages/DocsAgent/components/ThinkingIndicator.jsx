@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ThinkingIndicator = () => {
+const ThinkingIndicator = ({ message = "Nurotra is thinking..." }) => {
     return (
         <div className="thinking-indicator">
             <div className="thinking-leaf">
@@ -14,7 +14,7 @@ const ThinkingIndicator = () => {
                     </defs>
                 </svg>
             </div>
-            <span>Nurotra is thinking...</span>
+            <span>{message}</span>
         </div>
     );
 };

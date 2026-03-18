@@ -869,5 +869,6 @@ Respond ONLY with the JSON object.`;
 module.exports = {
     runDocumentAnalysis,
     detectAnalysisIntent,
-    buildDocumentSet
+    buildDocumentSet,
+    callPythonAnalysisEngine
 };

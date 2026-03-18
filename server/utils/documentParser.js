@@ -1,4 +1,5 @@
-const pdf = require('pdf-parse');
+let pdf = require('pdf-parse');
+if (pdf.default) pdf = pdf.default;
 const mammoth = require('mammoth');
 const axios = require('axios');
 
@@ -15,10 +16,37 @@ const parsePDF = async (source) => {
             buffer = source;
         }
 
-        const data = await pdf(buffer);
-        return data.text.trim();
+        let data;
+        try {
+            if (typeof pdf === 'function') {
+                data = await pdf(buffer);
+            } else if (pdf && typeof pdf.PDFParse === 'function') {
+                // Check if it's a class/constructor
+                try {
+                    data = await new pdf.PDFParse(buffer);
+                } catch (e) {
+                    if (e.message.includes("Class constructor")) {
+                        const instance = new pdf.PDFParse();
+                        data = await instance.parse(buffer);
+                    } else {
+                        throw e;
+                    }
+                }
+            } else if (pdf && typeof pdf.parse === 'function') {
+                data = await pdf.parse(buffer);
+            } else {
+                throw new Error('PDF parsing library is not correctly loaded as a function or recognized object.');
+            }
+        } catch (innerError) {
+            console.error('[PDF Parser] Execution error:', innerError.message);
+            throw innerError;
+        }
+        if (!data || !data.text) {
+            console.warn('[PDF Parser] Warning: pdf-parse returned empty text for buffer of size:', buffer.length);
+        }
+        return data.text ? data.text.trim() : '';
     } catch (error) {
-        console.error('PDF Parsing Error:', error);
+        console.error('PDF Parsing Error (CRITICAL):', error.message);
         return '';
     }
 };

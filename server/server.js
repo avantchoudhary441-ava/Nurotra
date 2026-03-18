@@ -14,8 +14,8 @@ app.set("trust proxy", 1);
 // Middleware
 app.use(helmet());
 app.use(compression());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 // Production CORS Configuration
 const allowedOrigins = [
     "http://localhost:5173",
@@ -52,7 +52,7 @@ app.use(cors({
 // Rate Limiting
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 1000,
     message: "Too many requests, please try again later."
 });
 app.use("/api/", apiLimiter);

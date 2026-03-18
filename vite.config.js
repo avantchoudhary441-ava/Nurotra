@@ -3,10 +3,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import Icons from 'unplugin-icons/vite';
 
 export default defineConfig({
   plugins: [
     react(),
+    Icons({
+      compiler: 'react',
+    }),
     nodePolyfills({
       // Whether to polyfill `global` variable
       global: true,

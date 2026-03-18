@@ -77,15 +77,20 @@ const generateWithOpenAI = async (prompt, systemPrompt = "", images = []) => {
     }
 };
 
+const crypto = require("crypto");
+
 /**
  * Main Generation Entry Point
  * Now prioritizes OpenAI with Gemini reservoir as fallback.
- * @param {string} prompt - The user prompt
- * @param {string} systemPrompt - Optional system context
  * @param {Array} images - Optional array of { mimeType: string, data: base64 } objects
+ * @param {Array} multimedia - Optional array of { mimeType: string, data: base64 } for PDFs, etc.
  */
-const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
-    const cacheKey = Buffer.from(prompt + systemPrompt + (images.length > 0 ? images[0].data.substring(0, 20) : '')).toString('base64').substring(0, 32);
+const generateWithFallback = async (prompt, systemPrompt = "", images = [], multimedia = []) => {
+    // Generate a unique cache key based on the full prompt and system prompt
+    const mmSample = multimedia.map(m => (m.data && typeof m.data === 'string') ? m.data.substring(0, 100) : (m.hint || '')).join('');
+    const hashData = `${prompt}|${systemPrompt}|${images.length > 0 ? (images[0].data ? images[0].data.substring(0, 50) : '') : ''}|${mmSample}`;
+    const cacheKey = crypto.createHash('md5').update(hashData).digest('hex');
+
     if (responseCache.has(cacheKey) && images.length === 0) {
         const cached = responseCache.get(cacheKey);
         if (Date.now() - cached.timestamp < CACHE_TTL) {
@@ -94,17 +99,22 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
     }
 
     // Attempt OpenAI First (Primary Engine)
-    if (openai) {
+    // CRITICAL: Skip OpenAI if multimedia (PDF) is present, as OpenAI doesn't support native PDF bits in Chat API.
+    if (openai && (!multimedia || multimedia.length === 0)) {
         try {
             console.log(`[AI Service] Attempting delivery via OpenAI (Primary)... ${images.length > 0 ? '[Vision Mode]' : ''}`);
             const text = await generateWithOpenAI(prompt, systemPrompt, images);
             if (text) {
-                if (images.length === 0) responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                if (images.length === 0 && (!multimedia || multimedia.length === 0)) {
+                    responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                }
                 return text;
             }
         } catch (openAiError) {
             console.warn('[AI Service] OpenAI Primary failed, falling back to Gemini Reservoir.');
         }
+    } else if (multimedia && multimedia.length > 0) {
+        console.log(`[AI Service] Multimedia detected (PDFs). Prioritizing Gemini Native Grounding.`);
     }
 
     const apiKeys = getApiKeys();
@@ -150,6 +160,32 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
                         });
                     }
 
+                    // Native Multimedia Support (PDF, etc.)
+                    if (multimedia && multimedia.length > 0) {
+                        multimedia.forEach(mm => {
+                            if (mm.data) {
+                                const dataSizeMB = (mm.data.length * 0.75) / (1024 * 1024);
+                                console.log(`[AI Service] Attaching PDF: ${mm.fileName || 'unnamed'} (${dataSizeMB.toFixed(2)} MB)`);
+                                
+                                // Hard limit: 70MB per part to avoid Node.js buffer issues
+                                if (dataSizeMB > 70) {
+                                    console.warn(`[AI Service] PDF ${mm.fileName} is too large (${dataSizeMB.toFixed(2)} MB). Skipping full data.`);
+                                    parts.push({ text: `[SYSTEM NOTE: PDF file ${mm.fileName} was too large for full ingestion. Focus on the user's prompt and provided snippets.]` });
+                                } else {
+                                    parts.push({
+                                        inline_data: {
+                                            mime_type: mm.mimeType || "application/pdf",
+                                            data: mm.data
+                                        }
+                                    });
+                                }
+                            } else if (mm.hint) {
+                                // Optimized: Just pass the hint if full data is skipped for this stage
+                                parts.push({ text: `[CONTEXT HINT]: ${mm.hint}` });
+                            }
+                        });
+                    }
+
                     parts.push({ text: prompt });
 
                     const response = await axios.post(url, {
@@ -158,6 +194,10 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = []) => {
                             responseMimeType: "application/json",
                             maxOutputTokens: 8192
                         }
+                    }, {
+                        maxContentLength: 200 * 1024 * 1024,
+                        maxBodyLength: 200 * 1024 * 1024,
+                        timeout: 90000 // 90 seconds for large PDFs
                     });
 
                     if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
@@ -613,6 +653,10 @@ const processDocsAgentQuery = async (prompt, userContext, history = [], preParse
 
         const lengthPref = detectLength(prompt);
 
+        // Extract numeric slide count if present (e.g., "10-14 slides" -> 14)
+        const slideMatch = prompt.match(/(\d+)\s*-\s*(\d+)\s*slides?/i) || prompt.match(/(\d+)\s*slides?/i);
+        const targetSlideCount = slideMatch ? (slideMatch[2] || slideMatch[1]) : (lengthPref === 'DETAILED' ? 12 : lengthPref === 'MEDIUM' ? 7 : 4);
+
         // =====================================================================
         // ADVANCED WORD OPERATIONS: Buildable Prompt Blocks
         // =====================================================================
@@ -783,6 +827,8 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
         2. MULTI-LAYOUT SUITE (MANDATORY VARIETY):
            - NEVER use "BULLETS" for more than 2 consecutive slides.
            - FORCE at least 3 different layout types in every deck.
+           - Avoid overlapping elements: Titles must be distinct from body text.
+           - CONTENT DEPTH: Each slide MUST contain at least 2 detailed points/bullets. 
            - "TITLE_COVER": High-impact first slide. 
            - "BULLETS": Use only for simple lists.
            - "THREE_COLUMNS": Use for features, benefits, or three distinct pillars.
@@ -805,40 +851,43 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
            - "fontFace": "Montserrat" | "Open Sans" | "Helvetica" | "Verdana".
 
         4. SCHEMA:
-        {
-          "intent": "${intent}",
-          "text": "Executive Narrative about the deck.",
-          "generation": {
-            "type": "ppt",
-            "data": {
-              "fileName": "Project_Presentation.pptx",
-              "title": "Presentation Header",
-              "theme": "Modern",
-              "accentColor": "#00CEC9",
-              "backgroundColor": "#2D3436",
-              "bgGradient": "#0F2027",
-              "fontFace": "Montserrat",
-              "slides": [
-                { 
-                  "title": "Slide Title",
-                  "layoutType": "TITLE_COVER" | "THREE_COLUMNS" | "DIAGONAL_SPLIT" | "DATA_GRID" | "BULLETS" | "BIG_FACT" | "TIMELINE",
-                  "bullets": ["Point 1", "Point 2"],
-                  "threeColumns": [
-                    { "title": "Column 1", "text": "Detail" },
-                    { "title": "Column 2", "text": "Detail" },
-                    { "title": "Column 3", "text": "Detail" }
-                  ],
-                  "dataGrid": [
-                    { "label": "Label 1", "value": "Value 1" },
-                    { "label": "Label 2", "value": "Value 2" }
-                  ],
-                  "imageQuery": "business strategy meeting",
-                  "speakerNotes": "Details for the presenter..." 
-                }
-              ]
-            }
-          }
-        }`;
+         {
+           "intent": "${intent}",
+           "text": "Executive Narrative about the deck.",
+           "generation": {
+             "type": "ppt",
+             "data": {
+               "fileName": "Project_Presentation.pptx",
+               "title": "Presentation Header",
+               "theme": "Modern",
+               "accentColor": "#00CEC9",
+               "backgroundColor": "#2D3436",
+               "bgGradient": "#0F2027",
+               "fontFace": "Montserrat",
+               "slides": [
+                 { 
+                   "title": "Slide Title",
+                   "layoutType": "TITLE_COVER" | "THREE_COLUMNS" | "DIAGONAL_SPLIT" | "DATA_GRID" | "BULLETS" | "BIG_FACT" | "TIMELINE",
+                   "bullets": ["Point 1", "Point 2"],
+                   "threeColumns": [
+                     { "title": "Column 1", "text": "Detail" },
+                     { "title": "Column 2", "text": "Detail" },
+                     { "title": "Column 3", "text": "Detail" }
+                   ],
+                   "dataGrid": [
+                     { "label": "Label 1", "value": "Value 1" },
+                     { "label": "Label 2", "value": "Value 2" }
+                   ],
+                   "imageQuery": "business strategy meeting",
+                   "speakerNotes": "Details for the presenter..." 
+                 }
+               ]
+             }
+           }
+         }
+         
+         CRITICAL RULE: This is a ${lengthPref} deck. TARGET SLIDE COUNT: ${targetSlideCount} SLIDES.
+         You MUST generate EXACTLY ${targetSlideCount} slide objects. Do not summarize.`;
         }
 
         if (docType === 'word' || advancedOps.some(op => ['VISUAL_GENERATION', 'DATA_VISUALIZATION'].includes(op))) {
@@ -846,26 +895,26 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
         }
 
         // ── Analytical path: extract insights across documents ────────────────
-        const analystPrompt = `You are the Nurotra Intelligence Analyst. Your goal is to extract deep insights, compare data, and generate structured analytical reports.
-        CRITICAL: Your response MUST be a valid JSON object.
+        const analystPrompt = `You are the Nurotra Intelligence Analyst.Your goal is to extract deep insights, compare data, and generate structured analytical reports.
+                CRITICAL: Your response MUST be a valid JSON object.
         SOURCE CONTEXT:
         ${contextContent}
 
-        REQUIRED JSON SCHEMA (6 SECTIONS):
-        {
-          "intent": "${intent}",
-          "text": "Executive Narrative (markdown)",
-          "documentSummaries": [ { "name": "Doc Name", "short": "5-6 lines concise summary", "detailed": ["Bullet 1", "Bullet 2", "Bullet 3"] } ],
-          "keyInsights": { "keywords": ["key1", "key2"], "topicClustering": ["Topic A", "Topic B"], "sentiment": "Positive|Negative|Neutral", "importantSections": ["Highlighted text or section names"] },
-          "comparativeAnalysis": { "similarities": ["Sim 1", "Sim 2"], "differences": ["Diff 1", "Diff 2"], "comparisonTable": { "headers": ["Aspect", "Doc 1", "Doc 2"], "rows": [["Pricing", "$10", "$12"], ["SLA", "99%", "95%"]] } },
-          "dataTrends": { "metrics": { "Label": "Value" }, "trends": ["Trend 1", "Trend 2"], "themes": ["Theme A"] },
-          "generation": {
-             "type": "generic",
-             "visual_intent": "ANALYTICS_DASHBOARD",
-             "graph_config": { "type": "bar|line|pie", "title": "Data Visualization", "data": [{ "name": "Label", "value": 100 }, ...], "xAxisName": "Metric", "yAxisName": "Count" }
-          },
-          "finalOutcome": {
-        CRITICAL: Output ONLY valid JSON.Ensure every widget directly maps to a goal or question in the user's prompt.`;
+        REQUIRED JSON SCHEMA(6 SECTIONS):
+            {
+                "intent": "${intent}",
+                    "text": "Executive Narrative (markdown)",
+                        "documentSummaries": [{ "name": "Doc Name", "short": "5-6 lines concise summary", "detailed": ["Bullet 1", "Bullet 2", "Bullet 3"] }],
+                            "keyInsights": { "keywords": ["key1", "key2"], "topicClustering": ["Topic A", "Topic B"], "sentiment": "Positive|Negative|Neutral", "importantSections": ["Highlighted text or section names"] },
+                "comparativeAnalysis": { "similarities": ["Sim 1", "Sim 2"], "differences": ["Diff 1", "Diff 2"], "comparisonTable": { "headers": ["Aspect", "Doc 1", "Doc 2"], "rows": [["Pricing", "$10", "$12"], ["SLA", "99%", "95%"]] } },
+                "dataTrends": { "metrics": { "Label": "Value" }, "trends": ["Trend 1", "Trend 2"], "themes": ["Theme A"] },
+                "generation": {
+                    "type": "generic",
+                        "visual_intent": "ANALYTICS_DASHBOARD",
+                            "graph_config": { "type": "bar|line|pie", "title": "Data Visualization", "data": [{ "name": "Label", "value": 100 }, ...], "xAxisName": "Metric", "yAxisName": "Count" }
+                },
+                "finalOutcome": {
+                    CRITICAL: Output ONLY valid JSON.Ensure every widget directly maps to a goal or question in the user's prompt.`;
 
         // ── Selection of System Prompt ────────────────────────────────────────
         let systemPrompt;

@@ -17,6 +17,31 @@ const https = require("https");
 const http = require("http");
 const pptxgen = require("pptxgenjs");
 const ExcelJS = require('exceljs');
+
+/**
+ * Robustly fetches an image and returns it as a Base64 string for embedding.
+ * Fixes the "Red X" remote path issue in Node.js.
+ */
+const fetchImageAsBase64 = (url) => {
+    return new Promise((resolve, reject) => {
+        const client = url.startsWith('https') ? https : http;
+        client.get(url, (res) => {
+            if (res.statusCode !== 200) {
+                res.resume();
+                return resolve(null);
+            }
+            const data = [];
+            res.on('data', (chunk) => data.push(chunk));
+            res.on('end', () => {
+                const buffer = Buffer.concat(data);
+                resolve(`data:${res.headers['content-type']};base64,${buffer.toString('base64')}`);
+            });
+        }).on('error', (err) => {
+            console.error("Cloud Image Fetch Failure:", err.message);
+            resolve(null);
+        });
+    });
+};
 // dashboardExportService is now required inside generateBuffer to avoid circular dependency
 // const dashboardExportService = require('./dashboardExportService');
 
@@ -667,12 +692,12 @@ const generateExcelBuffer = async (data) => {
 
 const getPPTTheme = (themeName) => {
     const themes = {
-        'Modern': { color: '1A1A1A', accent: '00D2D3', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F5F6FA' },
-        'Corporate': { color: '2D3436', accent: '0984E3', font: 'Helvetica', bg: 'FFFFFF', altBg: 'ECF0F1' },
-        'Dark': { color: 'FFFFFF', accent: '00CEC9', font: 'Open Sans', bg: '2D3436', altBg: '1E272E' },
-        'Creative': { color: '2D3436', accent: '6C5CE7', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F8F9FA' },
-        'Luxury': { color: 'D4AF37', accent: 'D4AF37', font: 'Garamond', bg: '1A1A1A', altBg: '2D3436' },
-        'Vibrant': { color: 'FFFFFF', accent: 'FF007F', font: 'Montserrat', bg: '4834D4', altBg: '686DE0' }
+        'Modern': { color: '1A1A1A', accent: '00D2D3', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F5F6FA', headingFont: 'Montserrat', bodyFont: 'Open Sans' },
+        'Corporate': { color: '2D3436', accent: '0984E3', font: 'Helvetica', bg: 'FFFFFF', altBg: 'ECF0F1', headingFont: 'Helvetica-Bold', bodyFont: 'Helvetica' },
+        'Dark': { color: 'FFFFFF', accent: '00CEC9', font: 'Montserrat', bg: '1E272E', altBg: '2D3436', headingFont: 'Montserrat', bodyFont: 'Open Sans' },
+        'Creative': { color: '2D3436', accent: '6C5CE7', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F8F9FA', headingFont: 'Montserrat', bodyFont: 'Montserrat' },
+        'Luxury': { color: 'D4AF37', accent: 'D4AF37', font: 'Playfair Display', bg: '1A1A1A', altBg: '2D3436', headingFont: 'Playfair Display', bodyFont: 'Lora' },
+        'Vibrant': { color: 'FFFFFF', accent: 'FF007F', font: 'Montserrat', bg: '4834D4', altBg: '686DE0', headingFont: 'Montserrat', bodyFont: 'Open Sans' }
     };
     return themes[themeName] || themes['Modern'];
 };
@@ -683,171 +708,168 @@ const generatePPTBuffer = async (data) => {
     const accent = (data.accentColor || theme.accent).replace('#', '');
     const bg = (data.backgroundColor || theme.bg).replace('#', '');
     const bgGradient = data.bgGradient ? data.bgGradient.replace('#', '') : null;
-    const font = data.fontFace || theme.font;
+
+    // 0. SET MASTER SLIDE (Branding)
+    pres.defineSlideMaster({
+        title: "MASTER_SLIDE",
+        background: bgGradient
+            ? { fill: bg, type: 'gradient', color: bg, rot: 90, stop: bgGradient }
+            : { fill: bg },
+        objects: [
+            { rect: { x: 0, y: 0, w: 0.1, h: '100%', fill: { color: accent } } },
+            { text: { text: "Nurotra Intelligence Suite", options: { x: 7.5, y: 7.1, w: 2.0, fontSize: 10, color: accent, italic: true, align: 'right' } } }
+        ]
+    });
 
     if (data.slides) {
-        data.slides.forEach(s => {
-            const slide = pres.addSlide();
-
-            // 1. DYNAMIC BACKGROUND ENGINE
-            if (bgGradient) {
-                slide.background = { fill: bg, type: 'gradient', color: bg, rot: 90, stop: bgGradient };
-            } else {
-                slide.background = { fill: bg };
-            }
-
-            // Subtle Texture (Geometric Overlay)
-            slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: '100%', fill: { color: accent, alpha: 5 } });
-            slide.addShape(pres.ShapeType.ellipse, { x: -1, y: -1, w: 4, h: 4, fill: { color: accent, alpha: 10 } });
-
+        for (const s of data.slides) {
+            const slide = pres.addSlide({ masterName: "MASTER_SLIDE" });
             const layout = s.layoutType || 'BULLETS';
-            const contrastTextColor = getContrastColor('#' + bg);
-            const contrastAccentColor = getContrastColor('#' + accent);
+            const SAFE_MARGIN = 0.5;
 
-            // 1.5 LIVE IMAGE FETCHING (Phase 3)
+            // 1. HELPERS FOR DYNAMIC COMPONENTS (Sync with Local Service)
+            const addTitle = (titleText, opts = {}) => {
+                const titleColor = getContrastColor('#' + bg);
+                const finalColor = (titleColor === '#FFFFFF' && accent === 'FFFFFF') ? '00D2D3' : accent;
+                slide.addText(String(titleText || "Slide"), {
+                    x: opts.x || SAFE_MARGIN, y: opts.y || 0.4, w: opts.w || '90%', h: opts.h || 0.8,
+                    fontSize: opts.fontSize || 36, bold: true, color: finalColor,
+                    fontFace: theme.headingFont, align: opts.align || 'left', valign: 'top'
+                });
+                if (!opts.noUnderline) {
+                    slide.addShape(pres.ShapeType.rect, { x: opts.x || SAFE_MARGIN, y: (opts.y || 0.4) + 0.7, w: 3.0, h: 0.05, fill: { color: finalColor, alpha: 40 } });
+                }
+            };
+
+            const addText = (textValue, opts = {}) => {
+                const finalTextColor = getContrastColor('#' + bg).replace('#', '');
+                const options = {
+                    x: opts.x || SAFE_MARGIN, y: opts.y || 1.5, w: opts.w || '90%', h: opts.h || 5.0,
+                    fontSize: opts.fontSize || 18, color: finalTextColor,
+                    fontFace: theme.bodyFont, lineSpacing: 32, valign: 'top',
+                    ...opts.animation ? { animate: opts.animation } : {}
+                };
+                if (Array.isArray(textValue)) {
+                    slide.addText(textValue.map(b => ({ text: String(b), options: { bullet: true, margin: 15, indent: 20 } })), options);
+                } else {
+                    slide.addText(String(textValue), options);
+                }
+            };
+
+            // 2. LIVE IMAGE FETCHING (Integrated with Base64 Fallback)
             const imgQuery = s.imageQuery || s.imageHint || "";
-            if (imgQuery && (layout.includes('IMAGE') || layout === 'TITLE_COVER' || layout === 'DIAGONAL_SPLIT')) {
+            if (imgQuery) {
                 const stockUrl = `https://loremflickr.com/1280/720/${encodeURIComponent(imgQuery.split(' ')[0])}`;
-                slide.addImage({ url: stockUrl, x: 0, y: 0, w: '100%', h: '100%', opacity: 20 });
+                try {
+                    const base64Data = await fetchImageAsBase64(stockUrl);
+                    if (base64Data) {
+                        slide.addImage({ data: base64Data, x: 0, y: 0, w: '100%', h: '100%', opacity: 15 });
+                    }
+                } catch (e) {
+                    console.error("Cloud Async Image Fetch Error:", e.message);
+                }
             }
 
-            // 2. LAYOUT ENGINE
+            // 3. NATIVE CHART ENGINE (Standardized)
+            if (s.chart_config) {
+                const c = s.chart_config;
+                const chartTypes = {
+                    'bar': pres.ChartType.bar,
+                    'line': pres.ChartType.line,
+                    'pie': pres.ChartType.pie,
+                    'area': pres.ChartType.area
+                };
+                slide.addChart(chartTypes[c.type] || pres.ChartType.bar, c.data, {
+                    x: c.x || SAFE_MARGIN, y: c.y || 1.6, w: c.w || 9, h: c.h || 5,
+                    title: c.title, showTitle: true,
+                    chartColors: [accent, '555555', '999999'],
+                    legendPos: 'b'
+                });
+            }
+
+            // 4. LAYOUT SUITE OVERHAUL
             switch (layout) {
                 case 'TITLE_COVER':
-                    // Background Split
-                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '40%', h: '100%', fill: accent });
-                    slide.addShape(pres.ShapeType.rect, { x: '40%', y: 0, w: '60%', h: '100%', fill: bg });
+                    // High-quality centered layout with safe margins
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: '100%', fill: 'FFFFFF' });
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: '45%', w: '100%', h: 0.1, fill: accent });
 
-                    slide.addText(String(s.title || "Untitled"), {
-                        x: '45%', y: '35%', w: '50%', h: '20%',
-                        fontSize: 54, bold: true, color: accent,
-                        fontFace: font, align: 'left', valign: 'middle'
+                    slide.addText(String(s.title || "PRESENTATION").toUpperCase(), {
+                        x: 0, y: '30%', w: '100%',
+                        fontSize: 48, bold: true, color: accent,
+                        fontFace: theme.headingFont, align: 'center', valign: 'middle'
                     });
-                    slide.addText("PROJECT PROPOSAL", {
-                        x: '45%', y: '30%', w: '50%', fontSize: 14, color: contrastTextColor, fontFace: font, italic: true
-                    });
-                    slide.addShape(pres.ShapeType.rect, { x: '45%', y: '55%', w: 2.0, h: 0.1, fill: accent });
-                    break;
 
-                case 'DIAGONAL_SPLIT':
-                    // High-impact Diagonal Design
-                    slide.addShape(pres.ShapeType.rtTriangle, { x: 0, y: 0, w: '100%', h: '100%', fill: accent, flipH: true });
-                    slide.addText(String(s.title || ""), {
-                        x: 0.5, y: '70%', w: '90%', fontSize: 44, bold: true, color: 'FFFFFF', fontFace: font
+                    slide.addText("NUROTRA INTELLIGENCE SUITE", {
+                        x: 0, y: '50%', w: '100%', fontSize: 14, color: '666666', fontFace: theme.bodyFont, align: 'center', spacing: 2
                     });
-                    if (s.bullets) {
-                        slide.addText(s.bullets[0] || "", { x: 0.5, y: '85%', w: '90%', fontSize: 20, color: 'FFFFFF', fontFace: font, italic: true });
-                    }
                     break;
 
                 case 'THREE_COLUMNS':
-                    slide.addText(String(s.title || "Key Pillars"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
+                    addTitle(s.title);
                     if (s.threeColumns) {
+                        const colW = 2.8;
+                        const colH = 4.2;
+                        const startY = 1.6;
                         s.threeColumns.slice(0, 3).forEach((col, idx) => {
-                            const x = 0.5 + (idx * 3.1);
-                            slide.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.8, h: 4.5, fill: 'FFFFFF', line: { color: accent, width: 1 } });
-                            slide.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.8, h: 0.1, fill: accent });
-                            slide.addText(String(col.title || ""), { x: x + 0.1, y: 1.7, w: 2.6, fontSize: 18, bold: true, color: accent, align: 'center', fontFace: font });
-                            slide.addText(String(col.text || ""), { x: x + 0.1, y: 2.2, w: 2.6, fontSize: 14, color: contrastTextColor, align: 'center', fontFace: font });
+                            const x = SAFE_MARGIN + (idx * 3.1);
+                            slide.addShape(pres.ShapeType.rect, { x: x, y: startY, w: colW, h: colH, fill: 'FFFFFF', line: { color: accent, width: 1 } });
+                            slide.addText(String(col.title || ""), { x: x + 0.1, y: startY + 0.2, w: colW - 0.2, fontSize: 16, bold: true, color: accent, align: 'center', fontFace: theme.headingFont });
+                            slide.addText(String(col.text || ""), { x: x + 0.1, y: startY + 0.7, w: colW - 0.2, fontSize: 13, color: '333333', align: 'center', fontFace: theme.bodyFont });
                         });
                     }
+                    break;
+
+                case 'QUADRANT':
+                    addTitle(s.title, { align: 'center' });
+                    const quadrantLabels = s.quadrant_labels || ["Strength", "Weakness", "Projected", "Risk"];
+                    [0, 1, 2, 3].forEach(idx => {
+                        const row = Math.floor(idx / 2);
+                        const col = idx % 2;
+                        const x = SAFE_MARGIN + 0.5 + (col * 4.0);
+                        const y = 1.6 + (row * 2.5);
+                        slide.addShape(pres.ShapeType.rect, { x, y, w: 3.8, h: 2.3, fill: 'FFFFFF', line: { color: accent, width: 1 } });
+                        slide.addText(quadrantLabels[idx], { x: x + 0.2, y: y + 0.1, w: 3.4, fontSize: 16, bold: true, color: accent, fontFace: theme.headingFont });
+                        if (s.bullets && s.bullets[idx]) {
+                            slide.addText(String(s.bullets[idx]), { x: x + 0.2, y: y + 0.6, w: 3.4, fontSize: 14, color: '333333', fontFace: theme.bodyFont });
+                        }
+                    });
                     break;
 
                 case 'DATA_GRID':
-                    slide.addText(String(s.title || "Data Analysis"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
+                    addTitle(s.title);
                     if (s.dataGrid) {
-                        s.dataGrid.slice(0, 6).forEach((item, idx) => {
-                            const row = Math.floor(idx / 3);
-                            const col = idx % 3;
-                            const x = 0.5 + (col * 3.1);
-                            const y = 1.5 + (row * 2.2);
-                            slide.addShape(pres.ShapeType.rect, { x: x, y: y, w: 2.8, h: 1.8, fill: 'F8F9FA', line: { color: 'CCCCCC', width: 1 } });
-                            slide.addText(String(item.label || ""), { x: x + 0.1, y: y + 0.2, w: 2.6, fontSize: 14, bold: true, color: accent, fontFace: font });
-                            slide.addText(String(item.value || ""), { x: x + 0.1, y: y + 0.7, w: 2.6, fontSize: 24, bold: true, color: contrastTextColor, fontFace: font });
+                        s.dataGrid.slice(0, 8).forEach((item, idx) => {
+                            const row = Math.floor(idx / 4);
+                            const col = idx % 4;
+                            const x = SAFE_MARGIN + (col * 2.3);
+                            const y = 1.6 + (row * 2.1);
+                            slide.addShape(pres.ShapeType.rect, { x, y, w: 2.1, h: 1.8, fill: 'FFFFFF', line: { color: 'EEEEEE' } });
+                            slide.addText(String(item.label || ""), { x: x + 0.1, y: y + 0.2, w: 1.9, fontSize: 11, bold: true, color: accent, fontFace: theme.headingFont, align: 'center' });
+                            slide.addText(String(item.value || ""), { x: x + 0.1, y: y + 0.7, w: 1.9, fontSize: 22, bold: true, color: '1A1A1A', fontFace: theme.bodyFont, align: 'center' });
                         });
                     }
                     break;
 
-                case 'BIG_FACT':
-                    if (s.bigFact) {
-                        slide.addText(String(s.bigFact.value || "0%"), {
-                            x: 0, y: '30%', w: '100%', h: 1.5,
-                            fontSize: 110, bold: true, color: accent,
-                            fontFace: font, align: 'center'
-                        });
-                        slide.addText(String(s.bigFact.label || "Key Metric"), {
-                            x: 0, y: '55%', w: '100%', h: 0.5,
-                            fontSize: 28, color: contrastTextColor,
-                            fontFace: font, align: 'center'
-                        });
-                    }
-                    break;
-
-                case 'PROCESS_FLOW':
-                    slide.addText(String(s.title || "Process"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
-                    if (s.processFlow) {
-                        s.processFlow.slice(0, 4).forEach((step, idx) => {
-                            const x = 0.5 + (idx * 2.3);
-                            slide.addShape(pres.ShapeType.roundRect, { x: x, y: 2.5, w: 2.1, h: 2.5, fill: 'FFFFFF', line: { color: accent, width: 2 }, rectRadius: 0.2 });
-                            slide.addText(String(step.label || ""), { x: x + 0.1, y: 2.6, w: 1.9, fontSize: 16, bold: true, color: accent, align: 'center', fontFace: font });
-                            if (idx < 3) slide.addShape(pres.ShapeType.rightArrow, { x: x + 2.15, y: 3.5, w: 0.3, h: 0.3, fill: accent });
-                        });
-                    }
-                    break;
-
-                case 'INFOGRAPHIC':
-                    slide.addText(String(s.title || "Insights"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
-                    if (s.infographic) {
-                        slide.addShape(pres.ShapeType.ellipse, { x: 1.0, y: 2.0, w: 3.0, h: 3.0, fill: accent });
-                        slide.addText(String(s.infographic.metric || ""), { x: 1.0, y: 2.7, w: 3.0, fontSize: 36, bold: true, color: contrastAccentColor, align: 'center', fontFace: font });
-                        slide.addText(String(s.infographic.icon || "Feature"), { x: 5.0, y: 2.5, w: 4.0, fontSize: 24, italic: true, color: contrastTextColor, fontFace: font });
-                    }
-                    break;
-
-                case 'COMPARISON':
-                    slide.addText(String(s.title || "Comparison"), { x: 0.5, y: 0.3, w: '90%', fontSize: 28, bold: true, color: accent, fontFace: font });
-                    slide.addShape(pres.ShapeType.rect, { x: 5.0, y: 1.2, w: 0.02, h: 5.0, fill: 'CCCCCC' });
-                    if (s.comparison) {
-                        if (s.comparison.left) slide.addText(s.comparison.left.map(b => ({ text: String(b), options: { bullet: true } })), { x: 0.5, y: 1.5, w: 4.2, h: 5.0, fontSize: 18, color: contrastTextColor, fontFace: font, lineSpacing: 32 });
-                        if (s.comparison.right) slide.addText(s.comparison.right.map(b => ({ text: String(b), options: { bullet: true } })), { x: 5.3, y: 1.5, w: 4.2, h: 5.0, fontSize: 18, color: contrastTextColor, fontFace: font, lineSpacing: 32 });
-                    }
-                    break;
-
-                case 'IMAGE_FULL':
-                    slide.addText(String(s.title || ""), {
-                        x: 0, y: '80%', w: '100%', h: 1.0,
-                        fontSize: 40, bold: true, color: 'FFFFFF',
-                        fontFace: font, align: 'center', fill: { color: '000000', alpha: 40 }
+                case 'TIMELINE':
+                    addTitle(s.title);
+                    const steps = s.timeline_steps || s.bullets || [];
+                    slide.addShape(pres.ShapeType.line, { x: SAFE_MARGIN, y: 4.0, w: 9.0, h: 0, line: { color: accent, width: 3 } });
+                    steps.slice(0, 5).forEach((step, idx) => {
+                        const x = SAFE_MARGIN + (idx * 1.8);
+                        slide.addShape(pres.ShapeType.ellipse, { x: x + 0.7, y: 3.8, w: 0.4, h: 0.4, fill: accent });
+                        slide.addText(String(step), { x: x, y: idx % 2 === 0 ? 3.0 : 4.5, w: 1.8, fontSize: 12, color: getContrastColor('#' + bg).replace('#', ''), align: 'center', fontFace: theme.bodyFont });
                     });
-                    if (s.imageHint) slide.addText(`[Visual: ${s.imageHint}]`, { x: 0.5, y: 0.5, fontSize: 12, color: accent, italic: true });
                     break;
 
-                default: // BULLETS
-                    // Stylish side accent
-                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 0.1, h: '100%', fill: accent });
-
-                    // Title with subtle underline
-                    slide.addText(String(s.title || "Slide"), {
-                        x: 0.5, y: 0.4, w: '90%', h: 0.6,
-                        fontSize: 36, bold: true, color: accent,
-                        fontFace: font, align: 'left', valign: 'top'
-                    });
-                    slide.addShape(pres.ShapeType.rect, { x: 0.5, y: 1.1, w: 3.0, h: 0.05, fill: { color: accent, alpha: 30 } });
-
-                    if (s.bullets) {
-                        slide.addText(s.bullets.map(b => ({ text: String(b), options: { bullet: true, margin: 15, indent: 20 } })), {
-                            x: 0.5, y: 1.5, w: '90%', h: 5.0,
-                            fontSize: 20, color: contrastTextColor,
-                            fontFace: font, lineSpacing: 36, valign: 'top'
-                        });
-                    }
+                default:
+                    addTitle(s.title);
+                    addText(s.bullets || s.text || "");
                     break;
             }
-
-            // Branding Footer
-            slide.addText("Nurotra Executive Suite", { x: 7.5, y: 7.1, w: 2.0, fontSize: 10, color: accent, italic: true, align: 'right' });
-        });
+        }
     }
+
     return await pres.write('nodebuffer');
 };
 

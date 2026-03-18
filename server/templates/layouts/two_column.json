@@ -1,0 +1,16 @@
+{
+    "layout": "two_column",
+    "elements": [
+        {
+            "type": "title"
+        },
+        {
+            "type": "text"
+        },
+        {
+            "type": "image"
+        }
+    ],
+    "style": "modern",
+    "alignment": "balanced"
+}
