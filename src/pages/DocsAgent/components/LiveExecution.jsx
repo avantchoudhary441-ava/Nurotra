@@ -50,21 +50,7 @@ const LiveExecution = ({
                 format
             );
 
-            // 2. TRIGGER BACKEND SYNC (Optional, keeps workspace updated)
-            // Skip sync for PDF as it's an export-only format, not a workspace source format.
-            if (format !== 'pdf') {
-                let projectName = "";
-                if (currentDoc.projectId && projects) {
-                    const project = projects.find(p => p.id === currentDoc.projectId);
-                    projectName = project ? project.name : "";
-                }
-
-                const docToSync = {
-                    ...currentDoc,
-                    type: format === 'xlsx' ? 'excel' : format === 'pptx' ? 'ppt' : 'word'
-                };
-                await docsAgentService.automateLocalSave(docToSync, projectName, format);
-            }
+            // Backend sync removed as per local save disabled feature
 
             setSyncStatus('success');
             setTimeout(() => setSyncStatus(null), 6000);

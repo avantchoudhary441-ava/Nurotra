@@ -8,31 +8,6 @@ const responseCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 Hour
 
 /**
- * API Key Reservoir & Rotation
- * Supports GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3...
- */
-const getApiKeys = () => {
-    const keys = [];
-    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
-
-    // Support non-sequential keys (GEMINI_API_KEY_2, GEMINI_API_KEY_6, etc.)
-    Object.keys(process.env)
-        .filter(key => key.startsWith('GEMINI_API_KEY_'))
-        .sort((a, b) => {
-            const numA = parseInt(a.split('_').pop());
-            const numB = parseInt(b.split('_').pop());
-            return numA - numB;
-        })
-        .forEach(key => {
-            keys.push(process.env[key]);
-        });
-
-    return keys;
-};
-
-let currentKeyIndex = 0;
-
-/**
  * Generate completion with OpenAI GPT (Supports Vision)
  * @param {string} prompt 
  * @param {string} systemPrompt 
@@ -81,6 +56,10 @@ const crypto = require("crypto");
 
 /**
  * Main Generation Entry Point
+ * Transitioned to OpenAI ONLY as per user request. 
+ * Gemini reservoir logic removed to ensure stability.
+ * @param {string} prompt - The user prompt
+ * @param {string} systemPrompt - Optional system context
  * Now prioritizes OpenAI with Gemini reservoir as fallback.
  * @param {Array} images - Optional array of { mimeType: string, data: base64 } objects
  * @param {Array} multimedia - Optional array of { mimeType: string, data: base64 } for PDFs, etc.
@@ -98,6 +77,18 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = [], mult
         }
     }
 
+    // OpenAI is now the exclusive engine
+    if (!openai) {
+        throw new Error("CRITICAL: OpenAI API key is missing or invalid. Please check your .env configuration.");
+    }
+
+    try {
+        console.log(`[AI Service] Executing via OpenAI... ${images.length > 0 ? '[Vision Mode]' : ''}`);
+        const text = await generateWithOpenAI(prompt, systemPrompt, images);
+        if (text) {
+            console.log(`[AI Service] OpenAI Response Received (${text.length} chars)`);
+            if (images.length === 0) responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+            return text;
     // Attempt OpenAI First (Primary Engine)
     // CRITICAL: Skip OpenAI if multimedia (PDF) is present, as OpenAI doesn't support native PDF bits in Chat API.
     if (openai && (!multimedia || multimedia.length === 0)) {
@@ -232,9 +223,14 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = [], mult
                 }
             }
         }
+        throw new Error("OpenAI returned an empty response.");
+    } catch (error) {
+        console.error(`[AI Service] Request Failed: ${error.message}`);
+        // Wrap and re-throw with actionable info
+        const enhancedError = new Error(`AI Generation Failed: ${error.message}`);
+        enhancedError.isAiFailure = true;
+        throw enhancedError;
     }
-
-    throw lastError || new Error("All AI engines (OpenAI & Gemini Reservoir) have failed.");
 };
 
 /**
@@ -816,6 +812,84 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
         - VARIETY: Use at least 3 DIFFERENT widget types. Avoid repeating chartType consecutively.`;
         } else {
             formatInstructions = `
+        POWERPOINT PRESENTATION RULES (INTELLIGENT AI GENERATOR PIPELINE):
+        You are Nurotra's AI Presentation Generator. You do not just fill templates. You must follow a strict, multi-stage planning and generation pipeline to produce engaging, structured, and modern "$50,000-deck" quality presentations.
+
+        PIPELINE STAGE 1: PROMPT UNDERSTANDING & SLIDE PLANNING
+        - First, analyze the intent, topic, audience, and requested tone.
+        - Create a logical, structured narrative flow (e.g., Title -> Problem -> Key Stats -> Solution -> Timeline -> Conclusion).
+        - Dedicate a specific, unique slide type for each step of the narrative.
+
+        PIPELINE STAGE 2: STRICT LAYOUT SELECTION & DIVERSITY
+        - NEVER use the same layout type for consecutive slides.
+        - NEVER use "BULLETS" for more than 1 slide in the deck.
+        - You MUST use at least 4 different layout types in every deck to guarantee visual variety.
+        - Available Layouts: "TITLE_COVER", "SECTION_DIVIDER", "BULLETS", "THREE_COLUMNS", "DIAGONAL_SPLIT", "DATA_GRID", "COMPARISON", "QUADRANT", "BIG_FACT", "IMAGE_RIGHT", "IMAGE_LEFT", "IMAGE_FULL", "TIMELINE", "PROCESS_FLOW", "INFOGRAPHIC", "DASHBOARD", "FUNNEL", "QUOTE".
+
+        PIPELINE STAGE 3: CONTENT MINIMIZATION & GENERATION
+        - Presentations are visual. You MUST restrict text length.
+        - ABSOLUTE MAXIMUM: 4-5 bullet points per slide.
+        - ABSOLUTE MAXIMUM: 8-10 words per bullet or text block. 
+        - DO NOT generate paragraphs. Focus entirely on keywords and concise statements. Each slide communicates ONE core idea.
+        - LAYOUT DIVERSITY CRITICAL: If you use "BULLETS" for slide 2, slide 3 MUST be "THREE_COLUMNS" or "DATA_GRID" or "BIG_FACT". FORCE VARIETY.
+
+        PIPELINE STAGE 4: VISUAL INTELLIGENCE & DESIGN STYLING
+        - "theme": "Modern" | "Corporate" | "Dark" | "Creative" | "Luxury" | "Vibrant".
+        - INVENT CONTEXTUAL COLORS: You MUST generate valid, diverse 6-character Hex codes for "accentColor", "backgroundColor", and "bgGradient". NEVER use the example colors. Tailor them to the topic (e.g., #27AE60 for Eco, #8E44AD for Creative).
+        - "imageQuery": A short, descriptive string for stock photos (e.g., "clean energy", "cybersecurity lab").
+        - "fontFace": "Montserrat" | "Open Sans" | "Helvetica" | "Verdana".
+
+        5. SCHEMA:
+        {
+          "intent": "${intent}",
+          "text": "Executive Narrative about the deck.",
+          "generation": {
+            "type": "ppt",
+            "data": {
+              "fileName": "Project_Presentation.pptx",
+              "title": "Presentation Header",
+              "theme": "Modern",
+              "accentColor": "#FF5733",
+              "backgroundColor": "#1A1A1A",
+              "bgGradient": "#333333",
+              "fontFace": "Montserrat",
+              "slides": [
+                { 
+                  "title": "Slide Title",
+                  "layoutType": "TITLE_COVER" | "SECTION_DIVIDER" | "THREE_COLUMNS" | "DIAGONAL_SPLIT" | "DATA_GRID" | "BULLETS" | "BIG_FACT" | "TIMELINE" | "PROCESS_FLOW" | "QUADRANT" | "DASHBOARD" | "FUNNEL" | "QUOTE",
+                  "bullets": ["Point 1", "Point 2"],
+                  "threeColumns": [
+                    { "title": "Column 1", "text": "Detail" },
+                    { "title": "Column 2", "text": "Detail" },
+                    { "title": "Column 3", "text": "Detail" }
+                  ],
+                  "dataGrid": [
+                    { "label": "Label 1", "value": "Value 1" },
+                    { "label": "Label 2", "value": "Value 2" }
+                  ],
+                  "processFlow": [
+                    { "label": "Step 1", "detail": "Info" },
+                    { "label": "Step 2", "detail": "Info" }
+                  ],
+                  "dashboardMetrics": [
+                    { "label": "Total Revenue", "value": "$5M", "trend": "+12%" },
+                    { "label": "Active Users", "value": "12K", "trend": "+5%" }
+                  ],
+                  "comparison": {
+                    "left": ["Pros 1", "Pros 2"],
+                    "right": ["Cons 1", "Cons 2"]
+                  },
+                  "timeline": [
+                    { "date": "Q1", "text": "Milestone A" },
+                    { "date": "Q2", "text": "Milestone B" }
+                  ],
+                  "imageQuery": "business strategy meeting",
+                  "speakerNotes": "Details for the presenter..." 
+                }
+              ]
+            }
+          }
+        }`;
         POWERPOINT PRESENTATION RULES (EXECUTIVE DESIGN):
         You are Nurotra's Creative Director. Create "Wow-Factor" slide decks that look like they cost $50,000.
 
@@ -1024,10 +1098,15 @@ CRITICAL RULES:
                 ${formatInstructions} `;
         } else {
             // ── CREATE path: generate a brand new document ────────────────────
-            systemPrompt = `You are the Nurotra Content Architect.
-        MISSION: Generate structured JSON for a ${intent} action.
+            systemPrompt = `You are the Nurotra Content Architect & Lead Designer.
+        MISSION: Generate structured JSON for a ${intent.toUpperCase()} action.
         DOCUMENT TYPE: ${docType.toUpperCase()}.
         DETAIL LEVEL: ${lengthPref}.
+
+        DESIGN GUIDELINES (FOR PPT):
+        1. COLOR THEORY: Use mathematically harmonious palettes. For "Luxury", use deep coals and golds. For "Medical", use clinical teals/whites. Always specify 'primaryColor', 'accentColor', and 'backgroundColor' in hex.
+        2. ICONOGRAPHY: Suggest specific Lucide icon names (e.g., 'zap', 'shield', 'trending-up') for every bullet point.
+        3. VISUALS: If a slide needs a conceptual diagram or futuristic scene, set 'prefersDalle': true.
 
         CRITICAL RULES:
         - Output ONLY valid JSON.
@@ -1048,7 +1127,15 @@ CRITICAL RULES:
         try {
             parsed = JSON.parse(cleanJson);
         } catch (jsonError) {
+            console.warn("[AI Service] Standard JSON parse failed, attempting repair...");
             parsed = JSON.parse(repairJson(cleanJson));
+        }
+
+        try {
+            require('fs').writeFileSync('debug_ai_output.json', JSON.stringify(parsed, null, 2));
+            console.log("\n--- AI OUTPUT LOGGED TO debug_ai_output.json ---\n");
+        } catch (e) {
+            console.error("Failed to write debug log", e);
         }
 
         // Post-processing to ensure no empty sections or slides
@@ -1075,6 +1162,7 @@ CRITICAL RULES:
         if (parsed?.generation?.data?.sections || parsed?.generation?.data?.slides) {
             const visualItems = [];
             if (parsed.generation.data.sections) {
+                // Word sections image logic
                 parsed.generation.data.sections.forEach(sec => {
                     if (sec.blocks) {
                         sec.blocks.forEach(block => {
@@ -1086,9 +1174,14 @@ CRITICAL RULES:
                 });
             }
             if (parsed.generation.data.slides) {
+                // PPT slides image logic with DALL-E preference
                 parsed.generation.data.slides.forEach(slide => {
                     if (!slide.image_url || slide.image_url.includes('placeholder')) {
-                        visualItems.push({ slide, query: slide.title || "Business presentation" });
+                        visualItems.push({ 
+                            slide, 
+                            query: slide.image_prompt || slide.title || "Business presentation",
+                            prefersDalle: slide.prefersDalle || false
+                        });
                     }
                 });
             }
@@ -1096,7 +1189,24 @@ CRITICAL RULES:
             if (visualItems.length > 0) {
                 try {
                     await Promise.all(visualItems.map(async item => {
-                        const itemUrl = await searchImageFromUnsplash(item.query);
+                        let itemUrl = null;
+                        
+                        // Intelligent Sourcing Route
+                        if (item.prefersDalle) {
+                            console.log(`[AI Service] Generating custom visual via DALL-E...`);
+                            try {
+                                itemUrl = await generateImageWithOpenAI(`Premium, professional, 3D high-end render for a slide titled "${item.query}". Digital art style, clean, minimalistic.`);
+                            } catch (dalleErr) {
+                                console.warn("[AI Service] DALL-E failed, falling back to Unsplash/Pexels.");
+                            }
+                        }
+
+                        if (!itemUrl) {
+                            itemUrl = await searchImageFromUnsplash(item.query);
+                        }
+                        
+                        // TODO: Add Pexels fallback here once key is provided
+                        
                         if (itemUrl) {
                             if (item.block) item.block.url = itemUrl;
                             if (item.slide) item.slide.image_url = itemUrl;
@@ -1111,7 +1221,11 @@ CRITICAL RULES:
         return parsed;
     } catch (error) {
         console.error("Docs Agent Execution Error:", error.message);
-        return { intent: "QUERY", text: "I encountered an issue. Please try again." };
+        return { 
+            intent: "QUERY", 
+            text: `Critical Execution Error: ${error.message}. Please refine your prompt or try again.`,
+            error: true
+        };
     }
 };
 

@@ -77,15 +77,23 @@ export const docsAgentService = {
             // The backend returns { intent, text, clarification, steps? }
             return response.data;
         } catch (error) {
-            // Log full error details for debugging
             console.error("Docs Agent AI Engine Failure:", error);
+            
+            let message = "Failed to connect to AI service";
             if (error.response) {
-                console.error("Server Response:", error.response.status, error.response.data);
+                // The server responded with a status code
+                message = error.response.data?.message || `Server Error (${error.response.status})`;
+                if (error.response.status === 503) {
+                    message = "AI Provider is currently unavailable. Please check your OpenAI API key.";
+                }
+            } else if (error.request) {
+                // The request was made but no response was received
+                message = "Network Error: The backend server is unreachable. Please ensure the server is running.";
+            } else {
+                message = error.message;
             }
 
-            // Re-throw error to let the caller handle it instead of showing generic fallback
-            // This allows the actual error message to reach the user
-            throw new Error(error.response?.data?.message || error.message || "Failed to connect to AI service");
+            throw new Error(message);
         }
     },
 

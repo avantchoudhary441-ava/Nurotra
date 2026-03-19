@@ -7,6 +7,10 @@ const { protect } = require('../middleware/authMiddleware');
 // In-memory storage for analysis file uploads
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } }); // 100MB max
 
+router.post('/query', protect, (req, res, next) => {
+    console.log(`[DocsAgent] Query received: "${req.body.prompt?.substring(0, 50)}..."`);
+    next();
+}, docsAgentController.processQuery);
 router.post('/query', protect, upload.array('files', 10), docsAgentController.processQuery);
 router.post('/analyze', protect, upload.array('files', 10), docsAgentController.analyzeDocuments);
 router.get('/projects', protect, docsAgentController.getProjects);

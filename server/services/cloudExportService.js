@@ -709,6 +709,15 @@ const generatePPTBuffer = async (data) => {
     const bg = (data.backgroundColor || theme.bg).replace('#', '');
     const bgGradient = data.bgGradient ? data.bgGradient.replace('#', '') : null;
 
+            // 1. DYNAMIC BACKGROUND ENGINE
+            if (bgGradient) {
+                slide.background = { fill: bg, type: 'gradient', color: bg, rot: 90, stop: bgGradient };
+            } else {
+                slide.background = { fill: bg };
+            }
+
+            // Subtle Transparency Overlay for Depth
+            slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: '100%', fill: { color: accent, transparency: 96 } });
     // 0. SET MASTER SLIDE (Branding)
     pres.defineSlideMaster({
         title: "MASTER_SLIDE",
@@ -725,6 +734,9 @@ const generatePPTBuffer = async (data) => {
         for (const s of data.slides) {
             const slide = pres.addSlide({ masterName: "MASTER_SLIDE" });
             const layout = s.layoutType || 'BULLETS';
+            const contrastTextColor = getContrastColor('#' + bg);
+            const contrastAccentColor = getContrastColor('#' + accent);
+            const safeAccentForLightBg = getLuminance(accent) > 0.6 ? '333333' : accent;
             const SAFE_MARGIN = 0.5;
 
             // 1. HELPERS FOR DYNAMIC COMPONENTS (Sync with Local Service)
@@ -790,6 +802,17 @@ const generatePPTBuffer = async (data) => {
             // 4. LAYOUT SUITE OVERHAUL
             switch (layout) {
                 case 'TITLE_COVER':
+                    // Background Split
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '40%', h: '100%', fill: accent });
+                    slide.addShape(pres.ShapeType.rect, { x: '40%', y: 0, w: '60%', h: '100%', fill: bg });
+
+                    slide.addText(String(s.title || "Untitled"), {
+                        x: '45%', y: '35%', w: '50%', h: '20%',
+                        fontSize: 54, bold: true, color: contrastTextColor,
+                        fontFace: font, align: 'left', valign: 'middle'
+                    });
+                    slide.addText("PROJECT PROPOSAL", {
+                        x: '45%', y: '30%', w: '50%', fontSize: 14, color: contrastTextColor, fontFace: font, italic: true
                     // High-quality centered layout with safe margins
                     slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: '100%', fill: 'FFFFFF' });
                     slide.addShape(pres.ShapeType.rect, { x: 0, y: '45%', w: '100%', h: 0.1, fill: accent });
@@ -800,6 +823,19 @@ const generatePPTBuffer = async (data) => {
                         fontFace: theme.headingFont, align: 'center', valign: 'middle'
                     });
 
+                case 'DIAGONAL_SPLIT':
+                    // High-impact Diagonal Design
+                    slide.addShape(pres.ShapeType.rtTriangle, { x: 0, y: 0, w: '100%', h: '100%', fill: accent, flipH: true });
+                    slide.addText(String(s.title || ""), {
+                        x: 0.5, y: '70%', w: '90%', fontSize: 44, bold: true, color: contrastAccentColor, fontFace: font
+                    });
+                    if (s.bullets) {
+                        slide.addText(s.bullets[0] || "", { x: 0.5, y: '85%', w: '90%', fontSize: 20, color: contrastAccentColor, fontFace: font, italic: true });
+                    }
+                    break;
+
+                case 'THREE_COLUMNS':
+                    slide.addText(String(s.title || "Key Pillars"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: contrastTextColor, fontFace: font });
                     slide.addText("NUROTRA INTELLIGENCE SUITE", {
                         x: 0, y: '50%', w: '100%', fontSize: 14, color: '666666', fontFace: theme.bodyFont, align: 'center', spacing: 2
                     });
@@ -812,6 +848,11 @@ const generatePPTBuffer = async (data) => {
                         const colH = 4.2;
                         const startY = 1.6;
                         s.threeColumns.slice(0, 3).forEach((col, idx) => {
+                            const x = 0.5 + (idx * 3.1);
+                            slide.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.8, h: 4.5, fill: 'FFFFFF', line: { color: accent, width: 1 } });
+                            slide.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.8, h: 0.1, fill: accent });
+                            slide.addText(String(col.title || ""), { x: x + 0.1, y: 1.7, w: 2.6, fontSize: 18, bold: true, color: safeAccentForLightBg, align: 'center', fontFace: font });
+                            slide.addText(String(col.text || ""), { x: x + 0.1, y: 2.0, w: 2.6, h: 3.5, fontSize: 14, color: '333333', align: 'center', fontFace: font, valign: 'top' });
                             const x = SAFE_MARGIN + (idx * 3.1);
                             slide.addShape(pres.ShapeType.rect, { x: x, y: startY, w: colW, h: colH, fill: 'FFFFFF', line: { color: accent, width: 1 } });
                             slide.addText(String(col.title || ""), { x: x + 0.1, y: startY + 0.2, w: colW - 0.2, fontSize: 16, bold: true, color: accent, align: 'center', fontFace: theme.headingFont });
@@ -820,6 +861,46 @@ const generatePPTBuffer = async (data) => {
                     }
                     break;
 
+                case 'DATA_GRID':
+                    slide.addText(String(s.title || "Data Grid"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: contrastTextColor, fontFace: font });
+                    if (s.dataGrid) {
+                        s.dataGrid.slice(0, 6).forEach((item, idx) => {
+                            const row = Math.floor(idx / 3);
+                            const col = idx % 3;
+                            const x = 0.5 + (col * 3.1);
+                            const y = 1.5 + (row * 2.2);
+                            slide.addShape(pres.ShapeType.rect, { x: x, y: y, w: 2.8, h: 1.8, fill: 'F8F9FA', line: { color: 'CCCCCC', width: 1 } });
+                            slide.addText(String(item.label || ""), { x: x + 0.1, y: y + 0.2, w: 2.6, fontSize: 14, bold: true, color: accent, fontFace: font });
+                            slide.addText(String(item.value || ""), { x: x + 0.1, y: y + 0.7, w: 2.6, fontSize: 24, bold: true, color: contrastTextColor, fontFace: font });
+                        });
+                    }
+                    break;
+
+                case 'BIG_FACT':
+                    slide.addText(String(s.title || ""), { x: 0.5, y: 0.3, w: '90%', fontSize: 24, bold: true, color: contrastTextColor, fontFace: font });
+                    if (s.bigFact) {
+                        slide.addText(String(s.bigFact.value || "0%"), {
+                            x: 0, y: '30%', w: '100%', h: 1.5,
+                            fontSize: 110, bold: true, color: accent,
+                            fontFace: font, align: 'center'
+                        });
+                        slide.addText(String(s.bigFact.label || "Key Metric"), {
+                            x: 0, y: '55%', w: '100%', h: 0.5,
+                            fontSize: 28, color: contrastTextColor,
+                            fontFace: font, align: 'center'
+                        });
+                    }
+                    break;
+
+                case 'PROCESS_FLOW':
+                    slide.addText(String(s.title || "Process"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
+                    if (s.processFlow) {
+                        s.processFlow.slice(0, 4).forEach((step, idx) => {
+                            const x = 0.5 + (idx * 2.45);
+                            slide.addShape(pres.ShapeType.roundRect, { x: x, y: 2.5, w: 2.1, h: 2.5, fill: 'FFFFFF', line: { color: accent, width: 2 }, rectRadius: 0.2 });
+                            slide.addText(String(step.label || ""), { x: x + 0.1, y: 2.6, w: 1.9, fontSize: 16, bold: true, color: safeAccentForLightBg, align: 'center', fontFace: font });
+                            slide.addText(String(step.detail || ""), { x: x + 0.1, y: 3.2, w: 1.9, h: 1.5, fontSize: 12, color: '333333', align: 'center', fontFace: font, valign: 'top' });
+                            if (idx < 3) slide.addShape(pres.ShapeType.rightArrow, { x: x + 2.15, y: 3.5, w: 0.3, h: 0.3, fill: accent });
                 case 'QUADRANT':
                     addTitle(s.title, { align: 'center' });
                     const quadrantLabels = s.quadrant_labels || ["Strength", "Weakness", "Projected", "Risk"];
@@ -851,6 +932,104 @@ const generatePPTBuffer = async (data) => {
                     }
                     break;
 
+                case 'INFOGRAPHIC':
+                    slide.addText(String(s.title || "Insights"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: contrastTextColor, fontFace: font });
+                    if (s.infographic) {
+                        slide.addShape(pres.ShapeType.ellipse, { x: 1.0, y: 2.0, w: 3.0, h: 3.0, fill: accent });
+                        slide.addText(String(s.infographic.metric || ""), { x: 1.0, y: 2.7, w: 3.0, fontSize: 36, bold: true, color: contrastAccentColor, align: 'center', fontFace: font });
+                        slide.addText(String(s.infographic.icon || "Feature"), { x: 5.0, y: 2.5, w: 4.0, fontSize: 24, italic: true, color: contrastTextColor, fontFace: font });
+                    }
+                    break;
+
+                case 'FUNNEL':
+                    slide.addText(String(s.title || "Funnel Analysis"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: contrastTextColor, fontFace: font });
+                    if (s.funnelStages) {
+                        const totalStages = Math.min(s.funnelStages.length, 4);
+                        for (let i = 0; i < totalStages; i++) {
+                            const stage = s.funnelStages[i];
+                            const widthPercent = 80 - (i * 15);
+                            const w = (widthPercent / 100) * 8.0;
+                            const x = (10 - w) / 2;
+                            const y = 1.5 + (i * 1.2);
+                            const tVal = i === 0 ? 0 : i === 1 ? 25 : i === 2 ? 50 : 75;
+                            slide.addShape(pres.ShapeType.trapezoid, { x: x, y: y, w: w, h: 1.0, fill: { color: accent, transparency: tVal }, flipV: true });
+                            slide.addText(String(stage.label || ""), { x: x, y: y + 0.1, w: w, h: 0.4, fontSize: 18, bold: true, color: contrastAccentColor, align: "center", fontFace: font });
+                            slide.addText(String(stage.value || ""), { x: x, y: y + 0.5, w: w, h: 0.4, fontSize: 24, bold: true, color: contrastAccentColor, align: "center", fontFace: font });
+                        }
+                    }
+                    break;
+
+                case 'DASHBOARD':
+                    slide.addText(String(s.title || "Performance Dashboard"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: contrastTextColor, fontFace: font });
+                    slide.addShape(pres.ShapeType.rect, { x: 0.5, y: 1.0, w: '90%', h: 0.05, fill: accent });
+                    if (s.dashboardMetrics) {
+                        s.dashboardMetrics.slice(0, 4).forEach((metric, idx) => {
+                            const col = idx % 2;
+                            const row = Math.floor(idx / 2);
+                            const x = 0.5 + (col * 4.6);
+                            const y = 1.5 + (row * 2.2);
+                            slide.addShape(pres.ShapeType.roundRect, { x: x, y: y, w: 4.2, h: 1.8, fill: 'F8F9FA', line: { color: 'E0E0E0', width: 1 }, rectRadius: 0.1 });
+                            slide.addText(String(metric.label || "Metric"), { x: x + 0.2, y: y + 0.2, w: 3.8, fontSize: 16, color: '666666', fontFace: font });
+                            slide.addText(String(metric.value || "0"), { x: x + 0.2, y: y + 0.6, w: 3.8, fontSize: 40, bold: true, color: safeAccentForLightBg, fontFace: font });
+                            if (metric.trend) {
+                                const isPositive = String(metric.trend).includes('+');
+                                slide.addText(String(metric.trend), { x: x + 0.2, y: y + 1.3, w: 3.8, fontSize: 14, bold: true, color: isPositive ? '27AE60' : 'C0392B', fontFace: font });
+                            }
+                        });
+                    }
+                    break;
+
+                case 'QUADRANT':
+                    slide.addText(String(s.title || "Strategic Quadrant"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: accent, fontFace: font });
+                    const quadCenterX = 5.0;
+                    const quadCenterY = 3.5;
+                    slide.addShape(pres.ShapeType.rect, { x: quadCenterX, y: 1.5, w: 0.05, h: 4.0, fill: 'CCCCCC' });
+                    slide.addShape(pres.ShapeType.rect, { x: 1.0, y: quadCenterY, w: 8.0, h: 0.05, fill: 'CCCCCC' });
+                    const quadLabels = s.quadrants || ["Top Left", "Top Right", "Bottom Left", "Bottom Right"];
+                    slide.addText(String(quadLabels[0] || ""), { x: 1.0, y: 1.5, w: 3.8, h: 1.8, fontSize: 20, bold: true, color: accent, align: "center", valign: "middle", fontFace: font });
+                    slide.addText(String(quadLabels[1] || ""), { x: 5.2, y: 1.5, w: 3.8, h: 1.8, fontSize: 20, bold: true, color: accent, align: "center", valign: "middle", fontFace: font });
+                    slide.addText(String(quadLabels[2] || ""), { x: 1.0, y: 3.7, w: 3.8, h: 1.8, fontSize: 20, bold: true, color: accent, align: "center", valign: "middle", fontFace: font });
+                    slide.addText(String(quadLabels[3] || ""), { x: 5.2, y: 3.7, w: 3.8, h: 1.8, fontSize: 20, bold: true, color: accent, align: "center", valign: "middle", fontFace: font });
+                    break;
+
+                case 'SECTION_DIVIDER':
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '25%', h: '100%', fill: accent });
+                    slide.addText(String(s.title || "Section"), {
+                        x: '30%', y: '40%', w: '65%', h: '20%',
+                        fontSize: 60, bold: true, color: contrastTextColor,
+                        fontFace: font, align: 'left', valign: 'middle'
+                    });
+                    slide.addShape(pres.ShapeType.rect, { x: '30%', y: '65%', w: 2.0, h: 0.1, fill: accent });
+                    break;
+
+                case 'QUOTE':
+                    slide.addShape(pres.ShapeType.rect, { x: '10%', y: '20%', w: 0.1, h: '60%', fill: accent });
+                    slide.addText(String(`"${s.title || s.bullets?.[0] || 'Quote'}"`), {
+                        x: '15%', y: '25%', w: '75%', h: '40%',
+                        fontSize: 48, italic: true, bold: true, color: contrastTextColor,
+                        fontFace: font, align: 'left', valign: 'middle'
+                    });
+                    if (s.bullets && s.bullets.length > 1) {
+                        slide.addText(String(s.bullets[1]), {
+                            x: '15%', y: '65%', w: '75%', fontSize: 24, bold: true, color: safeAccentForLightBg, fontFace: font
+                        });
+                    }
+                    break;
+
+                case 'COMPARISON':
+                    slide.addText(String(s.title || "Comparison"), { x: 0.5, y: 0.3, w: '90%', fontSize: 28, bold: true, color: contrastTextColor, fontFace: font });
+                    slide.addShape(pres.ShapeType.rect, { x: 5.0, y: 1.2, w: 0.02, h: 5.0, fill: 'CCCCCC' });
+                    if (s.comparison) {
+                        if (s.comparison.left) slide.addText(s.comparison.left.map(b => ({ text: String(b), options: { bullet: true } })), { x: 0.5, y: 1.5, w: 4.2, h: 5.0, fontSize: 18, color: contrastTextColor, fontFace: font, lineSpacing: 32 });
+                        if (s.comparison.right) slide.addText(s.comparison.right.map(b => ({ text: String(b), options: { bullet: true } })), { x: 5.3, y: 1.5, w: 4.2, h: 5.0, fontSize: 18, color: contrastTextColor, fontFace: font, lineSpacing: 32 });
+                    }
+                    break;
+
+                case 'IMAGE_FULL':
+                    slide.addText(String(s.title || ""), {
+                        x: 0, y: '80%', w: '100%', h: 1.0,
+                        fontSize: 40, bold: true, color: 'FFFFFF',
+                        fontFace: font, align: 'center', fill: { color: '000000', transparency: 60 }
                 case 'TIMELINE':
                     addTitle(s.title);
                     const steps = s.timeline_steps || s.bullets || [];
@@ -862,6 +1041,25 @@ const generatePPTBuffer = async (data) => {
                     });
                     break;
 
+                default: // BULLETS
+                    // Stylish side accent
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: 0.1, h: '100%', fill: accent });
+
+                    // Title with subtle underline
+                    slide.addText(String(s.title || "Slide"), {
+                        x: 0.5, y: 0.4, w: '90%', h: 0.6,
+                        fontSize: 36, bold: true, color: accent,
+                        fontFace: font, align: 'left', valign: 'top'
+                    });
+                    slide.addShape(pres.ShapeType.rect, { x: 0.5, y: 1.1, w: 3.0, h: 0.05, fill: { color: accent, transparency: 70 } });
+
+                    if (s.bullets) {
+                        slide.addText(s.bullets.map(b => ({ text: String(b), options: { bullet: true, margin: 15, indent: 20 } })), {
+                            x: 0.5, y: 1.5, w: '90%', h: 5.0,
+                            fontSize: 20, color: contrastTextColor,
+                            fontFace: font, lineSpacing: 36, valign: 'top'
+                        });
+                    }
                 default:
                     addTitle(s.title);
                     addText(s.bullets || s.text || "");

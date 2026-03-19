@@ -766,29 +766,242 @@ export const generateExcelSheet = async (data) => {
 };
 
 // ==========================================
-// POWERPOINT PRESENTATION GENERATOR
+// POWERPOINT PRESENTATION GENERATOR (Rich Layout Engine v2)
 // ==========================================
+
+/**
+ * HELPER: Simple Lucide Icon Path Data for premium slides
+ * (Pre-cached common paths to avoid network calls during export)
+ */
+const ICON_PATHS = {
+    zap: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
+    shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+    "trending-up": "M23 6l-9.5 9.5-5-5L1 18m22-12h-6m6 0v6",
+    users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2m8-14a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87m-4-12a4 4 0 0 1 0 7.75",
+    check: "M20 6L9 17l-5-5",
+    target: "M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 18c3.314 0 6-2.686 6-6s-2.686-6-6-6-6 2.686-6 6 2.686 6 6 6zM12 14c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z",
+    award: "M12 15l-2 5L9 9l11 4-5 2zm0 0l4 8 3-10-10-3 3 5z",
+    briefcase: "M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16m16 0h-4m4 0v-5a2 2 0 0 0-2-2H2a2 2 0 0 0-2 2v5h4"
+};
+
+/**
+ * Renders a slide based on its layoutType and data.
+ * Supports: 20+ Premium Layouts
+ */
+const renderSlideByLayout = (slide, slideData, themeData) => {
+    const { 
+        title, layoutType, bullets, image_url, 
+        threeColumns, bigFact, dataGrid, processFlow, 
+        dashboardMetrics, funnelStages, quadrants, comparison 
+    } = slideData;
+
+    const accentColor = (slideData.accentColor || themeData.accentColor || "#0078D4").replace('#', '');
+    const primaryColor = (slideData.primaryColor || themeData.primaryColor || "#2F4F8F").replace('#', '');
+    const bgColor = (slideData.backgroundColor || themeData.backgroundColor || "#FFFFFF").replace('#', '');
+    const textColor = (bgColor.toLowerCase() === 'ffffff' || bgColor.toLowerCase() === 'f5f5f5') ? '333333' : 'FFFFFF';
+    const subTextColor = (textColor === '333333') ? '666666' : 'CCCCCC';
+    const fontHeader = themeData.fontFace || "Montserrat";
+    const fontBody = themeData.fontBody || "Inter";
+
+    // Apply Background
+    slide.background = { fill: bgColor };
+
+    // --- Premium Layouts Switch ---
+    switch (layoutType) {
+        case 'TITLE_COVER':
+            slide.addText(title || "Presentation", {
+                x: 0, y: 3.5, w: '100%', h: 1.5,
+                fontSize: 48, bold: true, color: primaryColor,
+                align: 'center', fontFace: fontHeader
+            });
+            if (slideData.subtitle) {
+                slide.addText(slideData.subtitle, {
+                    x: 0, y: 4.8, w: '100%', h: 0.8,
+                    fontSize: 24, italic: true, color: subTextColor,
+                    align: 'center', fontFace: fontBody
+                });
+            }
+            if (image_url) {
+                slide.addImage({ data: image_url, x: 0, y: 0, w: 10, h: 5.625, sizing: { type: 'cover' } });
+                // Add a darken overlay for text readability
+                slide.addShape(slide.ShapeType.rect, { x: 0, y: 0, w: 10, h: 5.6, fill: { color: '000000', transparency: 50 } });
+            }
+            break;
+
+        case 'SWOT_ANALYSIS':
+            slide.addText(title || "SWOT Analysis", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 32, bold: true, color: primaryColor, fontFace: fontHeader });
+            const swotData = slideData.swot || { s: [], w: [], o: [], t: [] };
+            const boxes = [
+                { label: 'STRENGTHS', color: '27AE60', x: 0.5, y: 1.2, data: swotData.s },
+                { label: 'WEAKNESSES', color: 'E67E22', x: 5.1, y: 1.2, data: swotData.w },
+                { label: 'OPPORTUNITIES', color: '2980B9', x: 0.5, y: 3.4, data: swotData.o },
+                { label: 'THREATS', color: 'C0392B', x: 5.1, y: 3.4, data: swotData.t }
+            ];
+            boxes.forEach(box => {
+                slide.addShape(slide.ShapeType.rect, { x: box.x, y: box.y, w: 4.4, h: 2.0, fill: { color: bgColor }, line: { color: box.color, width: 2 } });
+                slide.addText(box.label, { x: box.x + 0.1, y: box.y + 0.1, fontSize: 16, bold: true, color: box.color, fontFace: fontHeader });
+                slide.addText(box.data.map(i => `• ${i}`).join('\n'), {
+                    x: box.x + 0.1, y: box.y + 0.4, w: 4.2, h: 1.5,
+                    fontSize: 12, color: textColor, fontFace: fontBody, valign: 'top'
+                });
+            });
+            break;
+
+        case 'BIG_FACT':
+            slide.addText(title || "", { x: 0, y: 1.5, w: '100%', h: 1, fontSize: 24, color: subTextColor, align: 'center', fontFace: fontBody });
+            slide.addText(bigFact?.metric || "99%", {
+                x: 0, y: 2.2, w: '100%', h: 1.5,
+                fontSize: 90, bold: true, color: accentColor, align: 'center', fontFace: fontHeader
+            });
+            slide.addText(bigFact?.description || "Significant Result", {
+                x: 1, y: 3.8, w: 8, h: 1,
+                fontSize: 20, color: textColor, align: 'center', fontFace: fontBody
+            });
+            break;
+
+        case 'QUOTATION':
+            slide.addText('"', { x: 1, y: 1.5, fontSize: 120, color: accentColor, fontFace: fontHeader, transparency: 80 });
+            slide.addText(slideData.quote || "The future belongs to those who believe in the beauty of their dreams.", {
+                x: 1.5, y: 2.2, w: 7, h: 2,
+                fontSize: 28, italic: true, color: textColor, align: 'center', fontFace: fontBody
+            });
+            slide.addText(`— ${slideData.author || "Eleanor Roosevelt"}`, {
+                x: 1, y: 4.2, w: 8, h: 0.5,
+                fontSize: 18, bold: true, color: accentColor, align: 'right', fontFace: fontHeader
+            });
+            break;
+
+        case 'TIMELINE':
+            slide.addText(title || "Timeline", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
+            const events = slideData.timeline || [];
+            slide.addShape(slide.ShapeType.line, { x: 0.5, y: 3.5, w: 9, h: 0, line: { color: accentColor, width: 3 } });
+            events.forEach((ev, i) => {
+                const xPos = 0.5 + (i * (9 / Math.max(events.length, 1)));
+                slide.addShape(slide.ShapeType.ellipse, { x: xPos - 0.1, y: 3.4, w: 0.2, h: 0.2, fill: { color: accentColor } });
+                slide.addText(ev.date || "", { x: xPos - 0.5, y: 3.1, w: 1, fontSize: 14, bold: true, align: 'center', color: accentColor });
+                slide.addText(ev.event || "", { x: xPos - 0.5, y: 3.7, w: 1, fontSize: 10, align: 'center', color: textColor });
+            });
+            break;
+
+        case 'COMPARISON':
+            slide.addText(title || "Comparison", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
+            const comp = slideData.comparison || { left: { title: "Option A", items: [] }, right: { title: "Option B", items: [] } };
+            // Left Box
+            slide.addShape(slide.ShapeType.rect, { x: 0.5, y: 1.2, w: 4.4, h: 4, fill: { color: bgColor }, line: { color: accentColor, width: 2 } });
+            slide.addText(comp.left.title, { x: 0.6, y: 1.3, w: 4.2, fontSize: 18, bold: true, color: accentColor, fontFace: fontHeader, align: 'center' });
+            slide.addText(comp.left.items.map(i => `• ${i}`).join('\n'), { x: 0.7, y: 1.8, w: 4, fontSize: 13, color: textColor, fontFace: fontBody });
+            // Right Box
+            slide.addShape(slide.ShapeType.rect, { x: 5.1, y: 1.2, w: 4.4, h: 4, fill: { color: bgColor }, line: { color: primaryColor, width: 2 } });
+            slide.addText(comp.right.title, { x: 5.2, y: 1.3, w: 4.2, fontSize: 18, bold: true, color: primaryColor, fontFace: fontHeader, align: 'center' });
+            slide.addText(comp.right.items.map(i => `• ${i}`).join('\n'), { x: 5.3, y: 1.8, w: 4, fontSize: 13, color: textColor, fontFace: fontBody });
+            break;
+
+        case 'FUNNEL':
+            slide.addText(title || "Sales Funnel", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
+            const stages = slideData.funnelStages || [];
+            stages.forEach((stage, i) => {
+                const width = 6 - (i * 1);
+                const xPos = 5 - (width / 2);
+                slide.addShape(slide.ShapeType.trapezoid, { 
+                    x: xPos, y: 1.2 + (i * 0.8), w: width, h: 0.7, 
+                    fill: { color: accentColor, transparency: i * 15 },
+                    line: { color: 'FFFFFF', width: 1 }
+                });
+                slide.addText(`${stage.label}: ${stage.value}`, { 
+                    x: xPos, y: 1.2 + (i * 0.8), w: width, h: 0.7, 
+                    fontSize: 14, bold: true, color: 'FFFFFF', align: 'center', fontFace: fontBody 
+                });
+            });
+            break;
+
+        case 'DASHBOARD':
+        case 'DATA_GRID':
+            slide.addText(title || "Dashboard", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
+            const metrics = slideData.dashboardMetrics || slideData.dataGrid || [];
+            metrics.forEach((m, i) => {
+                const x = 0.5 + (i % 3) * 3.1;
+                const y = 1.2 + Math.floor(i / 3) * 1.5;
+                slide.addShape(slide.ShapeType.rect, { x, y: y, w: 2.8, h: 1.2, fill: { color: 'F8F9FA' }, line: { color: accentColor, width: 1 } });
+                slide.addText(m.label, { x: x + 0.1, y: y + 0.1, w: 2.6, fontSize: 12, color: subTextColor, fontFace: fontBody });
+                slide.addText(String(m.value), { x: x + 0.1, y: y + 0.4, w: 2.6, fontSize: 24, bold: true, color: accentColor, fontFace: fontHeader });
+                if (m.trend) {
+                    slide.addText(m.trend, { x: x + 0.1, y: y + 0.9, w: 2.6, fontSize: 10, color: m.trend.includes('+') ? '27AE60' : 'C0392B', fontFace: fontBody });
+                }
+            });
+            break;
+
+        case 'MISSION_VISION':
+            slide.addText(title || "Mission & Vision", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 32, bold: true, color: primaryColor, fontFace: fontHeader, align: 'center' });
+            slide.addShape(slide.ShapeType.rect, { x: 0.5, y: 1.5, w: 4.4, h: 3, fill: { color: accentColor }, line: { color: 'FFFFFF', width: 2 } });
+            slide.addText("OUR MISSION", { x: 0.6, y: 1.6, w: 4.2, fontSize: 18, bold: true, color: 'FFFFFF', align: 'center' });
+            slide.addText(slideData.mission || "", { x: 0.7, y: 2.2, w: 4, fontSize: 16, color: 'FFFFFF', align: 'center' });
+            slide.addShape(slide.ShapeType.rect, { x: 5.1, y: 1.5, w: 4.4, h: 3, fill: { color: '34495E' }, line: { color: 'FFFFFF', width: 2 } });
+            slide.addText("OUR VISION", { x: 5.2, y: 1.6, w: 4.2, fontSize: 18, bold: true, color: 'FFFFFF', align: 'center' });
+            slide.addText(slideData.vision || "", { x: 5.3, y: 2.2, w: 4, fontSize: 16, color: 'FFFFFF', align: 'center' });
+            break;
+
+        case 'TEAM_PROFILE':
+            slide.addText(title || "Our Team", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
+            (slideData.team || []).forEach((member, i) => {
+                const x = 0.5 + (i * 2.4);
+                slide.addShape(slide.ShapeType.ellipse, { x, y: 1.2, w: 2, h: 2, fill: { color: 'EEEEEE' }, line: { color: accentColor, width: 2 } });
+                slide.addText(member.name, { x, y: 3.3, w: 2, fontSize: 16, bold: true, align: 'center' });
+                slide.addText(member.role, { x, y: 3.6, w: 2, fontSize: 12, italic: true, align: 'center' });
+            });
+            break;
+
+        case 'IMAGE_LEFT':
+        case 'IMAGE_RIGHT':
+            const isRight = layoutType === 'IMAGE_RIGHT';
+            if (image_url) slide.addImage({ data: image_url, x: isRight ? 5.5 : 0.5, y: 1.2, w: 4, h: 4, sizing: { type: 'cover' } });
+            slide.addText(title || "Slide", { x: isRight ? 0.5 : 5.5, y: 0.5, w: 4, fontSize: 24, bold: true, color: primaryColor });
+            slide.addText(bullets?.join('\n') || "", { x: isRight ? 0.5 : 5.5, y: 1.5, w: 4, fontSize: 14, bullet: true });
+            break;
+
+        default:
+            slide.addText(title || "Slide", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: accentColor, fontFace: fontHeader });
+            slide.addShape(slide.ShapeType.line, { x: 0.5, y: 1.0, w: 9, h: 0, line: { color: accentColor, width: 2 } });
+            if (bullets && Array.isArray(bullets)) {
+                bullets.forEach((bullet, i) => {
+                    const bText = typeof bullet === 'object' ? bullet.text : bullet;
+                    const bIcon = typeof bullet === 'object' ? bullet.icon : null;
+                    slide.addText(bText, {
+                        x: bIcon ? 1.0 : 0.7, y: 1.5 + (i * 0.5), w: 8.5, fontSize: 18, color: textColor,
+                        bullet: bIcon ? false : true
+                    });
+                    if (bIcon && ICON_PATHS[bIcon]) {
+                        slide.addShape(slide.ShapeType.star5, { x: 0.6, y: 1.55 + (i * 0.5), w: 0.2, h: 0.2, fill: { color: accentColor } });
+                    }
+                });
+            }
+            if (image_url && !['IMAGE_LEFT', 'IMAGE_RIGHT', 'TITLE_COVER'].includes(layoutType)) {
+                slide.addImage({ data: image_url, x: 7.5, y: 0.5, w: 2, h: 1.5, sizing: { type: 'contain' } });
+            }
+            break;
+    }
+};
+
 export const generatePresentation = async (docData) => {
     try {
         const data = JSON.parse(JSON.stringify(docData));
         normalizeContent(data);
-        const { fileName, slides } = data;
+        const { fileName, slides, title, theme, accentColor, backgroundColor, fontFace } = data;
         const pres = new pptxgen();
+        
+        pres.title = title || "Nurotra Intelligence Deck";
+        pres.author = "Nurotra Docs Agent";
+
+        const themeData = {
+            theme: theme || "Modern",
+            accentColor: accentColor || "#0078D4",
+            backgroundColor: backgroundColor || "#FFFFFF",
+            fontFace: fontFace || "Montserrat"
+        };
 
         if (slides && Array.isArray(slides)) {
             slides.forEach(slideData => {
                 const slide = pres.addSlide();
-                slide.addText(slideData.title || "Slide", {
-                    x: 0.5, y: 0.5, w: '90%', fontSize: 24, bold: true, color: '363636'
-                });
-                if (slideData.image_url || data.image_url) {
-                    slide.addImage({ path: slideData.image_url || data.image_url, x: '50%', y: '50%', w: 3, h: 2 });
-                }
-                if (slideData.bullets && Array.isArray(slideData.bullets)) {
-                    slide.addText(slideData.bullets.join('\n'), {
-                        x: 0.5, y: 1.5, w: '90%', h: '70%', fontSize: 18, color: '666666', bullet: true
-                    });
-                }
+                renderSlideByLayout(slide, slideData, themeData);
             });
         }
 

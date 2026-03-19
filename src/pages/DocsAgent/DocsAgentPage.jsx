@@ -430,21 +430,64 @@ const DocsAgentPage = () => {
                     md += `### 💥 ${slide.bigFact.value}\n> ${slide.bigFact.label}\n\n`;
                 }
 
+                if (slide.layoutType === 'QUOTE') {
+                    md += `> "${slide.title || slide.bullets?.[0] || ''}"\n`;
+                    if (slide.bullets && slide.bullets.length > 1) md += `— *${slide.bullets[1]}*\n\n`;
+                }
+
+                if (slide.layoutType === 'SECTION_DIVIDER') {
+                    md += `\n---\n## 🎯 ${slide.title}\n---\n\n`;
+                }
+
+                if (slide.layoutType === 'SWOT_ANALYSIS' && slide.swot) {
+                    md += `#### 🛡️ SWOT Analysis:\n`;
+                    md += `* **Strengths**: ${slide.swot.s?.join(', ')}\n`;
+                    md += `* **Weaknesses**: ${slide.swot.w?.join(', ')}\n`;
+                    md += `* **Opportunities**: ${slide.swot.o?.join(', ')}\n`;
+                    md += `* **Threats**: ${slide.swot.t?.join(', ')}\n`;
+                    md += '\n';
+                }
+
+                if (slide.layoutType === 'FUNNEL' && slide.funnelStages) {
+                    md += `#### ⏳ Sales Funnel:\n`;
+                    slide.funnelStages.forEach(s => md += `* **${s.label}**: ${s.value}\n`);
+                    md += '\n';
+                }
+
                 if (slide.layoutType === 'THREE_COLUMNS' && slide.threeColumns) {
                     md += `#### 🏛️ Three Pillars:\n`;
                     slide.threeColumns.slice(0, 3).forEach(c => md += `* **${c.title}**: ${c.text}\n`);
                     md += '\n';
                 }
 
-                if (slide.layoutType === 'DATA_GRID' && slide.dataGrid) {
-                    md += `#### 📊 Matrix / Grid:\n`;
-                    slide.dataGrid.slice(0, 6).forEach(i => md += `* **${i.label}**: ${i.value}\n`);
+                if ((slide.layoutType === 'DATA_GRID' || slide.layoutType === 'DASHBOARD') && (slide.dataGrid || slide.dashboardMetrics)) {
+                    md += `#### 📊 Matrix / Dashboard:\n`;
+                    const items = slide.dataGrid || slide.dashboardMetrics;
+                    items.slice(0, 6).forEach(i => md += `* **${i.label}**: ${i.value}${i.trend ? ` (${i.trend})` : ''}\n`);
                     md += '\n';
                 }
 
                 if (slide.layoutType === 'PROCESS_FLOW' && slide.processFlow) {
                     md += `#### 🔄 Process Flow:\n`;
                     slide.processFlow.forEach((step, idx) => md += `${idx + 1}. **${step.label}**\n`);
+                    md += '\n';
+                }
+
+                if (slide.layoutType === 'DASHBOARD' && slide.dashboardMetrics) {
+                    md += `#### 📈 Dashboard Metrics:\n`;
+                    slide.dashboardMetrics.forEach(m => md += `* **${m.label}**: ${m.value} (${m.trend || ''})\n`);
+                    md += '\n';
+                }
+
+                if (slide.layoutType === 'FUNNEL' && slide.funnelStages) {
+                    md += `#### 🔽 Funnel Stages:\n`;
+                    slide.funnelStages.forEach((stage, idx) => md += `${idx + 1}. **${stage.label}**: ${stage.value}\n`);
+                    md += '\n';
+                }
+
+                if (slide.layoutType === 'QUADRANT' && slide.quadrants) {
+                    md += `#### ⊞ Strategic Quadrant:\n`;
+                    slide.quadrants.forEach(q => md += `* ${q}\n`);
                     md += '\n';
                 }
 
@@ -463,7 +506,20 @@ const DocsAgentPage = () => {
                     md += '\n';
                 }
 
-                if (slide.bullets && slide.bullets.length > 0) {
+                if (slide.layoutType === 'IMAGE_LEFT' || slide.layoutType === 'IMAGE_RIGHT') {
+                    const side = slide.layoutType === 'IMAGE_LEFT' ? 'Left' : 'Right';
+                    md += `#### 🖼️ Visual on the ${side}\n`;
+                    if (slide.bullets && slide.bullets.length > 0) {
+                        slide.bullets.forEach(b => md += `* ${b}\n`);
+                    }
+                }
+
+                if (slide.layoutType === 'TIMELINE' && slide.timeline) {
+                    md += `#### 📅 Timeline / Road-map:\n`;
+                    slide.timeline.forEach(t => md += `* **${t.date || t.label}**: ${t.text || t.detail || ''}\n`);
+                }
+
+                if (slide.bullets && slide.bullets.length > 0 && !['IMAGE_LEFT', 'IMAGE_RIGHT'].includes(slide.layoutType)) {
                     slide.bullets.forEach(b => md += `* ${b}\n`);
                 }
 
@@ -638,9 +694,7 @@ const DocsAgentPage = () => {
 
                 setCurrentDoc(savedDoc);
 
-                // Re-sync to workspace (overwrite the same file, for both project & standalone docs)
-                const projectForSync = currentProject || projects.find(p => p.documents?.some(d => String(d.id) === String(savedDoc.id)));
-                docsAgentService.automateLocalSave(savedDoc, projectForSync ? projectForSync.name : "").catch(() => { });
+                // Re-sync to workspace disabled as per local save disabled feature
 
                 if (isModify) {
                     addLiveUpdate('✅ Changes applied! Your document is updated.');

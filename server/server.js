@@ -12,6 +12,14 @@ const app = express();
 app.set("trust proxy", 1);
 
 // Middleware
+// Middleware
+app.use(helmet({
+    contentSecurityPolicy: false, // Disable CSP in dev to avoid blocking cross-port requests
+    crossOriginEmbedderPolicy: false
+}));
+// app.use(compression()); // Temporarily disabled to rule out connection reset issues
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(helmet());
 app.use(compression());
 app.use(express.json({ limit: '200mb' }));
@@ -38,15 +46,19 @@ const finalOrigins = [...new Set(allowedOrigins.filter(Boolean))];
 
 app.use(cors({
     origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
+        
         if (finalOrigins.indexOf(origin) !== -1 || finalOrigins.some(o => origin && origin.startsWith(o))) {
             callback(null, true);
         } else {
-            console.warn(`Blocked CORS request from: ${origin}`);
+            console.warn(`Blocked CORS request from: ${origin}. Allowed: ${finalOrigins.join(', ')}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Rate Limiting
@@ -55,7 +67,7 @@ const apiLimiter = rateLimit({
     max: 1000,
     message: "Too many requests, please try again later."
 });
-app.use("/api/", apiLimiter);
+// app.use("/api/", apiLimiter); // Disabled temporarily to debug network resets
 const passport = require("./config/passport");
 app.use(passport.initialize());
 
@@ -74,6 +86,7 @@ app.use("/api/nuro", require("./routes/nuroRoutes"));
 app.use("/api/docs-agent", require("./routes/docsAgentRoutes"));
 app.use("/api/workspace", require("./routes/workspaceRoutes"));
 app.use("/api/deliverables", require("./routes/deliverableRoutes"));
+app.use("/api/health", require("./routes/healthRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 
 // Global Error Handler
@@ -111,4 +124,14 @@ if (process.env.NODE_ENV === "production") {
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.timeout = 900000; // 15 Minutes for very deep AI logic
+server.headersTimeout = 910000;
+server.keepAliveTimeout = 90000;
+
+server.listen(PORT, () => {
+    console.log(`\n================================================`);
+    console.log(`🚀 NUROTRA BACKEND ACTIVE ON PORT ${PORT}`);
+    console.log(`🕒 System Time: ${new Date().toISOString()}`);
+    console.log(`📡 OpenAI: ${process.env.OPENAI_API_KEY ? 'CONFIGURED' : 'MISSING'}`);
+    console.log(`================================================\n`);
+});

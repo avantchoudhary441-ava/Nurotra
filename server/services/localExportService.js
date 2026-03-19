@@ -476,39 +476,13 @@ const savePPT = async (data, fullPath, safeWriteBuffer) => {
 };
 
 const automateLocalSave = async (docData, projectName, userName, formatOverride) => {
-    const sName = String(docData.name || "Untitled");
-    const saveDir = ensureDirectory(userName, projectName);
-    const type = docData.type || 'docx';
-    const finalFormat = formatOverride || (type === 'excel' ? 'xlsx' : type === 'ppt' ? 'pptx' : 'docx');
-    const ext = finalFormat.startsWith('.') ? finalFormat : '.' + finalFormat;
-
-    const baseName = sName.replace(/[<>:"/\\|?*]/g, '_').trim() || "Document";
-    const fullPath = path.join(saveDir, `${baseName}${ext}`);
-
-    const safeWriteBuffer = (buffer, targetPath) => {
-        const tmpPath = targetPath + `.tmp_${Date.now()}`;
-        fs.writeFileSync(tmpPath, buffer);
-        try {
-            if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
-            fs.renameSync(tmpPath, targetPath);
-            return targetPath;
-        } catch (e) {
-            const versioned = targetPath.replace(ext, `_${Date.now()}${ext}`);
-            fs.renameSync(tmpPath, versioned);
-            return versioned;
-        }
-    };
-
-    const structure = rescueToFormat(docData, ext);
-    if (ext === '.xlsx') return { success: true, path: await saveExcel(structure, fullPath, safeWriteBuffer) };
-    if (ext === '.pptx') return { success: true, path: await savePPT(structure, fullPath, safeWriteBuffer) };
-    return { success: true, path: await saveWord(structure, fullPath, safeWriteBuffer) };
+    // Local directory creation and file saving disabled.
+    return { success: true, path: "disabled" };
 };
 
 const openWorkspace = (projectName, userName) => {
-    const projectPath = ensureDirectory(userName, projectName);
-    return new Promise((r, j) => {
-        exec(`start "" "${projectPath}"`, (err) => err ? j(err) : r({ success: true, path: projectPath }));
+    return new Promise((resolve) => {
+        resolve({ success: true, path: "disabled", message: "Local workspace is disabled." });
     });
 };
 
