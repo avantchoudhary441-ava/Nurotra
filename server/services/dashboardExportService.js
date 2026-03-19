@@ -108,26 +108,40 @@ const mapDashboardToPPT = (dashboard) => {
     const kpis = widgets.filter(w => w.type === 'kpi');
     if (kpis.length > 0) {
         slides.push({
-            title: "Key Performance Indicators",
+            title: "Executive KPI Summary",
             layoutType: 'DATA_GRID',
             dataGrid: kpis.map(k => ({
                 label: k.title,
-                value: `${k.value} (${k.change})`
+                value: String(k.value) + (k.change ? ` (${k.change})` : '')
             }))
         });
     }
 
-    // Charts get their own slides
+    // Charts get their own slides with NATIVE charts
     widgets.filter(w => w.type === 'chart').forEach(chart => {
+        const chartTypeMap = {
+            'bar': 'bar',
+            'line': 'line',
+            'pie': 'pie',
+            'area': 'area',
+            'composed': 'bar', // Fallback for simple PPT
+            'radar': 'line'    // Fallback
+        };
+
         slides.push({
             title: chart.title,
-            layoutType: 'INFOGRAPHIC',
-            infographic: {
-                metric: chart.data[0]?.value || 'N/A',
-                icon: chart.title,
-                label: chart.description
+            layoutType: 'BULLETS', // We use BULLETS as base then add native chart via chart_config
+            chart_config: {
+                type: chartTypeMap[chart.chartType] || 'bar',
+                title: chart.title,
+                data: [{
+                    name: chart.title,
+                    labels: chart.data.map(d => d.name),
+                    values: chart.data.map(d => d.value)
+                }],
+                x: 0.5, y: 1.5, w: 9, h: 5
             },
-            bullets: chart.data.slice(1, 5).map(d => `${d.name}: ${d.value}`)
+            speakerNotes: chart.description
         });
     });
 
@@ -136,7 +150,10 @@ const mapDashboardToPPT = (dashboard) => {
         slides.push({
             title: table.title,
             layoutType: 'BULLETS',
-            bullets: table.rows.slice(0, 5).map(r => r.join(' | '))
+            bullets: [
+                `Headers: ${table.headers.join(', ')}`,
+                ...table.rows.slice(0, 5).map(r => `• ${r.join(' | ')}`)
+            ]
         });
     });
 

@@ -129,9 +129,16 @@ const detectDocType = (prompt) => {
 const detectLength = (prompt) => {
     const lowerPrompt = prompt.toLowerCase();
 
+    // Check for explicit numeric counts (e.g., "7 pages", "10 slides")
+    const countMatch = lowerPrompt.match(/(\d+)\s*(page|slide|section)s?/i);
+    if (countMatch) {
+        const count = parseInt(countMatch[1]);
+        if (count >= 5) return 'DETAILED';
+    }
+
     // Check for length modifiers specifically
     if (/\b(short|concise|brief|quick summary|minimal)\b/i.test(lowerPrompt)) return 'SHORT';
-    if (/\b(detailed|elaborate|extensive|comprehensive|full|in-depth|deep dive)\b/i.test(lowerPrompt)) return 'DETAILED';
+    if (/\b(detailed|elaborate|extensive|comprehensive|full|in-depth|deep dive|professional report)\b/i.test(lowerPrompt)) return 'DETAILED';
 
     // Default to MEDIUM if no explicit modifiers found
     return 'MEDIUM';

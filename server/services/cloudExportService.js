@@ -17,6 +17,31 @@ const https = require("https");
 const http = require("http");
 const pptxgen = require("pptxgenjs");
 const ExcelJS = require('exceljs');
+
+/**
+ * Robustly fetches an image and returns it as a Base64 string for embedding.
+ * Fixes the "Red X" remote path issue in Node.js.
+ */
+const fetchImageAsBase64 = (url) => {
+    return new Promise((resolve, reject) => {
+        const client = url.startsWith('https') ? https : http;
+        client.get(url, (res) => {
+            if (res.statusCode !== 200) {
+                res.resume();
+                return resolve(null);
+            }
+            const data = [];
+            res.on('data', (chunk) => data.push(chunk));
+            res.on('end', () => {
+                const buffer = Buffer.concat(data);
+                resolve(`data:${res.headers['content-type']};base64,${buffer.toString('base64')}`);
+            });
+        }).on('error', (err) => {
+            console.error("Cloud Image Fetch Failure:", err.message);
+            resolve(null);
+        });
+    });
+};
 // dashboardExportService is now required inside generateBuffer to avoid circular dependency
 // const dashboardExportService = require('./dashboardExportService');
 
@@ -667,12 +692,12 @@ const generateExcelBuffer = async (data) => {
 
 const getPPTTheme = (themeName) => {
     const themes = {
-        'Modern': { color: '1A1A1A', accent: '00D2D3', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F5F6FA' },
-        'Corporate': { color: '2D3436', accent: '0984E3', font: 'Helvetica', bg: 'FFFFFF', altBg: 'ECF0F1' },
-        'Dark': { color: 'FFFFFF', accent: '00CEC9', font: 'Open Sans', bg: '2D3436', altBg: '1E272E' },
-        'Creative': { color: '2D3436', accent: '6C5CE7', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F8F9FA' },
-        'Luxury': { color: 'D4AF37', accent: 'D4AF37', font: 'Garamond', bg: '1A1A1A', altBg: '2D3436' },
-        'Vibrant': { color: 'FFFFFF', accent: 'FF007F', font: 'Montserrat', bg: '4834D4', altBg: '686DE0' }
+        'Modern': { color: '1A1A1A', accent: '00D2D3', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F5F6FA', headingFont: 'Montserrat', bodyFont: 'Open Sans' },
+        'Corporate': { color: '2D3436', accent: '0984E3', font: 'Helvetica', bg: 'FFFFFF', altBg: 'ECF0F1', headingFont: 'Helvetica-Bold', bodyFont: 'Helvetica' },
+        'Dark': { color: 'FFFFFF', accent: '00CEC9', font: 'Montserrat', bg: '1E272E', altBg: '2D3436', headingFont: 'Montserrat', bodyFont: 'Open Sans' },
+        'Creative': { color: '2D3436', accent: '6C5CE7', font: 'Montserrat', bg: 'FFFFFF', altBg: 'F8F9FA', headingFont: 'Montserrat', bodyFont: 'Montserrat' },
+        'Luxury': { color: 'D4AF37', accent: 'D4AF37', font: 'Playfair Display', bg: '1A1A1A', altBg: '2D3436', headingFont: 'Playfair Display', bodyFont: 'Lora' },
+        'Vibrant': { color: 'FFFFFF', accent: 'FF007F', font: 'Montserrat', bg: '4834D4', altBg: '686DE0', headingFont: 'Montserrat', bodyFont: 'Open Sans' }
     };
     return themes[themeName] || themes['Modern'];
 };
@@ -683,11 +708,6 @@ const generatePPTBuffer = async (data) => {
     const accent = (data.accentColor || theme.accent).replace('#', '');
     const bg = (data.backgroundColor || theme.bg).replace('#', '');
     const bgGradient = data.bgGradient ? data.bgGradient.replace('#', '') : null;
-    const font = data.fontFace || theme.font;
-
-    if (data.slides) {
-        data.slides.forEach(s => {
-            const slide = pres.addSlide();
 
             // 1. DYNAMIC BACKGROUND ENGINE
             if (bgGradient) {
@@ -698,20 +718,88 @@ const generatePPTBuffer = async (data) => {
 
             // Subtle Transparency Overlay for Depth
             slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: '100%', fill: { color: accent, transparency: 96 } });
+    // 0. SET MASTER SLIDE (Branding)
+    pres.defineSlideMaster({
+        title: "MASTER_SLIDE",
+        background: bgGradient
+            ? { fill: bg, type: 'gradient', color: bg, rot: 90, stop: bgGradient }
+            : { fill: bg },
+        objects: [
+            { rect: { x: 0, y: 0, w: 0.1, h: '100%', fill: { color: accent } } },
+            { text: { text: "Nurotra Intelligence Suite", options: { x: 7.5, y: 7.1, w: 2.0, fontSize: 10, color: accent, italic: true, align: 'right' } } }
+        ]
+    });
 
+    if (data.slides) {
+        for (const s of data.slides) {
+            const slide = pres.addSlide({ masterName: "MASTER_SLIDE" });
             const layout = s.layoutType || 'BULLETS';
             const contrastTextColor = getContrastColor('#' + bg);
             const contrastAccentColor = getContrastColor('#' + accent);
             const safeAccentForLightBg = getLuminance(accent) > 0.6 ? '333333' : accent;
+            const SAFE_MARGIN = 0.5;
 
-            // 1.5 LIVE IMAGE FETCHING (Phase 3)
+            // 1. HELPERS FOR DYNAMIC COMPONENTS (Sync with Local Service)
+            const addTitle = (titleText, opts = {}) => {
+                const titleColor = getContrastColor('#' + bg);
+                const finalColor = (titleColor === '#FFFFFF' && accent === 'FFFFFF') ? '00D2D3' : accent;
+                slide.addText(String(titleText || "Slide"), {
+                    x: opts.x || SAFE_MARGIN, y: opts.y || 0.4, w: opts.w || '90%', h: opts.h || 0.8,
+                    fontSize: opts.fontSize || 36, bold: true, color: finalColor,
+                    fontFace: theme.headingFont, align: opts.align || 'left', valign: 'top'
+                });
+                if (!opts.noUnderline) {
+                    slide.addShape(pres.ShapeType.rect, { x: opts.x || SAFE_MARGIN, y: (opts.y || 0.4) + 0.7, w: 3.0, h: 0.05, fill: { color: finalColor, alpha: 40 } });
+                }
+            };
+
+            const addText = (textValue, opts = {}) => {
+                const finalTextColor = getContrastColor('#' + bg).replace('#', '');
+                const options = {
+                    x: opts.x || SAFE_MARGIN, y: opts.y || 1.5, w: opts.w || '90%', h: opts.h || 5.0,
+                    fontSize: opts.fontSize || 18, color: finalTextColor,
+                    fontFace: theme.bodyFont, lineSpacing: 32, valign: 'top',
+                    ...opts.animation ? { animate: opts.animation } : {}
+                };
+                if (Array.isArray(textValue)) {
+                    slide.addText(textValue.map(b => ({ text: String(b), options: { bullet: true, margin: 15, indent: 20 } })), options);
+                } else {
+                    slide.addText(String(textValue), options);
+                }
+            };
+
+            // 2. LIVE IMAGE FETCHING (Integrated with Base64 Fallback)
             const imgQuery = s.imageQuery || s.imageHint || "";
-            if (imgQuery && (layout.includes('IMAGE') || layout === 'TITLE_COVER' || layout === 'DIAGONAL_SPLIT')) {
+            if (imgQuery) {
                 const stockUrl = `https://loremflickr.com/1280/720/${encodeURIComponent(imgQuery.split(' ')[0])}`;
-                slide.addImage({ url: stockUrl, x: 0, y: 0, w: '100%', h: '100%', opacity: 20 });
+                try {
+                    const base64Data = await fetchImageAsBase64(stockUrl);
+                    if (base64Data) {
+                        slide.addImage({ data: base64Data, x: 0, y: 0, w: '100%', h: '100%', opacity: 15 });
+                    }
+                } catch (e) {
+                    console.error("Cloud Async Image Fetch Error:", e.message);
+                }
             }
 
-            // 2. LAYOUT ENGINE
+            // 3. NATIVE CHART ENGINE (Standardized)
+            if (s.chart_config) {
+                const c = s.chart_config;
+                const chartTypes = {
+                    'bar': pres.ChartType.bar,
+                    'line': pres.ChartType.line,
+                    'pie': pres.ChartType.pie,
+                    'area': pres.ChartType.area
+                };
+                slide.addChart(chartTypes[c.type] || pres.ChartType.bar, c.data, {
+                    x: c.x || SAFE_MARGIN, y: c.y || 1.6, w: c.w || 9, h: c.h || 5,
+                    title: c.title, showTitle: true,
+                    chartColors: [accent, '555555', '999999'],
+                    legendPos: 'b'
+                });
+            }
+
+            // 4. LAYOUT SUITE OVERHAUL
             switch (layout) {
                 case 'TITLE_COVER':
                     // Background Split
@@ -725,9 +813,15 @@ const generatePPTBuffer = async (data) => {
                     });
                     slide.addText("PROJECT PROPOSAL", {
                         x: '45%', y: '30%', w: '50%', fontSize: 14, color: contrastTextColor, fontFace: font, italic: true
+                    // High-quality centered layout with safe margins
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: 0, w: '100%', h: '100%', fill: 'FFFFFF' });
+                    slide.addShape(pres.ShapeType.rect, { x: 0, y: '45%', w: '100%', h: 0.1, fill: accent });
+
+                    slide.addText(String(s.title || "PRESENTATION").toUpperCase(), {
+                        x: 0, y: '30%', w: '100%',
+                        fontSize: 48, bold: true, color: accent,
+                        fontFace: theme.headingFont, align: 'center', valign: 'middle'
                     });
-                    slide.addShape(pres.ShapeType.rect, { x: '45%', y: '55%', w: 2.0, h: 0.1, fill: accent });
-                    break;
 
                 case 'DIAGONAL_SPLIT':
                     // High-impact Diagonal Design
@@ -742,13 +836,27 @@ const generatePPTBuffer = async (data) => {
 
                 case 'THREE_COLUMNS':
                     slide.addText(String(s.title || "Key Pillars"), { x: 0.5, y: 0.3, w: '90%', fontSize: 32, bold: true, color: contrastTextColor, fontFace: font });
+                    slide.addText("NUROTRA INTELLIGENCE SUITE", {
+                        x: 0, y: '50%', w: '100%', fontSize: 14, color: '666666', fontFace: theme.bodyFont, align: 'center', spacing: 2
+                    });
+                    break;
+
+                case 'THREE_COLUMNS':
+                    addTitle(s.title);
                     if (s.threeColumns) {
+                        const colW = 2.8;
+                        const colH = 4.2;
+                        const startY = 1.6;
                         s.threeColumns.slice(0, 3).forEach((col, idx) => {
                             const x = 0.5 + (idx * 3.1);
                             slide.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.8, h: 4.5, fill: 'FFFFFF', line: { color: accent, width: 1 } });
                             slide.addShape(pres.ShapeType.rect, { x: x, y: 1.5, w: 2.8, h: 0.1, fill: accent });
                             slide.addText(String(col.title || ""), { x: x + 0.1, y: 1.7, w: 2.6, fontSize: 18, bold: true, color: safeAccentForLightBg, align: 'center', fontFace: font });
                             slide.addText(String(col.text || ""), { x: x + 0.1, y: 2.0, w: 2.6, h: 3.5, fontSize: 14, color: '333333', align: 'center', fontFace: font, valign: 'top' });
+                            const x = SAFE_MARGIN + (idx * 3.1);
+                            slide.addShape(pres.ShapeType.rect, { x: x, y: startY, w: colW, h: colH, fill: 'FFFFFF', line: { color: accent, width: 1 } });
+                            slide.addText(String(col.title || ""), { x: x + 0.1, y: startY + 0.2, w: colW - 0.2, fontSize: 16, bold: true, color: accent, align: 'center', fontFace: theme.headingFont });
+                            slide.addText(String(col.text || ""), { x: x + 0.1, y: startY + 0.7, w: colW - 0.2, fontSize: 13, color: '333333', align: 'center', fontFace: theme.bodyFont });
                         });
                     }
                     break;
@@ -793,6 +901,33 @@ const generatePPTBuffer = async (data) => {
                             slide.addText(String(step.label || ""), { x: x + 0.1, y: 2.6, w: 1.9, fontSize: 16, bold: true, color: safeAccentForLightBg, align: 'center', fontFace: font });
                             slide.addText(String(step.detail || ""), { x: x + 0.1, y: 3.2, w: 1.9, h: 1.5, fontSize: 12, color: '333333', align: 'center', fontFace: font, valign: 'top' });
                             if (idx < 3) slide.addShape(pres.ShapeType.rightArrow, { x: x + 2.15, y: 3.5, w: 0.3, h: 0.3, fill: accent });
+                case 'QUADRANT':
+                    addTitle(s.title, { align: 'center' });
+                    const quadrantLabels = s.quadrant_labels || ["Strength", "Weakness", "Projected", "Risk"];
+                    [0, 1, 2, 3].forEach(idx => {
+                        const row = Math.floor(idx / 2);
+                        const col = idx % 2;
+                        const x = SAFE_MARGIN + 0.5 + (col * 4.0);
+                        const y = 1.6 + (row * 2.5);
+                        slide.addShape(pres.ShapeType.rect, { x, y, w: 3.8, h: 2.3, fill: 'FFFFFF', line: { color: accent, width: 1 } });
+                        slide.addText(quadrantLabels[idx], { x: x + 0.2, y: y + 0.1, w: 3.4, fontSize: 16, bold: true, color: accent, fontFace: theme.headingFont });
+                        if (s.bullets && s.bullets[idx]) {
+                            slide.addText(String(s.bullets[idx]), { x: x + 0.2, y: y + 0.6, w: 3.4, fontSize: 14, color: '333333', fontFace: theme.bodyFont });
+                        }
+                    });
+                    break;
+
+                case 'DATA_GRID':
+                    addTitle(s.title);
+                    if (s.dataGrid) {
+                        s.dataGrid.slice(0, 8).forEach((item, idx) => {
+                            const row = Math.floor(idx / 4);
+                            const col = idx % 4;
+                            const x = SAFE_MARGIN + (col * 2.3);
+                            const y = 1.6 + (row * 2.1);
+                            slide.addShape(pres.ShapeType.rect, { x, y, w: 2.1, h: 1.8, fill: 'FFFFFF', line: { color: 'EEEEEE' } });
+                            slide.addText(String(item.label || ""), { x: x + 0.1, y: y + 0.2, w: 1.9, fontSize: 11, bold: true, color: accent, fontFace: theme.headingFont, align: 'center' });
+                            slide.addText(String(item.value || ""), { x: x + 0.1, y: y + 0.7, w: 1.9, fontSize: 22, bold: true, color: '1A1A1A', fontFace: theme.bodyFont, align: 'center' });
                         });
                     }
                     break;
@@ -895,8 +1030,15 @@ const generatePPTBuffer = async (data) => {
                         x: 0, y: '80%', w: '100%', h: 1.0,
                         fontSize: 40, bold: true, color: 'FFFFFF',
                         fontFace: font, align: 'center', fill: { color: '000000', transparency: 60 }
+                case 'TIMELINE':
+                    addTitle(s.title);
+                    const steps = s.timeline_steps || s.bullets || [];
+                    slide.addShape(pres.ShapeType.line, { x: SAFE_MARGIN, y: 4.0, w: 9.0, h: 0, line: { color: accent, width: 3 } });
+                    steps.slice(0, 5).forEach((step, idx) => {
+                        const x = SAFE_MARGIN + (idx * 1.8);
+                        slide.addShape(pres.ShapeType.ellipse, { x: x + 0.7, y: 3.8, w: 0.4, h: 0.4, fill: accent });
+                        slide.addText(String(step), { x: x, y: idx % 2 === 0 ? 3.0 : 4.5, w: 1.8, fontSize: 12, color: getContrastColor('#' + bg).replace('#', ''), align: 'center', fontFace: theme.bodyFont });
                     });
-                    if (s.imageHint) slide.addText(`[Visual: ${s.imageHint}]`, { x: 0.5, y: 0.5, fontSize: 12, color: accent, italic: true });
                     break;
 
                 default: // BULLETS
@@ -918,13 +1060,14 @@ const generatePPTBuffer = async (data) => {
                             fontFace: font, lineSpacing: 36, valign: 'top'
                         });
                     }
+                default:
+                    addTitle(s.title);
+                    addText(s.bullets || s.text || "");
                     break;
             }
-
-            // Branding Footer
-            slide.addText("Nurotra Executive Suite", { x: 7.5, y: 7.1, w: 2.0, fontSize: 10, color: accent, italic: true, align: 'right' });
-        });
+        }
     }
+
     return await pres.write('nodebuffer');
 };
 

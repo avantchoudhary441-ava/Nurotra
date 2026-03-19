@@ -1,6 +1,7 @@
 const Project = require("../models/Project");
 const Document = require("../models/Document");
 const WorkspaceFile = require("../models/WorkspaceFile");
+const axios = require("axios");
 const aiService = require("../services/aiService");
 const intentEngine = require("../services/intentEngine");
 const { contextualClassifyIntent } = require("../services/intentEngine");
@@ -22,132 +23,317 @@ const computeNextDueDate = (interval, fromDate = new Date()) => {
     return d;
 };
 
+const intentAnalyzer = require("../services/agents/intentAnalyzer");
+const classifier = require("../services/agents/classifier");
+const structurePlanner = require("../services/agents/structurePlanner");
+const contentGenerator = require("../services/agents/contentGenerator");
+const designEngine = require("../services/agents/designEngine");
+const renderingEngine = require("../services/agents/renderingEngine");
+
 /**
- * Process Docs Agent Query
+ * Process Docs Agent Query (Advanced Modular Pipeline)
  * Route: POST /api/docs-agent/query
  */
 const processQuery = async (req, res) => {
-    const { prompt, history, currentDoc, docIds } = req.body;
-    const hasOpenDoc = !!(currentDoc && (currentDoc.id || currentDoc._id));
-    const selectedDocCount = docIds ? docIds.length : (hasOpenDoc ? 1 : 0);
+    let { prompt, history, currentDoc, docIds, links } = req.body;
+    const uploadedFiles = req.files || [];
+
+    // If FormData was used, certain fields might be JSON strings
+    if (typeof history === 'string') try { history = JSON.parse(history); } catch { history = []; }
+    if (typeof currentDoc === 'string') try { currentDoc = JSON.parse(currentDoc); } catch { currentDoc = null; }
+    if (typeof docIds === 'string') try { docIds = JSON.parse(docIds); } catch { docIds = []; }
+    if (typeof links === 'string') try { links = JSON.parse(links); } catch { links = []; }
 
     if (!prompt) {
         return res.status(400).json({ message: "Prompt is required" });
     }
 
     try {
-        const userContext = {
-            name: req.user.name,
-            role: req.user.role,
-            niche: req.user.niche || "General"
-        };
+        console.log(`[DocsAgent] Starting Grounded 14-Stage Pipeline for: "${prompt.substring(0, 50)}..."`);
 
-        // 1. Context-aware Intent Detection (Prioritize LLM Rescue if requested or data is complex)
-        let intentInfo = contextualClassifyIntent(prompt, hasOpenDoc, selectedDocCount);
-        let categoryOverride = null;
+        // INGEST SOURCES: Fetch content from all attached materials
+        let sourceContent = ""; // Final grounding text string
 
-        // --- LLM SHIFT: Always verify intent via LLM if it's a critical request or confidence is not absolute ---
-        if (intentInfo.intent !== 'CREATE' && (intentInfo.confidence < 0.95 || selectedDocCount > 0)) {
-            console.log(`[LLM Shift] Verifying intent via Gemini...`);
-            try {
-                const rescue = await aiService.extractIntentWithLLM(prompt);
-                if (rescue) {
-                    // Check for clarification need first
-                    if (rescue.needs_clarification) {
-                        console.log(`[LLM Shift] Clarification needed: ${rescue.clarification_question}`);
-                        return res.json({
-                            intent: "CLARIFY",
-                            text: rescue.clarification_question,
-                            needs_clarification: true
-                        });
-                    }
+        // 1. Fetch from Sidebar/Project Documents
+        if (docIds && docIds.length > 0) {
+            const docs = await Document.find({ _id: { $in: docIds } });
+            sourceContent += docs.map(d => `SOURCE [DOC: ${d.name}]:\n${d.content}`).join("\n\n");
+        }
 
-                    // Only override if rescue is definitive and not conflicting with open doc logic
-                    if (!hasOpenDoc || rescue.intent !== 'QUERY') {
-                        intentInfo.intent = rescue.intent;
-                    }
-                    categoryOverride = rescue.category;
-
-                    // Update metadata if docType was inferred
-                    if (rescue.docType) {
-                        console.log(`[LLM Shift] Inferred docType: ${rescue.docType}`);
-                        intentInfo.inferredDocType = rescue.docType;
-                    }
-
-                    intentInfo.confidence = 1.0;
-                    console.log(`[LLM Shift] Intent updated to: ${intentInfo.intent} (${categoryOverride})`);
+        // 2. Fetch from External Links (Web Grounding)
+        if (links && links.length > 0) {
+            for (const link of links) {
+                try {
+                    const response = await axios.get(link, { timeout: 10000 });
+                    // Simple HTML-to-Text strategy
+                    const cleanText = response.data.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+                    sourceContent += `\n\nSOURCE [LINK: ${link}]:\n${cleanText.substring(0, 15000)}`;
+                } catch (e) {
+                    console.warn(`[DocsAgent] Failed to fetch link ${link}:`, e.message);
                 }
-            } catch (err) {
-                console.warn("LLM Intent Rescue failed, falling back to NLP:", err.message);
             }
         }
 
+        // 3. Fetch from Uploaded Files (Multimedia Handling)
+        if (uploadedFiles.length > 0) {
+            console.log(`[DocsAgent] Processing ${uploadedFiles.length} uploaded source files...`);
+            
+            // ALWAYS extract raw text first (this is our primary grounding source)
+            try {
+                const { buildDocumentSet } = require("../services/documentAnalysisService");
+                const extractedDocs = await buildDocumentSet([], uploadedFiles);
+                const totalExtractedLength = extractedDocs.reduce((acc, d) => acc + (d.content || "").length, 0);
+                
+                console.log(`[DocsAgent] Extraction Complete. Total characters: ${totalExtractedLength}`);
+                
+                sourceContent += `\n\n### CRITICAL GROUNDING SOURCE (UPLOADED FILES):\n`;
+                sourceContent += extractedDocs.map(d => `[FILE: ${d.name}]\n${d.content || "EMPTY_FILE_CONTENT"}`).join("\n\n");
+                
+                if (totalExtractedLength < 100) {
+                    console.warn("[DocsAgent] WARNING: Very little text extracted from files. Grounding may be weak.");
+                }
+            } catch (extErr) {
+                console.warn("[DocsAgent] Raw text extraction failed:", extErr.message);
+            }
 
-        const risk = intentEngine.detectRisk(prompt);
-
-        // 2. Advanced Operations Detection (e.g. multi-author merge, navigation pane, metadata inspection)
-        const advancedOps = intentEngine.detectAdvancedOps(prompt);
-        if (advancedOps.length > 0) {
-            console.log(`Debug: Advanced Word ops detected: ${advancedOps.join(', ')}`);
+            // SUPPLEMENT with deep analysis if structured insights are found
+            try {
+                const analysisResult = await runDocumentAnalysis(prompt, [], uploadedFiles, req.user);
+                if (analysisResult.isAnalysisRequest && analysisResult.executiveSummary?.detailed) {
+                    sourceContent += `\n\n### SUPPLEMENTAL ANALYSIS INSIGHTS:\n${analysisResult.executiveSummary.detailed.join("\n")}`;
+                }
+            } catch (awErr) {
+                // Not a fatal error, we have the raw text grounding
+            }
         }
 
-        // 3. Metadata Generation (Hybrid)
-        const metadata = intentEngine.generateMetadata(prompt, intentInfo.intent, categoryOverride, intentInfo.inferredDocType);
-
-        // 4. Narrative Execution (AI Personality + Advanced Ops injection)
-        const response = await aiService.processDocsAgentQuery(prompt, userContext, history, {
-            intent: intentInfo.intent,
-            risk,
-            metadata,
-            advancedOps,
-            currentDoc,
-            docIds, // Add this
-            hasOpenDoc  // ← tells AI to use MODIFY system prompt
-        });
-
-        // 5. Post-Generation Persistence for Dashboards
-        if (response.generation?.type === 'dashboard') {
-            if (intentInfo.intent === 'MODIFY' && hasOpenDoc) {
-                // Update existing document
-                const docId = currentDoc.id || currentDoc._id;
-                const updatedDoc = await Document.findOneAndUpdate(
-                    { _id: docId, userId: req.user._id },
-                    {
-                        rawStructure: response.generation.data,
-                        content: prompt, // Keep track of latest prompt used
-                        updatedAt: new Date()
-                    },
-                    { new: true }
-                );
-                if (updatedDoc) {
-                    response.document = { ...updatedDoc._doc, id: updatedDoc._id };
+        // VERIFY GROUNDING STRENGTH
+        if (uploadedFiles.length > 0 && sourceContent.length < 500) {
+            console.warn("[DocsAgent] CRITICAL: Grounding is weak after raw extraction. Attempting Python Recovery...");
+            try {
+                const { buildDocumentSet } = require("../services/documentAnalysisService");
+                const docsForPython = await buildDocumentSet([], uploadedFiles);
+                const { callPythonAnalysisEngine } = require("../services/documentAnalysisService");
+                const pyInsights = await callPythonAnalysisEngine(docsForPython, prompt, "EXTRACT_INFO");
+                if (pyInsights.processed_docs) {
+                    sourceContent += "\n\n### RECOVERY SOURCE (PYTHON ENGINE):\n";
+                    sourceContent += pyInsights.processed_docs.map(pd => pd.cleaned_snippet).join("\n");
                 }
-            } else {
-                // Create new document
+            } catch (pyErr) {
+                console.error("[DocsAgent] Recovery failed:", pyErr.message);
+            }
+        }
+
+        // multimediaContext: Original buffers for native AI ingestion (Gemini PDF support)
+        const multimediaContext = uploadedFiles
+            .filter(f => /\.pdf$/i.test(f.originalname) || (f.mimetype && f.mimetype.includes('pdf')))
+            .map(f => ({
+                mimeType: 'application/pdf',
+                data: f.buffer.toString('base64'),
+                fileName: f.originalname
+            }));
+
+        // OPTIMIZATION: Create a lightweight "brief" for earlier agents to prevent OOM
+        const multimediaBrief = multimediaContext.map(mm => ({
+            fileName: mm.fileName,
+            mimeType: mm.mimeType,
+            hint: `Multimodal context from PDF file: ${mm.fileName} is attached. Use it for specific names and facts.`
+        }));
+
+        // STAGE 1: INTENT ANALYSIS
+        let intentData;
+        try {
+            // Pass the BRIEF instead of the full Base64 payload here
+            intentData = await intentAnalyzer.analyzeIntent(prompt, sourceContent, multimediaBrief);
+            console.log(`[Stage 1 OK] Intent:`, intentData.topic);
+        } catch (st1Err) {
+            console.error(`[Stage 1 FAILED]:`, st1Err.message);
+            throw new Error(`Intent Analysis Error: ${st1Err.message}`);
+        }
+
+        // STAGE 2: CLASSIFICATION
+        let classification;
+        try {
+            // Pass the BRIEF instead of the full Base64 payload here
+            classification = await classifier.classifyType(prompt, intentData, multimediaBrief);
+            console.log(`[Stage 2 OK] Type: ${classification.presentation_type}`);
+        } catch (st2Err) {
+            console.error(`[Stage 2 FAILED]:`, st2Err.message);
+            throw new Error(`Classification Error: ${st2Err.message}`);
+        }
+
+        // STAGE 2.5: FASTAPI PYTHON AGENT INTERCEPTION FOR PPT
+        if (intentData.output_format === 'ppt' || intentData.output_format === 'pptx') {
+            console.log(`[DocsAgent] Intercepting PPT generation - Routing to Python CAMEL Agent...`);
+            try {
+                // Call the FastAPI Microservice
+                const fastApiResponse = await axios.post('http://localhost:8000/api/agents/ppt', {
+                    prompt: prompt,
+                    context_data: sourceContent
+                }, { timeout: 120000 }); // 2 minute timeout for agent generation
+
+                const agentData = fastApiResponse.data;
+                const processedSlides = agentData.slides;
+                const b64File = agentData.base64_file;
+
+                console.log(`[DocsAgent] Received generated PPT from Python Agent.`);
+
+                // Convert B64 back to buffer for saving
+                const pptBuffer = Buffer.from(b64File, 'base64');
+                
+                // Mock the expected structures for the rest of the flow to save correctly
+                const classification = { presentation_type: "PPT_Agent_Generated" };
+                const structure = { sections: processedSlides.map(s => ({ heading: s.title })) };
+                const finalOutput = {
+                    type: 'ppt',
+                    buffer: pptBuffer,
+                    fileName: (intentData.topic || 'Presentation').replace(/[<>:"/\\|?*]/g, '_').trim().replace(/\.pptx$/i, '') + '.pptx',
+                    mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                };
+
+                const displayContent = processedSlides.map(s => `### ${s.heading || s.title}\n${(s.bullet_points || []).join('\n')}`).join('\n\n');
+                
+                console.log(`[DocsAgent] Received PPT Buffer from Python. Size: ${pptBuffer.length} bytes`);
                 const document = new Document({
-                    name: response.generation.data?.fileName || metadata.name || 'Intelligence_Board.json',
-                    type: 'dashboard',
-                    content: prompt,
-                    rawStructure: response.generation.data,
-                    projectId: req.body.projectId || null,
-                    metadata: {
-                        purpose: metadata.purpose || 'Strategic Intelligence',
-                        category: metadata.category || 'General',
-                        entities: metadata.entities || [],
-                        confidenceScore: metadata.confidenceScore || 0.95
+                    name: finalOutput.fileName,
+                    type: 'ppt',
+                    content: displayContent,
+                    rawStructure: {
+                        slides: processedSlides.map(s => ({ 
+                            title: s.heading || s.title || "Slide", 
+                            bullets: s.bullet_points || [] 
+                        })),
+                        intent: intentData,
+                        classification,
+                        sections: processedSlides.map(s => ({ heading: s.heading || s.title }))
                     },
                     userId: req.user._id,
-                    status: 'draft'
+                    status: 'draft',
+                    metadata: { purpose: intentData.purpose, confidenceScore: 0.99 }
                 });
                 await document.save();
-                response.document = { ...document._doc, id: document._id };
+                console.log(`[DocsAgent] Document saved with ID: ${document._id}`);
+
+                // Explicitly save the beautifully generated Python PPTX buffer 
+                // to WorkspaceFile so downloading retrieves the Camel PPT, 
+                // instead of triggering a node-side PptxGenJS regeneration.
+                await WorkspaceFile.findOneAndUpdate(
+                    { userId: req.user._id, documentId: document._id },
+                    {
+                        userId: req.user._id,
+                        documentId: document._id,
+                        projectId: null,
+                        fileName: finalOutput.fileName,
+                        fileType: 'pptx',
+                        fileData: pptBuffer,
+                        size: pptBuffer.length
+                    },
+                    { upsert: true, new: true }
+                );
+
+                return res.json({
+                    success: true,
+                    document: { ...document._doc, id: document._id },
+                    intent: intentData.purpose,
+                    analysis: intentData,
+                    classification,
+                    structure,
+                    content: processedSlides,
+                    render: finalOutput,
+                    generation: { type: 'ppt', data: finalOutput },
+                    message: "Successfully generated PPT using Python Agents."
+                });
+
+            } catch (agentErr) {
+                console.error("[DocsAgent] Python Agent Generation Failed:", agentErr.message);
+                throw new Error(`Python Agent Error: ${agentErr.message}`);
             }
         }
 
-        res.json(response);
+        // STAGE 3: STRUCTURE PLANNING (Continues as normal for Word/Website)
+        let structure;
+        try {
+            structure = await structurePlanner.generateStructure(prompt, intentData, classification, sourceContent, multimediaContext);
+            if (!structure.sections) throw new Error("Agent returned empty sections");
+            console.log(`[Stage 3 OK] Sections: ${structure.sections.length}`);
+        } catch (st3Err) {
+            console.error(`[Stage 3 FAILED]:`, st3Err.message);
+            throw new Error(`Structure Planning Error: ${st3Err.message}`);
+        }
+
+        // STAGE 6: CONTENT GENERATION
+        let content;
+        try {
+            content = await contentGenerator.generateContent(prompt, intentData, structure, sourceContent, multimediaContext);
+            if (!content.slides) throw new Error("Agent returned empty slides");
+            console.log(`[Stage 6 OK] Content Generated.`);
+        } catch (st4Err) {
+            console.error(`[Stage 6 FAILED]:`, st4Err.message);
+            throw new Error(`Content Generation Error: ${st4Err.message}`);
+        }
+
+        // STAGE 5 & 7: DESIGN INTELLIGENCE & VISUAL ENHANCEMENT
+        let processedSlides;
+        try {
+            processedSlides = designEngine.processDesign(content.slides);
+            console.log(`[Stage 5/7 OK] Design applied.`);
+        } catch (st5Err) {
+            console.error(`[Stage 5/7 FAILED]:`, st5Err.message);
+            throw new Error(`Design Engine Error: ${st5Err.message}`);
+        }
+
+        // STAGE 11: RENDERING ENGINE
+        const finalOutput = await renderingEngine.renderOutput({
+            ...intentData,
+            slides: processedSlides,
+            topic: intentData.topic
+        }, intentData.output_format);
+
+        console.log(`[Stage 11] Rendering Complete for format: ${intentData.output_format}`);
+
+        // PERSISTENCE: Save the generated document to MongoDB
+        // Build a text representation of the content for the canvas view
+        const displayContent = processedSlides.map(s => `### ${s.title}\n${s.bullets.join('\n')}`).join('\n\n');
+
+        const document = new Document({
+            name: (finalOutput && finalOutput.fileName) || intentData.topic || 'Generated_Document',
+            type: intentData.output_format === 'website' ? 'website' : (intentData.output_format === 'ppt' ? 'ppt' : 'generic'),
+            content: displayContent,
+            rawStructure: {
+                slides: processedSlides,
+                intent: intentData,
+                classification,
+                sections: structure.sections
+            },
+            userId: req.user._id,
+            status: 'draft',
+            metadata: {
+                purpose: intentData.purpose,
+                confidenceScore: 0.98
+            }
+        });
+        await document.save();
+
+        // Respond with the comprehensive result (Stage 13)
+        res.json({
+            success: true,
+            document: { ...document._doc, id: document._id },
+            intent: intentData.purpose,
+            analysis: intentData,
+            classification,
+            structure,
+            content: processedSlides,
+            render: finalOutput,
+            generation: {
+                type: intentData.output_format,
+                data: finalOutput
+            },
+            message: `Successfully generated ${intentData.output_format} with advanced modular architecture.`
+        });
+
     } catch (error) {
-        console.error("Docs Agent Controller Error:", error);
-        res.status(500).json({ message: "Failed to process agent query" });
+        console.error("Advanced Docs Agent Controller Error:", error);
+        res.status(500).json({ message: "Modular pipeline failed", error: error.message });
     }
 };
 

@@ -14,7 +14,11 @@ import {
     Edit3,
     Clock,
     TrendingUp,
-    CornerUpLeft
+    CornerUpLeft,
+    Link,
+    Library,
+    Database,
+    Monitor
 } from 'lucide-react';
 import { docsAgentService } from '../../../services/docsAgentService';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
@@ -45,11 +49,16 @@ const DocsChat = ({
     const [prompt, setPrompt] = useState('');
     const [isListening, setIsListening] = useState(false);
     const [isThinking, setIsThinking] = useState(false);
+    const [isAnalysing, setIsAnalysing] = useState(false);
     const [isAutoTyping, setIsAutoTyping] = useState(false);
     const [uploadedFiles, setUploadedFiles] = useState([]);
     const [showPastConversations, setShowPastConversations] = useState(false);
     const [structuredVoiceResult, setStructuredVoiceResult] = useState(null);
     const [isStructuring, setIsStructuring] = useState(false);
+    const [attachedResources, setAttachedResources] = useState([]); // {id, type, name, value}
+    const [showResourcePicker, setShowResourcePicker] = useState(false);
+    const [linkInput, setLinkInput] = useState('');
+    const resourceFileInputRef = useRef(null);
     const recognitionRef = useRef(null);
     const silenceTimerRef = useRef(null);
     const transcriptAccumulatorRef = useRef('');
@@ -178,12 +187,12 @@ const DocsChat = ({
         const files = Array.from(e.target.files);
         setRawUploadedFiles(prev => [...prev, ...files]);
         setUploadedFiles(prev => [
-            ...prev, 
-            ...files.map(f => ({ 
-                id: Date.now() + Math.random(), 
+            ...prev,
+            ...files.map(f => ({
+                id: Date.now() + Math.random(),
                 name: f.name,
                 type: f.type,
-                preview: f.type.startsWith('image/') ? URL.createObjectURL(f) : null 
+                preview: f.type.startsWith('image/') ? URL.createObjectURL(f) : null
             }))
         ]);
         // Reset input so same file can be re-uploaded
@@ -197,6 +206,63 @@ const DocsChat = ({
             return prev.filter(f => f.id !== fileId);
         });
         setRawUploadedFiles(prev => prev.filter((_, i) => uploadedFiles[i]?.id !== fileId));
+    };
+
+    const removeAttachedResource = (id) => {
+        setAttachedResources(prev => prev.filter(r => r.id !== id));
+    };
+
+    const addLinkResource = () => {
+        if (!linkInput.trim()) return;
+        setAttachedResources(prev => [...prev, {
+            id: Date.now(),
+            type: 'link',
+            name: linkInput.trim(),
+            value: linkInput.trim()
+        }]);
+        setLinkInput('');
+        setShowResourcePicker(false);
+    };
+
+    const addNurotraResource = (item) => {
+        setAttachedResources(prev => [...prev, {
+            id: `nurotra_${Date.now()}`,
+            type: 'nurotra_doc',
+            name: item.name,
+            value: item.id || item._id
+        }]);
+        setShowResourcePicker(false);
+    };
+
+    const handleResourceFileUpload = (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+
+        files.forEach(file => {
+            const isImage = file.type.startsWith('image/');
+            const isVideo = file.type.startsWith('video/');
+            const isPDF = file.type === 'application/pdf';
+
+            let type = 'file';
+            if (isImage) type = 'image';
+            else if (isVideo) type = 'video';
+            else if (isPDF) type = 'pdf';
+
+            const resourceId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+
+            // Preview for images
+            let preview = null;
+            if (isImage) preview = URL.createObjectURL(file);
+
+            setAttachedResources(prev => [...prev, {
+                id: resourceId,
+                type: type,
+                name: file.name,
+                value: file, // Store the raw file object
+                preview: preview
+            }]);
+        });
+        setShowResourcePicker(false);
     };
 
     const handleExecute = async () => {
@@ -213,9 +279,16 @@ const DocsChat = ({
 
         // ── Immediately capture and clear uploaded files so UI is responsive ──
         const capturedFiles = [...rawUploadedFiles];
-        const capturedDocIds = [...selectedDocIds];
+        const capturedDocIds = [...selectedDocIds, ...attachedResources.filter(r => r.type === 'nurotra_doc').map(r => r.value)];
+        const capturedLinks = attachedResources.filter(r => r.type === 'link').map(r => r.value);
+        const capturedResourceFiles = attachedResources.filter(r => !['nurotra_doc', 'link'].includes(r.type)).map(r => r.value);
+
+        // Combine all files for the backend
+        const allFiles = [...rawUploadedFiles, ...capturedResourceFiles];
+
         setUploadedFiles([]);
         setRawUploadedFiles([]);
+        setAttachedResources([]);
 
         // ── Capture a state snapshot BEFORE this command executes ──
         const snapshot = onInlineUndo ? onInlineUndo('GET_SNAPSHOT') : null;
@@ -226,10 +299,17 @@ const DocsChat = ({
             type: 'user',
             text: userPrompt,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            snapshot
+            snapshot,
+            resources: attachedResources.map(r => ({
+                id: r.id,
+                type: r.type,
+                name: r.name,
+                preview: r.preview
+            }))
         };
         setStrategyMessages(prev => [...prev, userMsg]);
-        setIsThinking(true);
+        setIsAnalysing(true);
+        setIsThinking(false); // Mutually exclusive
 
         let finalPrompt = userPrompt;
 
@@ -258,7 +338,7 @@ const DocsChat = ({
                         }]);
 
                         const extractionResult = await docsAgentService.extractCommandFromFiles(capturedFiles, userPrompt);
-                        
+
                         if (extractionResult.success) {
                             finalPrompt = extractionResult.combinedCommand;
                             setStrategyMessages(prev => [...prev, {
@@ -299,6 +379,7 @@ const DocsChat = ({
                 // Always clear files even on error so they don't get stuck
                 setUploadedFiles([]);
                 setRawUploadedFiles([]);
+                setIsAnalysing(false);
                 setIsThinking(false);
                 setStrategyMessages(prev => [...prev, {
                     id: Date.now() + 1,
@@ -309,6 +390,16 @@ const DocsChat = ({
                 return;
             }
         }
+
+        let loadingTimer = null;
+
+        // DELIBERATE LOADING SEQUENCE:
+        // Transition from Analysing to Thinking after 3 seconds to ensure visibility.
+        // We capture the timer so we can clear it if the request finishes early.
+        loadingTimer = setTimeout(() => {
+            setIsAnalysing(false);
+            setIsThinking(true);
+        }, 3000);
 
         // ──────────────────────────────────────────────────────────────
         // NORMAL CREATION / QUERY ROUTE (no docs, or non-analysis prompt)
@@ -323,10 +414,10 @@ const DocsChat = ({
             const response = await docsAgentService.generateResponse(finalPrompt, intent, {
                 history: historyContext,
                 currentDoc: currentDoc,
-                docIds: selectedDocIds
+                docIds: capturedDocIds,
+                links: capturedLinks,
+                files: allFiles
             });
-
-            setIsThinking(false);
 
             const agentMsg = {
                 id: Date.now() + 1,
@@ -346,13 +437,16 @@ const DocsChat = ({
             }
         } catch (error) {
             console.error('Docs Agent Error:', error);
-            setIsThinking(false);
             setStrategyMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 type: 'error',
                 text: `❌ An error occurred: ${error.message || 'Unable to process your request. Please try again.'}`,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             }]);
+        } finally {
+            if (loadingTimer) clearTimeout(loadingTimer);
+            setIsAnalysing(false);
+            setIsThinking(false);
         }
     };
 
@@ -641,6 +735,24 @@ const DocsChat = ({
                             <span>{msg.text} • {msg.time}</span>
                         ) : (
                             <div className="message-content">
+                                {msg.resources && msg.resources.length > 0 && (
+                                    <div className="message-resources">
+                                        {msg.resources.map(res => (
+                                            <div key={res.id} className="resource-chip-mini">
+                                                {res.type === 'image' && res.preview ? (
+                                                    <img src={res.preview} alt="" className="mini-preview" />
+                                                ) : res.type === 'link' ? (
+                                                    <Link size={10} />
+                                                ) : res.type === 'nurotra_doc' ? (
+                                                    <Database size={10} />
+                                                ) : (
+                                                    <FileText size={10} />
+                                                )}
+                                                <span>{res.name}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                                 <p>{msg.text}</p>
                                 {msg.clarification && (
                                     <div className="clarification-options">
@@ -702,7 +814,10 @@ const DocsChat = ({
                         )}
                     </div>
                 ))}
-                {isThinking && <ThinkingIndicator />}
+                {isAnalysing && (
+                    <ThinkingIndicator message="Nurotra is analyzing your resources..." />
+                )}
+                {!isAnalysing && isThinking && <ThinkingIndicator />}
 
                 {liveUpdates && liveUpdates.length > 0 && (
                     <div className="micro-logs-container">
@@ -741,13 +856,13 @@ const DocsChat = ({
                     </div>
                 )}
                 {/* Document Status Indicator — shows doc count, prompts user to type */}
-                {!currentDoc && (selectedDocIds.length + rawUploadedFiles.length) > 0 && (
+                {!currentDoc && (selectedDocIds.length + rawUploadedFiles.length + attachedResources.length) > 0 && (
                     <div className="doc-status-indicator animate-fade-in-up">
                         <div className="doc-status-pill">
                             <TrendingUp size={14} className="doc-status-icon" />
                             <span className="doc-status-text">
-                                <strong>{selectedDocIds.length + rawUploadedFiles.length}</strong>
-                                {' '}item{(selectedDocIds.length + rawUploadedFiles.length) > 1 ? 's' : ''} ready
+                                <strong>{selectedDocIds.length + rawUploadedFiles.length + attachedResources.length}</strong>
+                                {' '}item{(selectedDocIds.length + rawUploadedFiles.length + attachedResources.length) > 1 ? 's' : ''} ready
                             </span>
                             <span className="doc-status-hint">↓ Type a prompt to analyze or create from these</span>
                         </div>
@@ -802,8 +917,8 @@ const DocsChat = ({
                         </div>
                     </div>
                 )}
-                {/* File Previews (Analytic or Command) */}
-                {uploadedFiles.length > 0 && (
+                {/* File & Resource Previews */}
+                {(uploadedFiles.length > 0 || attachedResources.length > 0) && (
                     <div className="command-previews animate-fade-in-up">
                         {uploadedFiles.map(file => (
                             <div key={file.id} className="command-file-chip">
@@ -814,6 +929,21 @@ const DocsChat = ({
                                 )}
                                 <span className="cmd-file-name" title={file.name}>{file.name}</span>
                                 <button className="cmd-remove-btn" onClick={() => removeUploadedFile(file.id)}>
+                                    <X size={10} />
+                                </button>
+                            </div>
+                        ))}
+                        {attachedResources.map(res => (
+                            <div key={res.id} className="command-file-chip resource-chip">
+                                {res.preview ? (
+                                    <img src={res.preview} alt="preview" className="cmd-img-preview" />
+                                ) : (
+                                    res.type === 'link' ? <Link size={14} className="cmd-file-icon" /> :
+                                        res.type === 'nurotra_doc' ? <Database size={14} className="cmd-file-icon" /> :
+                                            <Monitor size={14} className="cmd-file-icon" />
+                                )}
+                                <span className="cmd-file-name" title={res.name}>{res.name}</span>
+                                <button className="cmd-remove-btn" onClick={() => removeAttachedResource(res.id)}>
                                     <X size={10} />
                                 </button>
                             </div>
@@ -838,15 +968,65 @@ const DocsChat = ({
                     />
                     <div className="prompt-actions">
                         <div className="left-actions">
-                            <button 
-                                className="action-btn" 
-                                onClick={() => fileInputRef.current.click()} 
+                            <button
+                                className="action-btn"
+                                onClick={() => fileInputRef.current.click()}
                                 title="Attach files or images"
                             >
                                 <Paperclip size={18} />
                             </button>
+                            <button
+                                className={`action-btn ${showResourcePicker ? 'active' : ''}`}
+                                onClick={() => setShowResourcePicker(!showResourcePicker)}
+                                title="Add Sources (Links, Documents, Data)"
+                            >
+                                <Library size={18} />
+                            </button>
                             <button className={`action-btn ${isListening ? 'listening' : ''}`} onClick={toggleVoice}><Mic size={18} /></button>
                         </div>
+                        {showResourcePicker && (
+                            <div className="resource-picker-dropdown animate-fade-in-up">
+                                <div className="picker-section">
+                                    <label><Monitor size={12} /> Local Storage</label>
+                                    <button
+                                        className="picker-full-btn"
+                                        onClick={() => resourceFileInputRef.current.click()}
+                                    >
+                                        <Monitor size={14} /> From Device
+                                    </button>
+                                    <input
+                                        type="file"
+                                        ref={resourceFileInputRef}
+                                        style={{ display: 'none' }}
+                                        multiple
+                                        onChange={handleResourceFileUpload}
+                                    />
+                                </div>
+                                <div className="picker-section">
+                                    <label><Link size={12} /> Add Web Link</label>
+                                    <div className="picker-input-group">
+                                        <input
+                                            type="text"
+                                            placeholder="https://..."
+                                            value={linkInput}
+                                            onChange={(e) => setLinkInput(e.target.value)}
+                                            onKeyPress={(e) => e.key === 'Enter' && addLinkResource()}
+                                        />
+                                        <button onClick={addLinkResource}><ArrowRight size={14} /></button>
+                                    </div>
+                                </div>
+                                <div className="picker-section">
+                                    <label><Database size={12} /> Recent Nurotra Documents</label>
+                                    <div className="picker-scroll-list">
+                                        {allDocs?.slice(0, 5).map(doc => (
+                                            <button key={doc.id || doc._id} onClick={() => addNurotraResource(doc)}>
+                                                {doc.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <button className="execute-btn" onClick={handleExecute}><ArrowRight size={18} /></button>
                     </div>
                 </div>

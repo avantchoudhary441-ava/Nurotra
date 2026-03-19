@@ -42,11 +42,35 @@ export const docsAgentService = {
     generateResponse: async (prompt, intent, context = {}) => {
         try {
             const hasOpenDoc = !!(context.currentDoc && (context.currentDoc.id || context.currentDoc._id));
+
+            // Check if we have files to upload
+            if (context.files && context.files.length > 0) {
+                const formData = new FormData();
+                formData.append('prompt', prompt);
+                formData.append('intent', intent);
+                formData.append('history', JSON.stringify(context.history || []));
+                formData.append('currentDoc', JSON.stringify(context.currentDoc || null));
+                formData.append('docIds', JSON.stringify(context.docIds || []));
+                formData.append('links', JSON.stringify(context.links || []));
+                formData.append('hasOpenDoc', hasOpenDoc);
+
+                context.files.forEach(file => {
+                    formData.append('files', file);
+                });
+
+                const response = await api.post('/docs-agent/query', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                return response.data;
+            }
+
+            // Fallback to JSON if no files
             const response = await api.post('/docs-agent/query', {
                 prompt,
                 history: context.history || [],
                 currentDoc: context.currentDoc || null,
                 docIds: context.docIds || [],
+                links: context.links || [],
                 hasOpenDoc   // ← tells controller/AI to use MODIFY path
             });
 
