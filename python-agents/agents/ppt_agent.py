@@ -31,118 +31,112 @@ def create_model_instance(temperature: float = 0.2):
     )
 
 # ==========================================
-# STAGE 1: OUTLINE PLANNER
+# MASTER PPT GENERATOR
 # ==========================================
-def run_stage_1_planner(prompt: str, context: str) -> str:
-    model = create_model_instance(temperature=0.3)
-    sys_msg = BaseMessage.make_assistant_message(
-        role_name="Presentation Strategist",
-        content="""You are an elite Presentation Strategist.
-Your goal is to design the narrative structure (10-15 slides) for a PowerPoint based on the user's topic.
-Create a logical flow: Hook -> Problem/Background -> Core Concepts -> Deep Insights -> Case Study -> Data/Evidence -> Solutions -> Conclusion.
-Output ONLY the structural outline. No JSON yet."""
-    )
-    agent = ChatAgent(sys_msg, model=model)
-    user_msg = BaseMessage.make_user_message(
-        role_name="User",
-        content=f"Topic: {prompt}\n\nContext: {context}\n\nPlan the structure."
-    )
-    return agent.step(user_msg).msg.content
-
-# ==========================================
-# STAGE 2: CONTENT GENERATOR
-# ==========================================
-def run_stage_2_content_generator(outline: str) -> str:
+def run_ppt_generation(prompt: str, context: str, slide_count: int = 6) -> str:
     model = create_model_instance(temperature=0.4)
-    sys_msg = BaseMessage.make_assistant_message(
-        role_name="Content Expert",
-        content="""You are a brilliant Content Expert for presentations.
-Based on the provided outline, generate the exact slide content.
-Rules:
-- NO generic phrases (e.g. "improve efficiency").
-- 3-5 sharp, specific bullets per slide (under 12 words each).
-- Provide visual keywords if applicable.
-Output your draft content clearly (it does not have to be JSON yet, focus on quality)."""
-    )
-    agent = ChatAgent(sys_msg, model=model)
-    user_msg = BaseMessage.make_user_message(
-        role_name="User",
-        content=f"Outline:\n{outline}\n\nGenerate the rich slide content."
-    )
-    return agent.step(user_msg).msg.content
+    raw_content = """You are an expert PowerPoint slide generator for CAMEL PPTXToolkit. 
 
-# ==========================================
-# STAGE 3: REVIEWER & JSON FORMATTER
-# ==========================================
-def run_stage_3_reviewer(draft_content: str) -> str:
-    model = create_model_instance(temperature=0.1)
-    sys_msg = BaseMessage.make_assistant_message(
-        role_name="JSON Formatter",
-        content="""You are a STRICT JSON Formatter.
-Convert the presentation content into a specific JSON array format required by PPTXToolkit.
-Note that the schema structure MUST exactly be an array of dictionaries representing the slides.
+**Your job:** Output a single JSON array (no markdown, no commentary) for a presentation on "{topic}" with exactly {slide_count_plus_one} slides (including title). 
 
-Rules:
-1. The FIRST dict must represent the title slide and have strictly these keys:
-   {"title": "String", "subtitle": "String"}
-   
-2. The OTHER dicts represent content slides and must have these keys:
-   {"heading": "String", "bullet_points": ["String", "String"], "img_keywords": "Optional search keywords for image (String)"}
-   
-DO NOT include any nested lists in `bullet_points`. It MUST be a flat list of strings.
-If you need to show hierarchy or step-by-step process, start the bullet point with '>> '.
+**CAMEL PPTXToolkit slide types (choose from these only):**
+- **Title slide:** 
+  {"title": ..., "subtitle": ...}
+- **Bullet slide:** 
+  {"heading": ..., "bullet_points": ["...", "...",....], "img_keywords": "..."}
+- **Step-by-step slide:** 
+  {"heading": ..., "bullet_points": [">> Step 1: ...", ">> Step 2: ...", ">> Step 3: ...",....], "img_keywords": "..."}
+  (If a bullet starts with ">>", it's rendered as a pentagon/chevron shape.)
+- **Table slide:** 
+  {"heading": ..., "table": {"headers": [...], "rows": [[...],[...],[...]]}, "img_keywords": "..."}
 
-DO NOT include any markdown formatting or ticks. ONLY output a raw JSON array.
+**REQUIRED FORMAT:**
+[
+  {"title": "Title for {topic}", "subtitle": "Subtitle for this topic"},
+  {"heading": "...", "bullet_points": ["...", "...",....], "img_keywords": "..."},
+  {"heading": "...", "bullet_points": [">> Step 1: ...", ">> Step 2: ...",.....], "img_keywords": "..."},
+  {"heading": "...", "table": {"headers": ["Col1", "Col2"], "rows": [["A", "B"], ["C", "D"]]}, "img_keywords": "..."},
+  ...
+]
+
+**MANDATORY RULES:**
+1. The first slide is always a title slide.
+2. Include at least one step-by-step slide (with all bullet points starting with ">>").
+3. Include at least one table slide.
+4. At least TWO slides (not counting the title slide) MUST have non-empty, relevant "img_keywords" (search terms, not URLs) for the image field. Use visually interesting or topic-relevant keywords.
+5. For all bullet slides, use Markdown syntax for bold (**text**) and italics (*text*).
+6. **All bullet and step-by-step slides must include at least Four bullet points.**
+7. Make content clear, concise, and visually engaging. 
+8. Do NOT output markdown code fences or commentary—only raw JSON array.
+
+**Styling Note:** Slides will be rendered with a dark background and white text (no need to mention this, just make sure content is readable).
+
+**Example:**
+[
+  {"title": "AI Agents", "subtitle": "Exploring the world of artificial intelligence agents"},
+  {"heading": "Types of AI Agents", "bullet_points": ["Intelligent Virtual Agents", "Autonomous Agents", "Collaborative Agents",....], "img_keywords": "AI, technology"},
+  {"heading": "Creating an AI Agent", "bullet_points": [">> Step 1: Define the goal", ">> Step 2: Choose algorithms", ">> Step 3: Implement and test",">> Step 4:......], "img_keywords": "workflow, robotics"},
+  {"heading": "Comparison of AI Agents", "table": {"headers": ["Type", "Capabilities", "Examples"], "rows": [["Virtual", "Conversational AI", "Siri"], ["Autonomous", "Self-learning", "Robots"]]}, "img_keywords": "comparison chart, table"},
+  ... (add more if needed) ...
+]
 """
+    # Safe replacement of placeholders
+    content = raw_content.replace("{topic}", prompt).replace("{slide_count_plus_one}", str(slide_count + 1))
+    
+    sys_msg = BaseMessage.make_assistant_message(
+        role_name="Expert PPT Generator",
+        content=content
     )
     agent = ChatAgent(sys_msg, model=model)
     user_msg = BaseMessage.make_user_message(
         role_name="User",
-        content=f"Draft:\n{draft_content}\n\nOutput STRICT JSON array matching the required schema."
+        content=f"Topic: {prompt}\n\nContext: {context}\n\nGenerate the presentation JSON."
     )
     response = agent.step(user_msg).msg.content
     return response.replace("```json", "").replace("```", "").strip()
+
+def normalize_slides(slides_list: list) -> list:
+    new_slides = []
+    for i, s in enumerate(slides_list):
+        if i == 0:
+            new_slides.append({"title": s.get("title", "Presentation"), "subtitle": s.get("subtitle", "")})
+        else:
+            raw_bullets = s.get("bullet_points", s.get("bullets", []))
+            flat_bullets = []
+            for b in raw_bullets:
+                if isinstance(b, list):
+                    flat_bullets.extend(str(sub_b) for sub_b in b)
+                else:
+                    flat_bullets.append(str(b))
+                    
+            slide_dict = {
+                "heading": s.get("heading", s.get("title", "")),
+                "bullet_points": flat_bullets,
+                "img_keywords": s.get("img_keywords", s.get("visual", ""))
+            }
+            if "table" in s:
+                slide_dict["table"] = s["table"]
+            new_slides.append(slide_dict)
+    return new_slides
 
 # ==========================================
 # MAIN FASTAPI EXPOSED FUNCTION
 # ==========================================
 async def generate_ppt(prompt: str, context: str) -> Dict[str, Any]:    
-    # 1. Plan Outline
-    outline = run_stage_1_planner(prompt, context)
-    
-    # 2. Generate Content
-    draft_content = run_stage_2_content_generator(outline)
-    
-    # 3. Review & Format to PPTXToolkit schema
-    json_response = run_stage_3_reviewer(draft_content)
+    json_response = run_ppt_generation(prompt, context)
     
     try:
         parsed_data = json.loads(json_response)
         
-        # In case the model responds with an object containing "slides": [...]
+        # Check if it's wrapped in a "slides" key or bare array
         if isinstance(parsed_data, dict) and "slides" in parsed_data:
-            slides = parsed_data["slides"]
-            new_slides = []
-            for i, s in enumerate(slides):
-                if i == 0:
-                    new_slides.append({"title": s.get("title", "Presentation"), "subtitle": s.get("subtitle", "")})
-                else:
-                    raw_bullets = s.get("bullet_points", s.get("bullets", []))
-                    flat_bullets = []
-                    # Safely flatten any nested lists the LLM might have generated
-                    for b in raw_bullets:
-                        if isinstance(b, list):
-                            flat_bullets.extend(str(sub_b) for sub_b in b)
-                        else:
-                            flat_bullets.append(str(b))
-                            
-                    new_slides.append({
-                        "heading": s.get("heading", s.get("title", "")),
-                        "bullet_points": flat_bullets,
-                        "img_keywords": s.get("img_keywords", s.get("visual", ""))
-                    })
-            parsed_data = new_slides
-            json_response = json.dumps(parsed_data)
+            parsed_data = normalize_slides(parsed_data["slides"])
+        elif isinstance(parsed_data, list):
+            parsed_data = normalize_slides(parsed_data)
+        else:
+            raise ValueError("LLM returned unexpected JSON structure.")
+            
+        json_response = json.dumps(parsed_data)
         
     except json.JSONDecodeError as e:
         print(f"Failed to parse LLM JSON: {json_response}")
