@@ -21,8 +21,20 @@ export const NuroCoreProvider = ({ children }) => {
     // 🧠 INITIAL FETCH: Sync Nuro Memory from Cloud
     useEffect(() => {
         const fetchMemory = async () => {
-            const user = localStorage.getItem("nurotra_user");
-            if (!user) {
+            const rawUser = localStorage.getItem("nurotra_user");
+            if (!rawUser) {
+                setLoading(false);
+                return;
+            }
+
+            // Also verify the stored object actually has a valid token field
+            try {
+                const parsedUser = JSON.parse(rawUser);
+                if (!parsedUser?.token) {
+                    setLoading(false);
+                    return;
+                }
+            } catch {
                 setLoading(false);
                 return;
             }

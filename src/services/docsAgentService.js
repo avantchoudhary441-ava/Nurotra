@@ -78,7 +78,7 @@ export const docsAgentService = {
             return response.data;
         } catch (error) {
             console.error("Docs Agent AI Engine Failure:", error);
-            
+
             let message = "Failed to connect to AI service";
             if (error.response) {
                 // The server responded with a status code
