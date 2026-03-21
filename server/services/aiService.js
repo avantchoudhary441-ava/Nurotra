@@ -7,6 +7,17 @@ const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPE
 const responseCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 Hour
 
+let currentKeyIndex = 0;
+const getApiKeys = () => {
+    const keys = [];
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
+    for (let i = 2; i <= 10; i++) {
+        const k = process.env[`GEMINI_API_KEY_${i}`];
+        if (k) keys.push(k);
+    }
+    return keys;
+};
+
 /**
  * Generate completion with OpenAI GPT (Supports Vision)
  * @param {string} prompt 
@@ -65,166 +76,149 @@ const crypto = require("crypto");
  * @param {Array} multimedia - Optional array of { mimeType: string, data: base64 } for PDFs, etc.
  */
 const generateWithFallback = async (prompt, systemPrompt = "", images = [], multimedia = []) => {
-    // Generate a unique cache key based on the full prompt and system prompt
-    const mmSample = multimedia.map(m => (m.data && typeof m.data === 'string') ? m.data.substring(0, 100) : (m.hint || '')).join('');
-    const hashData = `${prompt}|${systemPrompt}|${images.length > 0 ? (images[0].data ? images[0].data.substring(0, 50) : '') : ''}|${mmSample}`;
-    const cacheKey = crypto.createHash('md5').update(hashData).digest('hex');
-
-    if (responseCache.has(cacheKey) && images.length === 0) {
-        const cached = responseCache.get(cacheKey);
-        if (Date.now() - cached.timestamp < CACHE_TTL) {
-            return cached.data;
-        }
-    }
-
-    // OpenAI is now the exclusive engine
-    if (!openai) {
-        throw new Error("CRITICAL: OpenAI API key is missing or invalid. Please check your .env configuration.");
-    }
-
     try {
-        console.log(`[AI Service] Executing via OpenAI... ${images.length > 0 ? '[Vision Mode]' : ''}`);
-        const text = await generateWithOpenAI(prompt, systemPrompt, images);
-        if (text) {
-            console.log(`[AI Service] OpenAI Response Received (${text.length} chars)`);
-            if (images.length === 0) responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
-            return text;
-    // Attempt OpenAI First (Primary Engine)
-    // CRITICAL: Skip OpenAI if multimedia (PDF) is present, as OpenAI doesn't support native PDF bits in Chat API.
-    if (openai && (!multimedia || multimedia.length === 0)) {
-        try {
-            console.log(`[AI Service] Attempting delivery via OpenAI (Primary)... ${images.length > 0 ? '[Vision Mode]' : ''}`);
-            const text = await generateWithOpenAI(prompt, systemPrompt, images);
-            if (text) {
-                if (images.length === 0 && (!multimedia || multimedia.length === 0)) {
-                    responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
-                }
-                return text;
+        // Generate a unique cache key based on the full prompt and system prompt
+        const mmSample = multimedia.map(m => (m.data && typeof m.data === 'string') ? m.data.substring(0, 100) : (m.hint || '')).join('');
+        const hashData = `${prompt}|${systemPrompt}|${images.length > 0 ? (images[0].data ? images[0].data.substring(0, 50) : '') : ''}|${mmSample}`;
+        const cacheKey = crypto.createHash('md5').update(hashData).digest('hex');
+
+        if (responseCache.has(cacheKey) && images.length === 0) {
+            const cached = responseCache.get(cacheKey);
+            if (Date.now() - cached.timestamp < CACHE_TTL) {
+                return cached.data;
             }
-        } catch (openAiError) {
-            console.warn('[AI Service] OpenAI Primary failed, falling back to Gemini Reservoir.');
         }
-    } else if (multimedia && multimedia.length > 0) {
-        console.log(`[AI Service] Multimedia detected (PDFs). Prioritizing Gemini Native Grounding.`);
-    }
 
-    const apiKeys = getApiKeys();
-    if (apiKeys.length === 0) {
-        throw new Error("No GEMINI_API_KEY or valid OpenAI Config found");
-    }
-
-    // Gemini Reservoir Fallback Logic
-    const geminiModels = [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-flash-latest"
-    ];
-    let lastError = null;
-
-    // Outer Loop: API Keys (The Reservoir)
-    for (let k = 0; k < apiKeys.length; k++) {
-        const keyAttemptIndex = (currentKeyIndex + k) % apiKeys.length;
-        const apiKey = apiKeys[keyAttemptIndex];
-
-        // Inner Loop: Models (The Fallback)
-        for (const modelName of geminiModels) {
-            let retries = 0;
-            const maxRetries = 1;
-
-            while (retries <= maxRetries) {
-                try {
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-
-                    const parts = [];
-                    if (systemPrompt) {
-                        parts.push({ text: `System Instruction: ${systemPrompt}` });
+        // 1. Attempt OpenAI Primary (Vision/Standard)
+        if (openai && (!multimedia || multimedia.length === 0)) {
+            try {
+                console.log(`[AI Service] Attempting delivery via OpenAI (Primary)... ${images.length > 0 ? '[Vision Mode]' : ''}`);
+                const text = await generateWithOpenAI(prompt, systemPrompt, images);
+                if (text) {
+                    if (images.length === 0 && (!multimedia || multimedia.length === 0)) {
+                        responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
                     }
+                    return text;
+                }
+            } catch (openAiError) {
+                console.warn('[AI Service] OpenAI Primary failed, falling back to Gemini Reservoir.');
+            }
+        } else if (multimedia && multimedia.length > 0) {
+            console.log(`[AI Service] Multimedia detected (PDFs). Prioritizing Gemini Native Grounding.`);
+        }
 
-                    if (images && images.length > 0) {
-                        images.forEach(img => {
-                            parts.push({
-                                inline_data: {
-                                    mime_type: img.mimeType || "image/png",
-                                    data: img.data
+        // 2. Gemini Reservoir Fallback Logic
+        const apiKeys = getApiKeys();
+        if (apiKeys.length === 0) {
+            if (!openai) throw new Error("CRITICAL: No AI engine available (OpenAI and Gemini configs missing)");
+            // If we reached here, OpenAI already failed or was skipped.
+            throw new Error("Gemini fallback required but no keys configured.");
+        }
+
+        const geminiModels = [
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-flash-latest"
+        ];
+        let lastError = null;
+
+        // Outer Loop: API Keys (The Reservoir)
+        for (let k = 0; k < apiKeys.length; k++) {
+            const keyAttemptIndex = (currentKeyIndex + k) % apiKeys.length;
+            const apiKey = apiKeys[keyAttemptIndex];
+
+            // Inner Loop: Models (The Fallback)
+            for (const modelName of geminiModels) {
+                let retries = 0;
+                const maxRetries = 1;
+
+                while (retries <= maxRetries) {
+                    try {
+                        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+                        const parts = [];
+                        if (systemPrompt) {
+                            parts.push({ text: `System Instruction: ${systemPrompt}` });
+                        }
+
+                        if (images && images.length > 0) {
+                            images.forEach(img => {
+                                parts.push({
+                                    inline_data: {
+                                        mime_type: img.mimeType || "image/png",
+                                        data: img.data
+                                    }
+                                });
+                            });
+                        }
+
+                        // Native Multimedia Support (PDF, etc.)
+                        if (multimedia && multimedia.length > 0) {
+                            multimedia.forEach(mm => {
+                                if (mm.data) {
+                                    const dataSizeMB = (mm.data.length * 0.75) / (1024 * 1024);
+                                    if (dataSizeMB > 70) {
+                                        console.warn(`[AI Service] PDF too large. Skipping full data.`);
+                                        parts.push({ text: `[SYSTEM NOTE: PDF file ${mm.fileName} was too large for full ingestion.]` });
+                                    } else {
+                                        parts.push({
+                                            inline_data: {
+                                                mime_type: mm.mimeType || "application/pdf",
+                                                data: mm.data
+                                            }
+                                        });
+                                    }
+                                } else if (mm.hint) {
+                                    parts.push({ text: `[CONTEXT HINT]: ${mm.hint}` });
                                 }
                             });
-                        });
-                    }
+                        }
 
-                    // Native Multimedia Support (PDF, etc.)
-                    if (multimedia && multimedia.length > 0) {
-                        multimedia.forEach(mm => {
-                            if (mm.data) {
-                                const dataSizeMB = (mm.data.length * 0.75) / (1024 * 1024);
-                                console.log(`[AI Service] Attaching PDF: ${mm.fileName || 'unnamed'} (${dataSizeMB.toFixed(2)} MB)`);
-                                
-                                // Hard limit: 70MB per part to avoid Node.js buffer issues
-                                if (dataSizeMB > 70) {
-                                    console.warn(`[AI Service] PDF ${mm.fileName} is too large (${dataSizeMB.toFixed(2)} MB). Skipping full data.`);
-                                    parts.push({ text: `[SYSTEM NOTE: PDF file ${mm.fileName} was too large for full ingestion. Focus on the user's prompt and provided snippets.]` });
-                                } else {
-                                    parts.push({
-                                        inline_data: {
-                                            mime_type: mm.mimeType || "application/pdf",
-                                            data: mm.data
-                                        }
-                                    });
-                                }
-                            } else if (mm.hint) {
-                                // Optimized: Just pass the hint if full data is skipped for this stage
-                                parts.push({ text: `[CONTEXT HINT]: ${mm.hint}` });
+                        parts.push({ text: prompt });
+
+                        const response = await axios.post(url, {
+                            contents: [{ parts }],
+                            generationConfig: {
+                                responseMimeType: "application/json",
+                                maxOutputTokens: 8192
                             }
+                        }, {
+                            timeout: 90000
                         });
-                    }
 
-                    parts.push({ text: prompt });
-
-                    const response = await axios.post(url, {
-                        contents: [{ parts }],
-                        generationConfig: {
-                            responseMimeType: "application/json",
-                            maxOutputTokens: 8192
+                        if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                            const text = response.data.candidates[0].content.parts[0].text.trim();
+                            currentKeyIndex = keyAttemptIndex;
+                            if (images.length === 0) {
+                                responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                            }
+                            return text;
                         }
-                    }, {
-                        maxContentLength: 200 * 1024 * 1024,
-                        maxBodyLength: 200 * 1024 * 1024,
-                        timeout: 90000 // 90 seconds for large PDFs
-                    });
+                        throw new Error("Invalid response format");
+                    } catch (gError) {
+                        const errorMsg = gError.response?.data?.error?.message || gError.message;
+                        const statusCode = gError.response?.status;
 
-                    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-                        const text = response.data.candidates[0].content.parts[0].text.trim();
-                        currentKeyIndex = keyAttemptIndex;
-                        if (images.length === 0) {
-                            responseCache.set(cacheKey, { data: text, timestamp: Date.now() });
+                        if (statusCode === 429 || errorMsg.toLowerCase().includes("quota")) {
+                            lastError = new Error(`Quota Exceeded: ${errorMsg}`);
+                            break;
                         }
-                        return text;
-                    }
-                    throw new Error("Invalid response format");
-                } catch (gError) {
-                    const errorMsg = gError.response?.data?.error?.message || gError.message;
-                    const statusCode = gError.response?.status;
 
-                    console.warn(`Debug: Key ${keyAttemptIndex + 1} | Model ${modelName} failed: ${errorMsg}`);
+                        if (statusCode === 503 && retries < maxRetries) {
+                            await new Promise(r => setTimeout(r, 2000));
+                            retries++;
+                            continue;
+                        }
 
-                    if (statusCode === 429 || errorMsg.toLowerCase().includes("quota")) {
-                        lastError = new Error(`Quota Exceeded: ${errorMsg}`);
-                        lastError.isQuotaError = true;
+                        lastError = new Error(`Gemini Error (${modelName}): ${errorMsg}`);
                         break;
                     }
-
-                    if (statusCode === 503 && retries < maxRetries) {
-                        await new Promise(r => setTimeout(r, 2000));
-                        retries++;
-                        continue;
-                    }
-
-                    lastError = new Error(`Gemini Error (${modelName}): ${errorMsg}`);
-                    break;
                 }
             }
         }
-        throw new Error("OpenAI returned an empty response.");
-    } catch (error) {
+        throw lastError || new Error("All AI engines failed.");
+    }
+    catch (error) {
         console.error(`[AI Service] Request Failed: ${error.message}`);
         // Wrap and re-throw with actionable info
         const enhancedError = new Error(`AI Generation Failed: ${error.message}`);
@@ -890,78 +884,7 @@ ${composition_profile === 'GOLDEN_RATIO' ? `
             }
           }
         }`;
-        POWERPOINT PRESENTATION RULES (EXECUTIVE DESIGN):
-        You are Nurotra's Creative Director. Create "Wow-Factor" slide decks that look like they cost $50,000.
 
-        1. NARRATIVE & DESIGN FLOW:
-           - Ensure logical progression (Title -> Problem -> Solution -> Data -> Future).
-           - Support "PREMIUM_DESIGN" aesthetic: minimalist, high-contrast, or vibrant.
-           - Support modern typography (Montserrat, Open Sans, Helvetica).
-
-        2. MULTI-LAYOUT SUITE (MANDATORY VARIETY):
-           - NEVER use "BULLETS" for more than 2 consecutive slides.
-           - FORCE at least 3 different layout types in every deck.
-           - Avoid overlapping elements: Titles must be distinct from body text.
-           - CONTENT DEPTH: Each slide MUST contain at least 2 detailed points/bullets. 
-           - "TITLE_COVER": High-impact first slide. 
-           - "BULLETS": Use only for simple lists.
-           - "THREE_COLUMNS": Use for features, benefits, or three distinct pillars.
-           - "DIAGONAL_SPLIT": Dynamic, edgy split for high-impact narrative.
-           - "DATA_GRID": Sophisticated 2x2 or 3x2 grid for modular info.
-           - "COMPARISON": Use for Pros/Cons or Before/After.
-           - "QUADRANT": Use for SWOT or focus areas.
-           - "BIG_FACT": Focus on one giant metric + label.
-           - "IMAGE_RIGHT" | "IMAGE_LEFT": Balanced text + visual.
-           - "IMAGE_FULL": Emotional or high-impact statement.
-           - "TIMELINE" | "PROCESS_FLOW": Step-based or chronological content.
-           - "INFOGRAPHIC": High-density modular data.
-
-        3. DYNAMIC STYLE & IMAGE ENGINE:
-           - "theme": "Modern" | "Corporate" | "Dark" | "Creative" | "Luxury" | "Vibrant".
-           - "accentColor": topic-matched HEX.
-           - "backgroundColor": topic-matched HEX.
-           - "bgGradient": topic-matched HEX.
-           - "imageQuery": A short, descriptive string for stock photos (e.g., "clean energy", "cybersecurity lab").
-           - "fontFace": "Montserrat" | "Open Sans" | "Helvetica" | "Verdana".
-
-        4. SCHEMA:
-         {
-           "intent": "${intent}",
-           "text": "Executive Narrative about the deck.",
-           "generation": {
-             "type": "ppt",
-             "data": {
-               "fileName": "Project_Presentation.pptx",
-               "title": "Presentation Header",
-               "theme": "Modern",
-               "accentColor": "#00CEC9",
-               "backgroundColor": "#2D3436",
-               "bgGradient": "#0F2027",
-               "fontFace": "Montserrat",
-               "slides": [
-                 { 
-                   "title": "Slide Title",
-                   "layoutType": "TITLE_COVER" | "THREE_COLUMNS" | "DIAGONAL_SPLIT" | "DATA_GRID" | "BULLETS" | "BIG_FACT" | "TIMELINE",
-                   "bullets": ["Point 1", "Point 2"],
-                   "threeColumns": [
-                     { "title": "Column 1", "text": "Detail" },
-                     { "title": "Column 2", "text": "Detail" },
-                     { "title": "Column 3", "text": "Detail" }
-                   ],
-                   "dataGrid": [
-                     { "label": "Label 1", "value": "Value 1" },
-                     { "label": "Label 2", "value": "Value 2" }
-                   ],
-                   "imageQuery": "business strategy meeting",
-                   "speakerNotes": "Details for the presenter..." 
-                 }
-               ]
-             }
-           }
-         }
-         
-         CRITICAL RULE: This is a ${lengthPref} deck. TARGET SLIDE COUNT: ${targetSlideCount} SLIDES.
-         You MUST generate EXACTLY ${targetSlideCount} slide objects. Do not summarize.`;
         }
 
         if (docType === 'word' || advancedOps.some(op => ['VISUAL_GENERATION', 'DATA_VISUALIZATION'].includes(op))) {
@@ -1177,8 +1100,8 @@ CRITICAL RULES:
                 // PPT slides image logic with DALL-E preference
                 parsed.generation.data.slides.forEach(slide => {
                     if (!slide.image_url || slide.image_url.includes('placeholder')) {
-                        visualItems.push({ 
-                            slide, 
+                        visualItems.push({
+                            slide,
                             query: slide.image_prompt || slide.title || "Business presentation",
                             prefersDalle: slide.prefersDalle || false
                         });
@@ -1190,7 +1113,7 @@ CRITICAL RULES:
                 try {
                     await Promise.all(visualItems.map(async item => {
                         let itemUrl = null;
-                        
+
                         // Intelligent Sourcing Route
                         if (item.prefersDalle) {
                             console.log(`[AI Service] Generating custom visual via DALL-E...`);
@@ -1204,9 +1127,9 @@ CRITICAL RULES:
                         if (!itemUrl) {
                             itemUrl = await searchImageFromUnsplash(item.query);
                         }
-                        
+
                         // TODO: Add Pexels fallback here once key is provided
-                        
+
                         if (itemUrl) {
                             if (item.block) item.block.url = itemUrl;
                             if (item.slide) item.slide.image_url = itemUrl;
@@ -1221,8 +1144,8 @@ CRITICAL RULES:
         return parsed;
     } catch (error) {
         console.error("Docs Agent Execution Error:", error.message);
-        return { 
-            intent: "QUERY", 
+        return {
+            intent: "QUERY",
             text: `Critical Execution Error: ${error.message}. Please refine your prompt or try again.`,
             error: true
         };

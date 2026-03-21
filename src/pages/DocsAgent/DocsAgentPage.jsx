@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { docsAgentService } from '../../services/docsAgentService';
 import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../services/generatorService';
 import ProjectsDocs from './components/ProjectsDocs';
@@ -8,6 +9,7 @@ import DashboardRenderer from '../../components/dashboard/DashboardRenderer';
 import './DocsAgent.css';
 
 const DocsAgentPage = () => {
+    const { user } = useAuth();
     const [leftWidth, setLeftWidth] = useState(window.innerWidth * 0.25);
     const [rightWidth, setRightWidth] = useState(window.innerWidth * 0.30);
     const [activeMobileScreen, setActiveMobileScreen] = useState('chat');
@@ -145,8 +147,10 @@ const DocsAgentPage = () => {
     };
 
     useEffect(() => {
-        fetchInitialData();
-    }, []);
+        if (user?.token) {
+            fetchInitialData();
+        }
+    }, [user?.token]);
 
     // Execution State Machine
     const [executionState, setExecutionState] = useState({

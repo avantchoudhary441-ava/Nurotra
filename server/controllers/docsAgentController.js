@@ -77,18 +77,18 @@ const processQuery = async (req, res) => {
         // 3. Fetch from Uploaded Files (Multimedia Handling)
         if (uploadedFiles.length > 0) {
             console.log(`[DocsAgent] Processing ${uploadedFiles.length} uploaded source files...`);
-            
+
             // ALWAYS extract raw text first (this is our primary grounding source)
             try {
                 const { buildDocumentSet } = require("../services/documentAnalysisService");
                 const extractedDocs = await buildDocumentSet([], uploadedFiles);
                 const totalExtractedLength = extractedDocs.reduce((acc, d) => acc + (d.content || "").length, 0);
-                
+
                 console.log(`[DocsAgent] Extraction Complete. Total characters: ${totalExtractedLength}`);
-                
+
                 sourceContent += `\n\n### CRITICAL GROUNDING SOURCE (UPLOADED FILES):\n`;
                 sourceContent += extractedDocs.map(d => `[FILE: ${d.name}]\n${d.content || "EMPTY_FILE_CONTENT"}`).join("\n\n");
-                
+
                 if (totalExtractedLength < 100) {
                     console.warn("[DocsAgent] WARNING: Very little text extracted from files. Grounding may be weak.");
                 }
@@ -180,7 +180,7 @@ const processQuery = async (req, res) => {
 
                 // Convert B64 back to buffer for saving
                 const pptBuffer = Buffer.from(b64File, 'base64');
-                
+
                 // Mock the expected structures for the rest of the flow to save correctly
                 const classification = { presentation_type: "PPT_Agent_Generated" };
                 const structure = { sections: processedSlides.map(s => ({ heading: s.title })) };
@@ -192,16 +192,16 @@ const processQuery = async (req, res) => {
                 };
 
                 const displayContent = processedSlides.map(s => `### ${s.heading || s.title}\n${(s.bullet_points || []).join('\n')}`).join('\n\n');
-                
+
                 console.log(`[DocsAgent] Received PPT Buffer from Python. Size: ${pptBuffer.length} bytes`);
                 const document = new Document({
                     name: finalOutput.fileName,
                     type: 'ppt',
                     content: displayContent,
                     rawStructure: {
-                        slides: processedSlides.map(s => ({ 
-                            title: s.heading || s.title || "Slide", 
-                            bullets: s.bullet_points || [] 
+                        slides: processedSlides.map(s => ({
+                            title: s.heading || s.title || "Slide",
+                            bullets: s.bullet_points || []
                         })),
                         intent: intentData,
                         classification,
@@ -245,8 +245,8 @@ const processQuery = async (req, res) => {
                 });
 
             } catch (agentErr) {
-                console.error("[DocsAgent] Python Agent Generation Failed:", agentErr.message);
-                throw new Error(`Python Agent Error: ${agentErr.message}`);
+                console.warn("[DocsAgent] Python Agent unavailable, falling back to Node.js PPT pipeline:", agentErr.message);
+                // Fall through to the Node.js pipeline below
             }
         }
 
