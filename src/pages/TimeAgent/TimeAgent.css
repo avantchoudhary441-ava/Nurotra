@@ -1,60 +1,59 @@
 .time-agent-container {
     display: flex;
-    gap: 0; /* Gap managed by resizer handle */
-    height: calc(100vh - 120px);
-    padding: 0 24px 24px;
-    margin-top: 20px;
+    gap: 0;
+    height: 100%;
+    width: 100%;
     overflow: hidden;
-}
-
-.resizer-handle {
-    width: 12px;
-    cursor: col-resize;
-    display: flex;
-    align-items: center;
-    background: rgba(255, 255, 255, 0.15);
-    transition: background 0.2s, width 0.2s;
-    z-index: 10;
     position: relative;
 }
 
-.resizer-handle:hover,
-.resizer-handle:active {
-    background: linear-gradient(180deg, #a855f7, #6366f1);
-    width: 5px;
+.resizer-handle {
+    width: 4px; /* Thinner hit area but more precise */
+    cursor: col-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.05);
+    position: relative;
 }
 
-.resizer-handle:hover .resizer-line {
-    background: #3b82f6;
-    height: 60%;
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+.resizer-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.resizer-handle:hover::after {
+    background: #a855f7; /* Purple divider like in Docs Agent */
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.6);
 }
 
 .resizer-line {
-    width: 2px;
-    height: 30px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 2px;
-    transition: all 0.3s ease;
+    display: none; /* Replaced by pseudo-element for full height */
 }
 
 /* Common Panel Styling */
 .agent-panel {
-    height: 100%;
+    background: rgba(255, 255, 255, 0.02);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: #000000;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 24px;
-    backdrop-filter: blur(20px);
+    border: none;
+    border-radius: 0;
 }
 
 /* Left Panel: Calendar */
 .calendar-panel {
-    flex: 0 0 auto;
-    z-index: 2;
-    padding: 24px;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 32px;
     display: flex;
     flex-direction: column;
     gap: 20px;
