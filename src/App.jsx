@@ -41,6 +41,7 @@ import CollabInsights from "./pages/CollabInsights";
 import History from "./pages/History";
 import SafetyTrust from "./pages/SafetyTrust";
 import DocsAgentPage from "./pages/DocsAgent/DocsAgentPage";
+import TimeAgentPage from "./pages/TimeAgent/TimeAgentPage";
 
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
@@ -124,6 +125,7 @@ export default function App() {
 
             <Route path="/nuro-lab" element={<NuroLab />} />
             <Route path="/docs-agent" element={<DocsAgentPage />} />
+            <Route path="/time-agent" element={<TimeAgentPage />} />
 
             {/* 404 Debug Catch-all */}
             <Route path="*" element={
