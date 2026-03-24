@@ -53,6 +53,26 @@ const TimeAgentPage = () => {
         return () => clearInterval(simulation);
     }, []);
 
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            if (!isResizing.current) return;
+            const newWidth = Math.max(300, Math.min(window.innerWidth - 300, e.clientX));
+            setLeftWidth(newWidth);
+        };
+
+        const handleMouseUp = () => {
+            isResizing.current = false;
+            document.body.style.cursor = 'default';
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, []);
+
     const handleCommand = () => {
         if (!command.trim()) return;
         
@@ -88,15 +108,18 @@ const TimeAgentPage = () => {
     });
 
     return (
-        <div className="min-h-screen bg-[#050510] text-white">
+        <div className="h-screen flex flex-col bg-[#050510] text-white overflow-hidden">
             <BackgroundEffects />
             <Header />
             
-            <main className="h-screen flex flex-col pt-20 overflow-hidden bg-[#050510]">
-                <div className="time-agent-container" style={{ display: 'flex', flex: 1 }}>
-                    {/* LEFT SIDE: CALENDAR (The Execution Field) */}
-                    <div className="agent-panel calendar-panel" style={{ width: leftWidth, flexShrink: 0 }}>
-                        <div className="calendar-header">
+            <main className="flex-1 min-h-0 bg-[#050510] relative">
+                <div className="time-agent-container absolute inset-0 flex overflow-hidden">
+                    {/* LEFT PANEL: CALENDAR (The Execution Field) */}
+                    <div 
+                        className="agent-panel calendar-panel" 
+                        style={{ width: `${leftWidth}px`, flexShrink: 0 }}
+                    >
+                        <div className="calendar-header flex justify-between items-start mb-6">
                             <div>
                                 <button 
                                     onClick={() => navigate('/')}
@@ -111,40 +134,41 @@ const TimeAgentPage = () => {
                                 </h2>
                                 <p className="text-xs text-gray-500">March 2026</p>
                             </div>
-                            <div className="real-time-clock">
+                            <div className="real-time-clock text-blue-400/80 font-mono text-lg">
                                 {currentTime.toLocaleTimeString([], { hour12: false })}
                             </div>
                         </div>
 
-                        <div className="calendar-grid">
-                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
-                                <div key={d} className="text-center text-[10px] font-bold text-blue-400/50 uppercase tracking-widest mb-2">
-                                    {d}
+                        <div className="calendar-grid grid grid-cols-7 gap-3 flex-1 overflow-hidden">
+                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                                <div key={day} className="text-center text-[10px] font-bold text-blue-400/50 uppercase tracking-widest mb-1">
+                                    {day}
                                 </div>
                             ))}
                             {calendarDays.map((d, i) => (
-                                <motion.div 
-                                    key={i} 
-                                    whileHover={{ scale: 1.02 }}
-                                    onClick={() => d.day > 0 && setSelectedDay(d)}
-                                    className={`day-cell ${d.status} ${selectedDay?.day === d.day ? 'ring-2 ring-blue-500' : ''}`}
+                                <motion.div
+                                    key={i}
+                                    whileHover={{ scale: 1.02, backgroundColor: 'rgba(59, 130, 246, 0.15)' }}
+                                    onClick={() => d.day > 0 && setSelectedDay(d.day)}
+                                    className={`calendar-day relative aspect-[1/0.8] p-2 rounded-lg border transition-all cursor-pointer ${
+                                        selectedDay === d.day ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'border-white/10 bg-white/5'
+                                    } ${d.day === 24 ? 'border-blue-400/50 shadow-[0_0_10px_rgba(59,130,246,0.2)]' : ''}`}
                                 >
-                                    <span className="day-number">{d.day > 0 ? d.day : ''}</span>
+                                    <span className="text-[10px] font-bold text-gray-400">{d.day > 0 ? d.day : ''}</span>
                                     {d.day === 24 && (
-                                        <div className="mt-2 space-y-1">
-                                            <div className="h-1.5 w-full bg-blue-500/30 rounded-full overflow-hidden">
-                                                <div className="h-full bg-blue-500 animate-pulse" style={{ width: '70%' }}></div>
+                                        <div className="absolute bottom-2 left-2 right-2 space-y-1">
+                                            <div className="h-1 w-full bg-blue-500/20 rounded-full overflow-hidden">
+                                                <div className="h-full bg-blue-400 animate-pulse" style={{ width: '65%' }}></div>
                                             </div>
                                             <div className="flex gap-1">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
-                                                <div className="w-1.5 h-1.5 rounded-full bg-yellow-500"></div>
-                                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                                                <div className="w-1 h-1 rounded-full bg-blue-400 shadow-[0_0_5px_rgba(59,130,246,0.5)]"></div>
+                                                <div className="w-1 h-1 rounded-full bg-blue-400/50"></div>
                                             </div>
                                         </div>
                                     )}
                                     {d.day === 26 && (
-                                        <div className="absolute top-1 right-1">
-                                            <AlertCircle size={12} className="text-red-500 animate-bounce" />
+                                        <div className="absolute top-2 right-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-ping"></div>
                                         </div>
                                     )}
                                 </motion.div>
@@ -152,116 +176,100 @@ const TimeAgentPage = () => {
                         </div>
                     </div>
 
-                    {/* RESIZER HANDLE */}
+                    {/* DRAGGABLE RESIZER */}
                     <div 
-                        className="resizer-handle"
-                        onMouseDown={(e) => {
-                            isResizing.current = true;
-                            document.body.style.cursor = 'col-resize';
-                            document.body.style.userSelect = 'none';
-                        }}
+                        className="resizer-handle w-1 h-full cursor-col-resize hover:bg-purple-500/50 transition-colors z-10"
+                        onMouseDown={() => { isResizing.current = true; document.body.style.cursor = 'col-resize'; }}
                     >
-                        <div className="resizer-line"></div>
+                        <div className="w-[1px] h-full bg-white/10 mx-auto" />
                     </div>
 
-                    {/* RIGHT SIDE: COMMAND PANEL (The Brain) */}
-                    <div className="agent-panel command-panel" style={{ flex: 1 }}>
-                        {/* Section 1: Input */}
-                        <div className="panel-section">
-                            <div className="command-input-container">
-                                <div className="input-wrapper">
-                                    <input 
-                                        type="text" 
-                                        value={command}
-                                        onChange={(e) => setCommand(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleCommand()}
-                                        placeholder="Give an intent (e.g. Schedule a pitch meeting)"
-                                        className="main-input"
-                                    />
+                    {/* RIGHT PANEL: COMMAND CENTER (The Brain) */}
+                    <div className="agent-panel command-panel flex-1 flex flex-col bg-[#08081a]">
+                        <div className="parsing-header p-6 border-b border-white/5">
+                            <div className="relative group">
+                                <input 
+                                    type="text" 
+                                    placeholder="Give an intent (e.g. Schedule a pitch meeting)"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500/50 transition-all pr-12"
+                                    value={command}
+                                    onChange={(e) => setCommand(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleCommand()}
+                                />
+                                <Send className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 group-hover:text-blue-400 cursor-pointer transition-colors" size={18} />
+                            </div>
+                            <div className="flex gap-2 mt-4 overflow-x-auto pb-1 scrollbar-hide">
+                                <button className="flex-none flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"><Play size={12} /> Schedule Task</button>
+                                <button className="flex-none flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"><Calendar size={12} /> Set Goal</button>
+                                <button className="flex-none flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"><Cpu size={12} /> Execute Now</button>
+                                <button className="flex-none bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-lg transition-all"><Mic size={12} /></button>
+                            </div>
+                        </div>
+
+                        {/* SCROLLABLE FEED AREA */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-white/10">
+                            <div>
+                                <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">Active Executions</h3>
+                                <div className="space-y-3">
+                                    <AnimatePresence mode="popLayout">
+                                        {tasks.map(task => (
+                                            <motion.div 
+                                                key={task.id}
+                                                initial={{ opacity: 0, x: 20 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, scale: 0.95 }}
+                                                className={`p-4 rounded-xl border bg-white/2 transition-all ${
+                                                    task.status === 'running' ? 'border-blue-500/30 bg-blue-500/5 shadow-[0_0_20px_rgba(59,130,246,0.1)]' : 'border-white/5'
+                                                }`}
+                                            >
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div>
+                                                        <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-tighter">{task.agent}</span>
+                                                        <h4 className="font-bold text-sm">{task.name}</h4>
+                                                    </div>
+                                                    <div className="p-1.5 rounded-lg bg-black/40">
+                                                        {task.status === 'running' ? <CheckCircle2 className="text-blue-400 animate-pulse" size={16} /> : <CheckCircle2 className="text-gray-600" size={16} />}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {task.steps.map((step, idx) => (
+                                                        <div key={idx} className="flex items-center gap-3 text-xs text-gray-400">
+                                                            <Settings size={12} className={task.status === 'running' && idx === 0 ? "animate-spin-slow text-blue-400" : ""} />
+                                                            {step}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                    </AnimatePresence>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 border-t border-white/5">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Autonomous Sync</h3>
                                     <button 
-                                        onClick={handleCommand}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300"
+                                        onClick={() => setIsAutoMode(!isAutoMode)}
+                                        className={`text-[9px] px-2 py-0.5 rounded border transition-all font-bold ${
+                                            isAutoMode ? 'bg-blue-900/40 text-blue-400 border-blue-400/50' : 'bg-gray-800/40 text-gray-500 border-gray-700'
+                                        }`}
                                     >
-                                        <Send size={18} />
+                                        {isAutoMode ? 'ACTIVE' : 'STANDBY'}
                                     </button>
                                 </div>
-                                <div className="quick-actions">
-                                    <button className="action-btn flex items-center gap-1"><Play size={12} /> Schedule Task</button>
-                                    <button className="action-btn flex items-center gap-1"><Calendar size={12} /> Set Goal</button>
-                                    <button className="action-btn flex items-center gap-1"><Cpu size={12} /> Execute Now</button>
-                                    <button className="action-btn"><Mic size={12} /></button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Section 2: Task Breakdown */}
-                        <div className="breakdown-feed scrollbar-hide">
-                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 px-1">Active Executions</h3>
-                            <AnimatePresence initial={false}>
-                                {tasks.map(task => (
-                                    <motion.div 
-                                        key={task.id}
-                                        initial={{ opacity: 0, x: 20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -20 }}
-                                        className={`task-step ${task.status === 'running' ? 'border-yellow-500 bg-yellow-500/5' : ''}`}
-                                    >
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <span className={`text-[10px] font-bold uppercase tracking-tighter ${task.status === 'running' ? 'text-yellow-400' : 'text-blue-400'}`}>
-                                                    {task.agent}
-                                                </span>
-                                                <h4 className="text-sm font-semibold">{task.name}</h4>
-                                            </div>
-                                            {task.status === 'running' ? (
-                                                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
-                                                    <Settings size={14} className="text-yellow-500" />
-                                                </motion.div>
-                                            ) : (
-                                                <CheckCircle2 size={14} className="text-green-500" />
-                                            )}
+                                <div className="font-mono text-[11px] space-y-1.5 opacity-60">
+                                    {logs.map((log, i) => (
+                                        <div key={i} className="flex gap-3">
+                                            <span className="text-blue-400/50">[{log.time}]</span>
+                                            <span className="text-gray-300">{log.msg}</span>
                                         </div>
-                                        <div className="space-y-1">
-                                            {task.steps.map((step, i) => (
-                                                <div key={i} className="flex items-center gap-2 text-[11px] text-gray-400">
-                                                    <div className={`w-1 h-1 rounded-full ${task.status === 'running' && i === 1 ? 'bg-yellow-500' : 'bg-gray-600'}`}></div>
-                                                    {step}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
-                        </div>
-
-                        {/* Section 3: Control & Logs */}
-                        <div className="panel-section bg-black/20">
-                            <div className="flex justify-between items-center mb-3">
-                                <div className="flex items-center gap-2">
-                                    <div className={`w-2 h-2 rounded-full ${isAutoMode ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
-                                    <span className="text-xs font-bold uppercase tracking-widest">{isAutoMode ? 'Auto Mode' : 'Manual Mode'}</span>
+                                    ))}
                                 </div>
-                                <button 
-                                    onClick={() => setIsAutoMode(!isAutoMode)}
-                                    className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-1 rounded border border-white/10 transition-colors"
-                                >
-                                    Toggle
-                                </button>
-                            </div>
-                            <div className="execution-log scrollbar-hide">
-                                {logs.map((log, i) => (
-                                    <div key={i} className="log-entry">
-                                        <span className="log-time">[{log.time}]</span>
-                                        {log.msg}
-                                    </div>
-                                ))}
                             </div>
                         </div>
                     </div>
                 </div>
             </main>
-
-            <Footer />
         </div>
     );
 };
