@@ -30,12 +30,12 @@ export default function AgentsGrid() {
     },
     {
       id: 3,
-      name: "Marketing Expert AI",
-      role: "Brand Strategist",
-      icon: "📣",
-      skills: "Ads • Reels • Branding",
+      name: "Time Agent",
+      role: "AI Scheduling Assistant",
+      icon: "🕐",
+      skills: "Task Planning • Calendar Sync • Reminders",
       status: "online",
-      route: "coming-soon",
+      route: "/time-agent",
     },
     {
       id: 4,
