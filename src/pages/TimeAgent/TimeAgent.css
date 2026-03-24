@@ -1,0 +1,245 @@
+.time-agent-container {
+    display: flex;
+    gap: 0; /* Gap managed by resizer handle */
+    height: calc(100vh - 120px);
+    padding: 0 24px 24px;
+    margin-top: 20px;
+    overflow: hidden;
+}
+
+.resizer-handle {
+    width: 12px;
+    cursor: col-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    z-index: 10;
+    margin: 0 -6px; /* Overlap with panels for better hit area */
+}
+
+.resizer-handle:hover .resizer-line {
+    background: #3b82f6;
+    height: 60%;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+.resizer-line {
+    width: 2px;
+    height: 30px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    transition: all 0.3s ease;
+}
+
+/* Common Panel Styling */
+.agent-panel {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px border rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    backdrop-filter: blur(20px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Left Panel: Calendar */
+.calendar-panel {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.real-time-clock {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    color: #3b82f6;
+    text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 12px;
+    flex: 1;
+}
+
+.day-cell {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 100px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+.day-cell:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.day-cell.active {
+    border-color: #3b82f6;
+    box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1), 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+.day-cell.active::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 12px;
+    border: 2px solid #3b82f6;
+    animation: active-glow 2s infinite;
+}
+
+@keyframes active-glow {
+    0% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.02); }
+    100% { opacity: 0.3; transform: scale(1); }
+}
+
+.day-cell.past {
+    opacity: 0.4;
+    filter: grayscale(0.5);
+}
+
+.day-number {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 8px;
+}
+
+/* Right Panel: Command Center */
+.command-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-section {
+    padding: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.command-input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.input-wrapper {
+    position: relative;
+}
+
+.main-input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: white;
+    font-size: 0.95rem;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+.main-input:focus {
+    border-color: #3b82f6;
+    background: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+.quick-actions {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.action-btn {
+    white-space: nowrap;
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: #3b82f6;
+    color: white;
+}
+
+/* Task Breakdown */
+.breakdown-feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.task-step {
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid #3b82f6;
+    padding: 12px;
+    border-radius: 4px 12px 12px 4px;
+}
+
+.step-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: #3b82f6;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.step-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+/* Execution Log */
+.execution-log {
+    height: 150px;
+    background: rgba(0, 0, 0, 0.4);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    padding: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    overflow-y: auto;
+}
+
+.log-entry {
+    margin-bottom: 4px;
+}
+
+.log-time {
+    color: #3b82f6;
+    margin-right: 8px;
+}
+
+/* Status Colors */
+.status-pending { background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); }
+.status-running { background: rgba(234, 179, 8, 0.2); border: 1px solid rgba(234, 179, 8, 0.3); animation: statusPulse 2s infinite; }
+.status-completed { background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.3); }
+.status-urgent { background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+
+@keyframes statusPulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
