@@ -34,13 +34,14 @@
 
 /* Common Panel Styling */
 .agent-panel {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px border rgba(255, 255, 255, 0.1);
+    background: rgba(128, 128, 128, 0.05);
+    border: 1px solid rgba(128, 128, 128, 0.15);
     border-radius: 24px;
     backdrop-filter: blur(20px);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    position: relative;
+    color: inherit;
 }
 
 /* Left Panel: Calendar */
@@ -49,6 +50,8 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
+    position: relative;
+    z-index: 50; /* Force calendar above command panel */
 }
 
 .calendar-header {
@@ -72,19 +75,21 @@
 }
 
 .day-cell {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--bg-secondary, rgba(128, 128, 128, 0.05));
+    border: 1px solid var(--border-color, rgba(128, 128, 128, 0.2));
     border-radius: 12px;
     padding: 12px;
     min-height: 100px;
     transition: all 0.3s ease;
     cursor: pointer;
     position: relative;
+    z-index: 1;
 }
 
 .day-cell:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.2);
+    background: var(--bg-hover, rgba(128, 128, 128, 0.1));
+    border-color: var(--border-hover, rgba(128, 128, 128, 0.4));
+    z-index: 99; /* Massive z-index when hovered so hover card stays on top */
 }
 
 .day-cell.active {
@@ -115,7 +120,8 @@
 .day-number {
     font-size: 0.8rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.4);
+    color: inherit;
+    opacity: 0.6;
     margin-bottom: 8px;
 }
 
@@ -123,6 +129,8 @@
 .command-panel {
     display: flex;
     flex-direction: column;
+    position: relative;
+    z-index: 10;
 }
 
 .panel-section {
@@ -142,20 +150,24 @@
 
 .main-input {
     width: 100%;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
+    border: 1px solid rgba(128, 128, 128, 0.3);
     border-radius: 12px;
     padding: 12px 16px;
-    color: white;
+    color: inherit;
     font-size: 0.95rem;
     outline: none;
     transition: all 0.3s ease;
 }
 
+.main-input::placeholder {
+    color: rgba(128, 128, 128, 0.6);
+}
+
 .main-input:focus {
     border-color: #3b82f6;
-    background: rgba(0, 0, 0, 0.5);
-    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+    background: rgba(128, 128, 128, 0.05);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
 }
 
 .quick-actions {
@@ -169,17 +181,18 @@
     white-space: nowrap;
     padding: 6px 12px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(128, 128, 128, 0.05);
+    border: 1px solid rgba(128, 128, 128, 0.2);
     font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.7);
+    color: inherit;
+    opacity: 0.8;
     transition: all 0.2s ease;
 }
 
 .action-btn:hover {
     background: rgba(59, 130, 246, 0.1);
     border-color: #3b82f6;
-    color: white;
+    opacity: 1;
 }
 
 /* Task Breakdown */
@@ -193,7 +206,7 @@
 }
 
 .task-step {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(128, 128, 128, 0.05);
     border-left: 3px solid #3b82f6;
     padding: 12px;
     border-radius: 4px 12px 12px 4px;
@@ -215,11 +228,13 @@
 /* Execution Log */
 .execution-log {
     height: 150px;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(128, 128, 128, 0.1);
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.75rem;
     padding: 12px;
-    color: rgba(255, 255, 255, 0.6);
+    color: inherit;
+    border-radius: 8px;
+    opacity: 0.8;
     overflow-y: auto;
 }
 
@@ -242,4 +257,30 @@
     0% { opacity: 1; }
     50% { opacity: 0.7; }
     100% { opacity: 1; }
+}
+
+.calendar-hover-card {
+    position: absolute;
+    bottom: calc(100% + 5px); /* Eject upward to avoid right panel overlap */
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    min-width: 160px;
+    max-width: 220px;
+    background: #0f172a; /* Hardcoded dark to contrast white text */
+    color: #f8fafc;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(59, 130, 246, 0.1);
+    z-index: 99999; /* Absolute dominance */
+    pointer-events: none; /* Handled by Framer Motion pointer-events */
+}
+
+.day-cell {
+    z-index: 1;
+}
+
+.day-cell:hover {
+    z-index: 40;
 }
