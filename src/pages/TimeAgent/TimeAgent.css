@@ -12,10 +12,16 @@
     cursor: col-resize;
     display: flex;
     align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.15);
+    transition: background 0.2s, width 0.2s;
     z-index: 10;
-    margin: 0 -6px; /* Overlap with panels for better hit area */
+    position: relative;
+}
+
+.resizer-handle:hover,
+.resizer-handle:active {
+    background: linear-gradient(180deg, #a855f7, #6366f1);
+    width: 5px;
 }
 
 .resizer-handle:hover .resizer-line {
@@ -34,17 +40,20 @@
 
 /* Common Panel Styling */
 .agent-panel {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px border rgba(255, 255, 255, 0.1);
-    border-radius: 24px;
-    backdrop-filter: blur(20px);
+    height: 100%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background: #000000;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    backdrop-filter: blur(20px);
 }
 
 /* Left Panel: Calendar */
 .calendar-panel {
+    flex: 0 0 auto;
+    z-index: 2;
     padding: 24px;
     display: flex;
     flex-direction: column;
