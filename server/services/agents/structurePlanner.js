@@ -4,13 +4,16 @@
  */
 const aiService = require("../aiService");
 
-const generateStructure = async (prompt, intentData, classificationData, sourceContent = "", multimediaContext = []) => {
+const generateStructure = async (prompt, intentData, classificationData, sourceContent = "", multimediaContext = [], temporalContext = "") => {
   const systemPrompt = `
         You are the Nurotra Structure Planner. 
         Based on the User Intent and Classification provided, you must plan the structure of the document (Word, PPT, or Excel).
         
         [SOURCE CONTENT]: 
         ${sourceContent || 'None'}
+
+        [TEMPORAL CONTEXT]:
+        ${temporalContext || "No specific temporal context provided."}
 
         CRITICAL MISSION: You are a professional researcher. You MUST consult the attached PDF files to find the REAL name of the novel, the ACTUAL names of all characters, and the REAL plot details.
         
@@ -34,30 +37,30 @@ const generateStructure = async (prompt, intentData, classificationData, sourceC
 
   try {
     let text = await aiService.generateWithFallback(extendedPrompt, systemPrompt, [], multimediaContext);
-    
+
     // Cleanup and repair
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-        text = jsonMatch[0];
+      text = jsonMatch[0];
     } else {
-        text = text.replace(/```json|```/g, "").trim();
+      text = text.replace(/```json|```/g, "").trim();
     }
 
     try {
-        return JSON.parse(text);
+      return JSON.parse(text);
     } catch (parseErr) {
-        console.warn("[Agent 3] JSON Parse Failed. Attempting repair...");
-        if (text.endsWith('...') || text.includes('sections')) {
-            try {
-                let repaired = text;
-                if (!repaired.endsWith(']}')) repaired += ']}';
-                if (!repaired.endsWith('}')) repaired += '\}';
-                return JSON.parse(repaired);
-            } catch (e) {
-                console.error("[Agent 3] Repair failed:", e.message);
-            }
+      console.warn("[Agent 3] JSON Parse Failed. Attempting repair...");
+      if (text.endsWith('...') || text.includes('sections')) {
+        try {
+          let repaired = text;
+          if (!repaired.endsWith(']}')) repaired += ']}';
+          if (!repaired.endsWith('}')) repaired += '\}';
+          return JSON.parse(repaired);
+        } catch (e) {
+          console.error("[Agent 3] Repair failed:", e.message);
         }
-        throw parseErr;
+      }
+      throw parseErr;
     }
   } catch (error) {
     console.error("[Agent 3] Structure Planning failed:", error.message);
