@@ -16,17 +16,20 @@ import {
     Play
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import './TimeAgent.css';
 
 const TimeAgentPage = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const userName = user?.name || 'User';
 
     // UI State
     const [command, setCommand] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date());
     const [calendarWidth, setCalendarWidth] = useState(50);
     const [isResizing, setIsResizing] = useState(false);
-    const [selectedDay, setSelectedDay] = useState(25);
+    const [selectedDay, setSelectedDay] = useState(new Date().getDate());
     const [isSyncExpanded, setIsSyncExpanded] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [isAutoMode, setIsAutoMode] = useState(true);
@@ -51,11 +54,10 @@ const TimeAgentPage = () => {
     ]);
 
     const [logs, setLogs] = useState([
-        { time: '11:52:16', msg: 'System: Heuristic sync complete.' },
-        { time: '11:52:09', msg: 'Time Agent: Analyzing temporal drift...' },
-        { time: '11:52:00', msg: 'Docs Agent: Research phase initiated.' },
-        { time: '11:51:52', msg: 'Comm Agent: Monitoring inbox.' },
-        { time: '11:51:46', msg: 'System: Resources optimized.' }
+        { time: new Date().toLocaleTimeString([], { hour12: false }), msg: `System: Neural Engine initialized for ${userName}.` },
+        { time: new Date(Date.now() - 60000).toLocaleTimeString([], { hour12: false }), msg: 'Time Agent: Calibrating temporal nexus...' },
+        { time: new Date(Date.now() - 120000).toLocaleTimeString([], { hour12: false }), msg: 'Docs Agent: Syncing project manifest.' },
+        { time: new Date(Date.now() - 180000).toLocaleTimeString([], { hour12: false }), msg: 'Comm Agent: Monitoring encrypted channels.' }
     ]);
 
     const [chatStage, setChatStage] = useState(0);
@@ -80,7 +82,7 @@ const TimeAgentPage = () => {
         {
             id: 1,
             role: 'assistant',
-            text: 'Welcome back, Avant. Autonomous monitoring is active. I have coordinated with the Docs and Comm agents to streamline your Q3 preparations. How would you like to proceed?'
+            text: `Welcome back, ${userName}. Autonomous monitoring is active. I have coordinated with the Docs and Comm agents to streamline your schedule. How would you like to proceed?`
         }
     ]);
 
@@ -208,8 +210,14 @@ const TimeAgentPage = () => {
     };
 
     const calendarDays = Array.from({ length: 35 }, (_, i) => {
-        const day = i - 3; // Mocking March
-        return { day, status: day === 25 ? 'active' : (day < 25 && day > 0) ? 'past' : 'future' };
+        const todayNum = new Date().getDate();
+        const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay();
+        const day = i - (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1) + 1; // Simplified grid offset
+
+        return {
+            day,
+            status: day === todayNum ? 'active' : (day < todayNum && day > 0) ? 'past' : 'future'
+        };
     });
 
     return (
@@ -233,7 +241,7 @@ const TimeAgentPage = () => {
                                     Nurotra <span>Space</span>
                                 </h2>
                                 <p className="ta-cal-subtitle">
-                                    March 2026 <span className="dot" /> <span className="dim">Time Agent Active</span>
+                                    {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} <span className="dot" /> <span className="dim">Time Agent Active</span>
                                 </p>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
@@ -273,7 +281,7 @@ const TimeAgentPage = () => {
                                                 ))}
                                             </div>
                                         )}
-                                        {d.day === 25 && <div className="ta-day__dot" />}
+                                        {d.day === new Date().getDate() && <div className="ta-day__dot" />}
                                     </motion.div>
                                 );
                             })}
