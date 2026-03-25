@@ -4,13 +4,16 @@
  */
 const aiService = require("../aiService");
 
-const analyzeIntent = async (prompt, sourceContent = "", multimediaContext = []) => {
+const analyzeIntent = async (prompt, sourceContent = "", multimediaContext = [], temporalContext = "") => {
     const systemPrompt = `
         [SOURCE MATERIAL]:
         ${(sourceContent && typeof sourceContent === 'string') ? sourceContent.substring(0, 5000) : "No source provided."}
 
         You are the Nurotra Intent Analyzer. Extract structured information from the user prompt into JSON.
         You MUST prioritize the [SOURCE MATERIAL] above for topic, audience, and purpose.
+        
+        [TEMPORAL CONTEXT]:
+        ${temporalContext || "No specific temporal context provided."}
         
         Fields:
         - topic: The main subject.
