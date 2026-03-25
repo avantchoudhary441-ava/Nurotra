@@ -1,6 +1,7 @@
 .time-agent-container {
     display: flex;
-    gap: 0; /* Gap managed by resizer handle */
+    gap: 0;
+    /* Gap managed by resizer handle */
     height: calc(100vh - 120px);
     padding: 0 24px 24px;
     margin-top: 20px;
@@ -15,7 +16,8 @@
     justify-content: center;
     transition: all 0.2s ease;
     z-index: 10;
-    margin: 0 -6px; /* Overlap with panels for better hit area */
+    margin: 0 -6px;
+    /* Overlap with panels for better hit area */
 }
 
 .resizer-handle:hover .resizer-line {
@@ -51,7 +53,8 @@
     flex-direction: column;
     gap: 20px;
     position: relative;
-    z-index: 50; /* Force calendar above command panel */
+    z-index: 50;
+    /* Force calendar above command panel */
 }
 
 .calendar-header {
@@ -89,7 +92,8 @@
 .day-cell:hover {
     background: var(--bg-hover, rgba(128, 128, 128, 0.1));
     border-color: var(--border-hover, rgba(128, 128, 128, 0.4));
-    z-index: 99; /* Massive z-index when hovered so hover card stays on top */
+    z-index: 99;
+    /* Massive z-index when hovered so hover card stays on top */
 }
 
 .day-cell.active {
@@ -107,9 +111,20 @@
 }
 
 @keyframes active-glow {
-    0% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 0.6; transform: scale(1.02); }
-    100% { opacity: 0.3; transform: scale(1); }
+    0% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.6;
+        transform: scale(1.02);
+    }
+
+    100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
 }
 
 .day-cell.past {
@@ -131,6 +146,9 @@
     flex-direction: column;
     position: relative;
     z-index: 10;
+    height: 100%;
+    /* Force full height of the container */
+    overflow: hidden;
 }
 
 .panel-section {
@@ -170,46 +188,192 @@
     box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
 }
 
-.quick-actions {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 4px;
-}
-
-.action-btn {
-    white-space: nowrap;
-    padding: 6px 12px;
-    border-radius: 8px;
-    background: rgba(128, 128, 128, 0.05);
-    border: 1px solid rgba(128, 128, 128, 0.2);
-    font-size: 0.8rem;
-    color: inherit;
-    opacity: 0.8;
-    transition: all 0.2s ease;
-}
-
-.action-btn:hover {
-    background: rgba(59, 130, 246, 0.1);
+.action-btn.active {
+    background: rgba(59, 130, 246, 0.2);
     border-color: #3b82f6;
-    opacity: 1;
+    color: #3b82f6;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
 }
 
-/* Task Breakdown */
-.breakdown-feed {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
+.side-panel-content {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0 0 24px 24px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    flex: 1;
+    height: 0;
+    /* Force flex child to not expand parent */
+    min-height: 0;
+    overflow: hidden;
 }
 
-.task-step {
-    background: rgba(128, 128, 128, 0.05);
-    border-left: 3px solid #3b82f6;
-    padding: 12px;
-    border-radius: 4px 12px 12px 4px;
+/* Premium Todo Styles */
+.todo-main-input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: white;
+    font-size: 0.9rem;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+.todo-main-input:focus {
+    border-color: #3b82f6;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+.todo-add-btn {
+    background: #3b82f6;
+    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.todo-add-btn:hover {
+    background: #2563eb;
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+}
+
+.todo-premium-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 12px;
+    position: relative;
+}
+
+.todo-premium-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(59, 130, 246, 0.3);
+    transform: translateX(4px);
+}
+
+.todo-check-circle {
+    width: 24px;
+    height: 24px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.todo-premium-item.completed .todo-check-circle {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.todo-premium-item.completed .todo-text {
+    text-decoration: line-through;
+    opacity: 0.4;
+}
+
+.todo-text {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #f1f5f9;
+    line-height: 1.4;
+    margin-bottom: 4px;
+}
+
+.todo-meta {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.todo-urgent-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    animation: urgent-pulse 2s infinite;
+}
+
+@keyframes urgent-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}
+
+.priority-high {
+    background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border-left: 4px solid #ef4444 !important;
+}
+
+.todo-list-container {
+    flex: 1;
+    overflow-y: auto !important;
+    min-height: 0;
+    padding-right: 8px;
+    position: relative;
+    max-height: 100%;
+    /* added to be sure */
+}
+
+/* Ensure the motion container doesn't collapse or expand weirdly */
+.side-panel-content>div {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+}
+
+/* Scrollbar Hide Utility if not in global */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.todo-list-container::-webkit-scrollbar {
+    width: 4px;
+}
+
+.todo-list-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
 }
 
 .step-label {
@@ -248,33 +412,62 @@
 }
 
 /* Status Colors */
-.status-pending { background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); }
-.status-running { background: rgba(234, 179, 8, 0.2); border: 1px solid rgba(234, 179, 8, 0.3); animation: statusPulse 2s infinite; }
-.status-completed { background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.3); }
-.status-urgent { background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+.status-pending {
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.status-running {
+    background: rgba(234, 179, 8, 0.2);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    animation: statusPulse 2s infinite;
+}
+
+.status-completed {
+    background: rgba(34, 197, 94, 0.2);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.status-urgent {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+}
 
 @keyframes statusPulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.7; }
-    100% { opacity: 1; }
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+
+    100% {
+        opacity: 1;
+    }
 }
 
 .calendar-hover-card {
     position: absolute;
-    bottom: calc(100% + 5px); /* Eject upward to avoid right panel overlap */
+    bottom: calc(100% + 5px);
+    /* Eject upward to avoid right panel overlap */
     left: 50%;
     transform: translateX(-50%);
     width: max-content;
     min-width: 160px;
     max-width: 220px;
-    background: #0f172a; /* Hardcoded dark to contrast white text */
+    background: #0f172a;
+    /* Hardcoded dark to contrast white text */
     color: #f8fafc;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 12px;
     padding: 12px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(59, 130, 246, 0.1);
-    z-index: 99999; /* Absolute dominance */
-    pointer-events: none; /* Handled by Framer Motion pointer-events */
+    z-index: 99999;
+    /* Absolute dominance */
+    pointer-events: none;
+    /* Handled by Framer Motion pointer-events */
 }
 
 .day-cell {

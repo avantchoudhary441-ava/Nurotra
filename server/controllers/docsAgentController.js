@@ -8,6 +8,7 @@ const { contextualClassifyIntent } = require("../services/intentEngine");
 const { saveToCloud } = require("./workspaceController");
 const { runDocumentAnalysis } = require("../services/documentAnalysisService");
 const { extractCommandsFromFiles } = require("../services/commandExtractionService");
+const { getTemporalContext } = require("../utils/timeHelper");
 
 // Revaluation helper: compute next due date from interval
 const computeNextDueDate = (interval, fromDate = new Date()) => {
@@ -140,11 +141,15 @@ const processQuery = async (req, res) => {
             hint: `Multimodal context from PDF file: ${mm.fileName} is attached. Use it for specific names and facts.`
         }));
 
+        // GET TEMPORAL CONTEXT (Time Awareness)
+        const temporalContext = getTemporalContext();
+        console.log(`[DocsAgent] Temporal Context generated.`);
+
         // STAGE 1: INTENT ANALYSIS
         let intentData;
         try {
             // Pass the BRIEF instead of the full Base64 payload here
-            intentData = await intentAnalyzer.analyzeIntent(prompt, sourceContent, multimediaBrief);
+            intentData = await intentAnalyzer.analyzeIntent(prompt, sourceContent, multimediaBrief, temporalContext);
             console.log(`[Stage 1 OK] Intent:`, intentData.topic);
         } catch (st1Err) {
             console.error(`[Stage 1 FAILED]:`, st1Err.message);
@@ -155,7 +160,7 @@ const processQuery = async (req, res) => {
         let classification;
         try {
             // Pass the BRIEF instead of the full Base64 payload here
-            classification = await classifier.classifyType(prompt, intentData, multimediaBrief);
+            classification = await classifier.classifyType(prompt, intentData, multimediaBrief, temporalContext);
             console.log(`[Stage 2 OK] Type: ${classification.presentation_type}`);
         } catch (st2Err) {
             console.error(`[Stage 2 FAILED]:`, st2Err.message);
@@ -253,7 +258,7 @@ const processQuery = async (req, res) => {
         // STAGE 3: STRUCTURE PLANNING (Continues as normal for Word/Website)
         let structure;
         try {
-            structure = await structurePlanner.generateStructure(prompt, intentData, classification, sourceContent, multimediaContext);
+            structure = await structurePlanner.generateStructure(prompt, intentData, classification, sourceContent, multimediaContext, temporalContext);
             if (!structure.sections) throw new Error("Agent returned empty sections");
             console.log(`[Stage 3 OK] Sections: ${structure.sections.length}`);
         } catch (st3Err) {

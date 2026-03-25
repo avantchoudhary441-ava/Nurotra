@@ -4,11 +4,14 @@
  */
 const aiService = require("../aiService");
 
-const classifyType = async (prompt, intentData, multimediaContext = []) => {
+const classifyType = async (prompt, intentData, multimediaContext = [], temporalContext = "") => {
     const systemPrompt = `
         You are the Nurotra Classifier. 
         Based on the user prompt and the extracted intent, classify the presentation/document type.
         CONSULT attached PDF files if available to understand the complexity and nature of the source.
+        
+        [TEMPORAL CONTEXT]:
+        ${temporalContext || "No specific temporal context provided."}
         
         Possible types:
         - startup_pitch
@@ -25,9 +28,9 @@ const classifyType = async (prompt, intentData, multimediaContext = []) => {
           "presentation_type": "..."
         }
     `;
- 
+
     const extendedPrompt = `Original Prompt: ${prompt}\nIntent Data: ${JSON.stringify(intentData)}`;
- 
+
     try {
         let text = await aiService.generateWithFallback(extendedPrompt, systemPrompt, [], multimediaContext);
         text = text.replace(/```json|```/g, "").trim();
