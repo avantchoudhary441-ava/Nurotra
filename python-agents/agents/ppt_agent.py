@@ -86,7 +86,7 @@ class GammaRenderer:
         
         if with_accent:
             # Sophisticated background geometry (UI Sidebar effect)
-            bar = slide.shapes.add_shape(MSO_SHAPE_TYPE.RECTANGLE, Inches(0), Inches(0), Inches(0.04), Inches(5.625))
+            bar = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(0), Inches(0), Inches(0.04), Inches(5.625))
             bar.fill.solid()
             bar.fill.fore_color.rgb = RGBColor(*self.accent)
             bar.line.visible = False
@@ -116,7 +116,7 @@ class GammaRenderer:
         self._add_text(sub_box, subtitle, size=22, color=self.muted, align=PP_ALIGN.CENTER)
         
         # Accent decoration
-        line = slide.shapes.add_shape(MSO_SHAPE_TYPE.RECTANGLE, Inches(4), Inches(3.1), Inches(2), Inches(0.03))
+        line = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(4), Inches(3.1), Inches(2), Inches(0.03))
         line.fill.solid()
         line.fill.fore_color.rgb = RGBColor(*self.accent)
         line.line.visible = False
@@ -142,7 +142,7 @@ class GammaRenderer:
         elif layout == "HERO" and img_stream:
             # Full bleed with text card
             slide.shapes.add_picture(img_stream, Inches(0), Inches(0), width=Inches(10))
-            overlay = slide.shapes.add_shape(MSO_SHAPE_TYPE.RECTANGLE, Inches(5.5), Inches(0), Inches(4.5), Inches(5.625))
+            overlay = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(5.5), Inches(0), Inches(4.5), Inches(5.625))
             overlay.fill.solid()
             overlay.fill.fore_color.rgb = RGBColor(*self.bg)
             overlay.fill.transparency = 0.2

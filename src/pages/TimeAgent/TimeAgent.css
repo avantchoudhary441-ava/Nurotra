@@ -165,6 +165,49 @@
     color: var(--ta-blue);
 }
 
+/* Header Toggle Interface */
+.ta-header-toggle {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.ta-header-btn {
+    font-size: 1.5rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: none;
+    border: none;
+    color: var(--ta-text-dim);
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0.5;
+    padding: 0;
+}
+
+.ta-header-btn--active {
+    color: var(--ta-text);
+    opacity: 1;
+}
+
+.ta-header-btn span {
+    color: var(--ta-blue);
+}
+
+.ta-header-btn:hover {
+    opacity: 0.8;
+}
+
+.ta-header-divider {
+    width: 2px;
+    height: 24px;
+    background: var(--ta-border);
+    border-radius: 99px;
+}
+
 .ta-cal-subtitle {
     color: var(--ta-text-muted);
     font-size: 0.85rem;
@@ -591,3 +634,188 @@
     font-size: 10px;
     color: var(--ta-text-muted);
 }
+
+/* ── Progress Tracker ── */
+.ta-view-selector {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 4px;
+    border-radius: 12px;
+    width: fit-content;
+    border: 1px solid var(--ta-border);
+}
+
+.ta-view-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--ta-text-muted);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ta-view-btn--active {
+    background: var(--ta-blue);
+    color: white;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Sub-view Toggle style (Segmented Control) */
+.ta-subview-selector {
+    display: flex;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 4px;
+    border-radius: 12px;
+    border: 1px solid var(--ta-border);
+    width: fit-content;
+}
+
+.ta-subview-btn {
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--ta-text-muted);
+    transition: all 0.2s;
+}
+
+.ta-subview-btn--active {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--ta-text);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.ta-tracker-container {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    animation: ta-fade-in 0.4s ease-out;
+}
+
+@keyframes ta-fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.ta-tracker-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.ta-stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--ta-border);
+    padding: 20px;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ta-stat-val {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--ta-blue);
+}
+
+.ta-stat-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ta-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.ta-task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ta-task-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--ta-border);
+    padding: 20px;
+    border-radius: 20px;
+    transition: all 0.2s;
+}
+
+.ta-task-card:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.ta-task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.ta-task-name {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.ta-task-percentage {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--ta-blue);
+}
+
+.ta-progress-track {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.ta-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--ta-blue), var(--ta-purple));
+    border-radius: 99px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ta-objective-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.ta-obj-item {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--ta-border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ta-obj-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.ta-obj-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ta-text-muted);
+}
