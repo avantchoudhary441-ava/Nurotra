@@ -873,7 +873,7 @@ const generatePPTBuffer = async (data) => {
                     }
                     break;
 
-                case 'QUADRANT':
+                case 'QUADRANT': {
                     addTitle(s.title, { align: 'center' });
                     const quadrantLabels = s.quadrant_labels || ["Strength", "Weakness", "Projected", "Risk"];
                     [0, 1, 2, 3].forEach(idx => {
@@ -888,8 +888,9 @@ const generatePPTBuffer = async (data) => {
                         }
                     });
                     break;
+                }
 
-                case 'TIMELINE':
+                case 'TIMELINE': {
                     addTitle(s.title);
                     const steps = s.timeline_steps || s.bullets || [];
                     slide.addShape(pres.ShapeType.line, { x: SAFE_MARGIN, y: 4.0, w: 9.0, h: 0, line: { color: accent, width: 3 } });
@@ -899,6 +900,7 @@ const generatePPTBuffer = async (data) => {
                         slide.addText(String(step), { x: x, y: idx % 2 === 0 ? 3.0 : 4.5, w: 1.8, fontSize: 12, color: contrastTextColor, align: 'center', fontFace: theme.bodyFont });
                     });
                     break;
+                }
 
                 case 'DASHBOARD':
                     addTitle(s.title || "Performance Dashboard", { align: 'center' });
@@ -1046,10 +1048,11 @@ const generatePDFBuffer = async (data) => {
                                     doc.moveDown();
                                     break;
                                 case 'paragraph':
-                                case 'styled_paragraph':
+                                case 'styled_paragraph': {
                                     const fontSize = block.style?.fontSize ? Math.floor(block.style.fontSize / 2) : 12;
                                     doc.fontSize(fontSize).font('Helvetica').fillColor('#333').text(block.text || '', { align: 'justify' });
                                     break;
+                                }
                                 case 'bullet':
                                     (block.items || []).forEach(item => {
                                         doc.fontSize(12).font('Helvetica').fillColor('#333').text(`• ${item}`, { indent: 20 });
@@ -1079,7 +1082,7 @@ const generatePDFBuffer = async (data) => {
                                         });
                                     }
                                     break;
-                                case 'image':
+                                case 'image': {
                                     const imgUrl = block.url || data.image_url;
                                     const isExampleUrl = imgUrl && (imgUrl.includes('example.com') || imgUrl.includes('placeholder') || imgUrl.includes('localhost') || imgUrl.includes('nurotra.com'));
 
@@ -1097,6 +1100,7 @@ const generatePDFBuffer = async (data) => {
                                         doc.fontSize(10).font('Helvetica-Oblique').fillColor('grey').text(`🖼️ [Image Placeholder: ${block.caption || 'Insert image here'}]`, { align: 'center' });
                                     }
                                     break;
+                                }
                                 case 'page_break':
                                     doc.addPage();
                                     break;
