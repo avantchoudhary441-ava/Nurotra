@@ -390,7 +390,7 @@ const savePPT = async (data, fullPath, safeWriteBuffer) => {
                     }
                     break;
 
-                case 'QUADRANT':
+                case 'QUADRANT': {
                     addTitle(s.title, { align: 'center' });
                     const quadrantLabels = s.quadrant_labels || ["Strength", "Weakness", "Projected", "Risk"];
                     [0, 1, 2, 3].forEach(idx => {
@@ -405,8 +405,9 @@ const savePPT = async (data, fullPath, safeWriteBuffer) => {
                         }
                     });
                     break;
+                }
 
-                case 'TIMELINE':
+                case 'TIMELINE': {
                     addTitle(s.title);
                     const steps = s.timeline_steps || s.bullets || [];
                     slide.addShape(pres.ShapeType.line, { x: SAFE_MARGIN, y: 4.0, w: 9.0, h: 0, line: { color: accent, width: 3 } });
@@ -416,6 +417,7 @@ const savePPT = async (data, fullPath, safeWriteBuffer) => {
                         slide.addText(String(step), { x: x, y: idx % 2 === 0 ? 3.0 : 4.5, w: 1.8, fontSize: 12, color: getContrastColor('#' + bg).replace('#', ''), align: 'center', fontFace: theme.bodyFont });
                     });
                     break;
+                }
 
                 case 'DATA_GRID':
                     addTitle(s.title);
@@ -432,7 +434,7 @@ const savePPT = async (data, fullPath, safeWriteBuffer) => {
                     }
                     break;
 
-                case 'IMAGE_SPLIT':
+                case 'IMAGE_SPLIT': {
                     const splitPos = s.splitRatio || 50; // percentage
                     const imgOnLeft = s.imageSide !== 'right';
                     const textX = imgOnLeft ? (splitPos + 5) / 10 + '%' : '5%';
@@ -452,8 +454,9 @@ const savePPT = async (data, fullPath, safeWriteBuffer) => {
                     slide.addText(String(s.title || ""), { x: textX, y: '20%', w: textW, fontSize: 32, bold: true, color: accent, fontFace: theme.headingFont });
                     addText(s.bullets || s.text || "", { x: textX, y: '35%', w: textW });
                     break;
+                }
 
-                case 'SWOT':
+                case 'SWOT': {
                     addTitle("SWOT Analysis", { align: 'center' });
                     const swot = ["STRENGTHS", "WEAKNESSES", "OPPORTUNITIES", "THREATS"];
                     const swotColors = [accent, 'E74C3C', '2ECC71', 'F1C40F'];
@@ -467,6 +470,7 @@ const savePPT = async (data, fullPath, safeWriteBuffer) => {
                         }
                     });
                     break;
+                }
 
             }
         }

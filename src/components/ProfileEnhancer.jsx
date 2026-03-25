@@ -234,7 +234,7 @@ function renderTabContent(tab, data) {
                 </div>
             );
 
-        case "optimize":
+        case "optimize": {
             // Fallback if data structure is old
             const platformSuggestions = data?.optimizationSuggestions?.platform || data?.optimizationSuggestions || [];
             const nurotraSuggestions = data?.optimizationSuggestions?.nurotra || [];
@@ -280,6 +280,7 @@ function renderTabContent(tab, data) {
                     </div>
                 </div>
             );
+        }
 
         default: return null;
     }

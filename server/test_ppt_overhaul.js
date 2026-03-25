@@ -164,7 +164,7 @@ const runTest = async () => {
                     });
                 }
                 break;
-            case 'TIMELINE':
+            case 'TIMELINE': {
                 addTitle(s.title);
                 const steps = s.timeline_steps || [];
                 slide.addShape(pres.ShapeType.line, { x: 0.5, y: 4.0, w: 9.0, h: 0, line: { color: accent, width: 3 } });
@@ -174,6 +174,7 @@ const runTest = async () => {
                     slide.addText(String(step), { x: x, y: idx % 2 === 0 ? 3.0 : 4.5, w: 1.8, fontSize: 12, color: contrastTextColor, align: 'center', fontFace: theme.bodyFont });
                 });
                 break;
+            }
             case 'DATA_GRID':
                 addTitle(s.title);
                 if (s.dataGrid) {
@@ -188,7 +189,7 @@ const runTest = async () => {
                     });
                 }
                 break;
-            case 'SWOT':
+            case 'SWOT': {
                 addTitle("SWOT Analysis", { align: 'center' });
                 const swot = ["STRENGTHS", "WEAKNESSES", "OPPORTUNITIES", "THREATS"];
                 const swotColors = [accent, 'E74C3C', '2ECC71', 'F1C40F'];
@@ -202,12 +203,14 @@ const runTest = async () => {
                     }
                 });
                 break;
-            case 'IMAGE_SPLIT':
+            }
+            case 'IMAGE_SPLIT': {
                 const splitPos = 40;
                 slide.addImage({ path: s.image_url, x: 0, y: 0, w: splitPos / 10, h: '100%', opacity: 100 });
                 slide.addText(String(s.title || ""), { x: '45%', y: '20%', w: '50%', fontSize: 32, bold: true, color: accent, fontFace: theme.headingFont });
                 addText(s.bullets || "", { x: '45%', y: '35%', w: '50%' });
                 break;
+            }
             default:
                 addTitle(s.title);
                 addText(s.bullets || "");

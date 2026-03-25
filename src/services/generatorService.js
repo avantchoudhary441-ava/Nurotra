@@ -828,7 +828,7 @@ const renderSlideByLayout = (slide, slideData, themeData) => {
             }
             break;
 
-        case 'SWOT_ANALYSIS':
+        case 'SWOT_ANALYSIS': {
             slide.addText(title || "SWOT Analysis", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 32, bold: true, color: primaryColor, fontFace: fontHeader });
             const swotData = slideData.swot || { s: [], w: [], o: [], t: [] };
             const boxes = [
@@ -846,6 +846,7 @@ const renderSlideByLayout = (slide, slideData, themeData) => {
                 });
             });
             break;
+        }
 
         case 'BIG_FACT':
             slide.addText(title || "", { x: 0, y: 1.5, w: '100%', h: 1, fontSize: 24, color: subTextColor, align: 'center', fontFace: fontBody });
@@ -871,7 +872,7 @@ const renderSlideByLayout = (slide, slideData, themeData) => {
             });
             break;
 
-        case 'TIMELINE':
+        case 'TIMELINE': {
             slide.addText(title || "Timeline", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
             const events = slideData.timeline || [];
             slide.addShape(slide.ShapeType.line, { x: 0.5, y: 3.5, w: 9, h: 0, line: { color: accentColor, width: 3 } });
@@ -882,8 +883,9 @@ const renderSlideByLayout = (slide, slideData, themeData) => {
                 slide.addText(ev.event || "", { x: xPos - 0.5, y: 3.7, w: 1, fontSize: 10, align: 'center', color: textColor });
             });
             break;
+        }
 
-        case 'COMPARISON':
+        case 'COMPARISON': {
             slide.addText(title || "Comparison", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
             const comp = slideData.comparison || { left: { title: "Option A", items: [] }, right: { title: "Option B", items: [] } };
             // Left Box
@@ -895,8 +897,9 @@ const renderSlideByLayout = (slide, slideData, themeData) => {
             slide.addText(comp.right.title, { x: 5.2, y: 1.3, w: 4.2, fontSize: 18, bold: true, color: primaryColor, fontFace: fontHeader, align: 'center' });
             slide.addText(comp.right.items.map(i => `• ${i}`).join('\n'), { x: 5.3, y: 1.8, w: 4, fontSize: 13, color: textColor, fontFace: fontBody });
             break;
+        }
 
-        case 'FUNNEL':
+        case 'FUNNEL': {
             slide.addText(title || "Sales Funnel", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
             const stages = slideData.funnelStages || [];
             stages.forEach((stage, i) => {
@@ -913,9 +916,10 @@ const renderSlideByLayout = (slide, slideData, themeData) => {
                 });
             });
             break;
+        }
 
         case 'DASHBOARD':
-        case 'DATA_GRID':
+        case 'DATA_GRID': {
             slide.addText(title || "Dashboard", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: primaryColor, fontFace: fontHeader });
             const metrics = slideData.dashboardMetrics || slideData.dataGrid || [];
             metrics.forEach((m, i) => {
@@ -929,6 +933,7 @@ const renderSlideByLayout = (slide, slideData, themeData) => {
                 }
             });
             break;
+        }
 
         case 'MISSION_VISION':
             slide.addText(title || "Mission & Vision", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 32, bold: true, color: primaryColor, fontFace: fontHeader, align: 'center' });
@@ -951,12 +956,13 @@ const renderSlideByLayout = (slide, slideData, themeData) => {
             break;
 
         case 'IMAGE_LEFT':
-        case 'IMAGE_RIGHT':
+        case 'IMAGE_RIGHT': {
             const isRight = layoutType === 'IMAGE_RIGHT';
             if (image_url) slide.addImage({ data: image_url, x: isRight ? 5.5 : 0.5, y: 1.2, w: 4, h: 4, sizing: { type: 'cover' } });
             slide.addText(title || "Slide", { x: isRight ? 0.5 : 5.5, y: 0.5, w: 4, fontSize: 24, bold: true, color: primaryColor });
             slide.addText(bullets?.join('\n') || "", { x: isRight ? 0.5 : 5.5, y: 1.5, w: 4, fontSize: 14, bullet: true });
             break;
+        }
 
         default:
             slide.addText(title || "Slide", { x: 0.5, y: 0.3, w: 9, h: 0.8, fontSize: 28, bold: true, color: accentColor, fontFace: fontHeader });

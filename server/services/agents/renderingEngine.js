@@ -10,7 +10,7 @@ const renderOutput = async (processedData, format) => {
         case 'website':
             return await generateWebsite(processedData);
         case 'ppt':
-        case 'pptx':
+        case 'pptx': {
             // Generate valid PPTX buffer using the cloud service
             const pptResult = await cloudExportService.generateBuffer({
                 name: processedData.topic || "Presentation",
@@ -23,9 +23,10 @@ const renderOutput = async (processedData, format) => {
                 fileName: pptResult.fileName,
                 mimeType: pptResult.mimeType
             };
+        }
         case 'report':
         case 'word':
-        case 'docx':
+        case 'docx': {
             // Map 'slides' from content generator to 'sections' for the Word engine
             if (processedData.slides && !processedData.sections) {
                 processedData.sections = processedData.slides.map(s => ({
@@ -46,6 +47,7 @@ const renderOutput = async (processedData, format) => {
                 fileName: wordResult.fileName,
                 mimeType: wordResult.mimeType
             };
+        }
         default:
             return { type: 'text', message: "Generic rendering fallback." };
     }

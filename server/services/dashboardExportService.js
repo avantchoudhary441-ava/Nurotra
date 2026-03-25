@@ -182,14 +182,16 @@ const mapDashboardToPPT = (dashboard) => {
 const exportDashboard = async (dashboard, format = 'pdf') => {
     try {
         switch (format.toLowerCase()) {
-            case 'docx':
+            case 'docx': {
                 const wordData = mapDashboardToWord(dashboard);
                 return await generateWordBuffer(wordData);
-            case 'pptx':
+            }
+            case 'pptx': {
                 const pptData = mapDashboardToPPT(dashboard);
                 return await generatePPTBuffer(pptData);
+            }
             case 'xlsx':
-            case 'pbi':
+            case 'pbi': {
                 // Power BI / Excel Export: Generate high-fidelity multi-sheet Excel workbook (.xlsx)
                 const pbiSheets = [];
                 const sheetNames = new Set();
@@ -246,9 +248,11 @@ const exportDashboard = async (dashboard, format = 'pdf') => {
                 }
 
                 return await generateExcelBuffer({ sheets: pbiSheets });
-            default: // PDF
+            }
+            default: { // PDF
                 const pdfData = mapDashboardToWord(dashboard); // PDFs currently share Word structuring in cloudExport
                 return await generatePDFBuffer(pdfData);
+            }
         }
     } catch (error) {
         console.error("[DashboardExportService] Export Failed:", error);
