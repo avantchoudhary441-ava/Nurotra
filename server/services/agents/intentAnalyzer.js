@@ -24,11 +24,14 @@ const analyzeIntent = async (prompt, sourceContent = "", multimediaContext = [],
         - complexity: beginner, intermediate, expert.
         - slides: estimated number (default 7).
         - output_format: ppt, website, report.
+        - deadline: Any specific time reference (e.g., "tomorrow", "Friday", "2 hours", "ISO-8601 string"). Default: null.
+        - urgency: low, medium, high, critical.
 
         Output STRICT JSON:
         {
           "topic": "...", "audience": "...", "purpose": "...", "tone": "...",
-          "content_density": "...", "complexity": "...", "slides": 7, "output_format": "ppt"
+          "content_density": "...", "complexity": "...", "slides": 7, "output_format": "ppt",
+          "deadline": "...", "urgency": "..."
         }
     `;
 

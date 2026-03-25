@@ -217,4 +217,11 @@ export const adminService = {
     }
 };
 
+export const timeAgentService = {
+    planTask: async (prompt) => {
+        const response = await api.post("/time-agent/plan", { prompt });
+        return response.data;
+    }
+};
+
 export default api;

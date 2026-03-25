@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { timeAgentService } from '../../services/apiService';
 import './TimeAgent.css';
 
 const TimeAgentPage = () => {
@@ -34,6 +35,7 @@ const TimeAgentPage = () => {
     const [isListening, setIsListening] = useState(false);
     const [isAutoMode, setIsAutoMode] = useState(true);
     const [isTodoView, setIsTodoView] = useState(false);
+    const [lastPlanning, setLastPlanning] = useState(null);
 
     // Data State
     const [tasks, setTasks] = useState([
@@ -119,11 +121,13 @@ const TimeAgentPage = () => {
     }, [isResizing]);
 
     // Handlers
-    const handleCommand = () => {
+    const handleCommand = async () => {
         if (!command.trim()) return;
 
-        const userMsg = command;
+        const userMsg = command.trim();
         setCommand('');
+
+        // 1. Instantly update UI with user message
         setMessages(prev => [...prev, { id: Date.now(), role: 'user', text: userMsg }]);
 
         const addLog = (msgText) => {
@@ -133,47 +137,53 @@ const TimeAgentPage = () => {
             }, ...prev]);
         };
 
-        if (chatStage === 0) {
-            addLog(`User: "${userMsg}"`);
-            setPendingTask(userMsg);
-            setTaskContext(userMsg);
-            setChatStage(1);
+        addLog(`User: "${userMsg}"`);
 
-            setTimeout(() => {
-                const hasDeadline = userMsg.match(/(\d+)(st|nd|rd|th)?/i) || userMsg.toLowerCase().includes('tomorrow') || userMsg.toLowerCase().includes('today');
-                const question = hasDeadline
-                    ? 'Time Agent: I see the deadline. Could you specify any additional constraints or who the target audience is?'
-                    : 'Time Agent: Need details. What is the deadline for this task and who is the audience?';
+        try {
+            // 2. Call Time Agent API
+            const response = await timeAgentService.planTask(userMsg);
 
-                setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', text: question }]);
-                addLog(question);
-            }, 1000);
-        } else if (chatStage === 1) {
-            addLog(`User: "${userMsg}"`);
-            setTaskContext(prev => prev + " | " + userMsg);
-            setChatStage(2);
+            if (response.success) {
+                const { intent, planning } = response;
+                setLastPlanning(intent);
 
-            setTimeout(() => {
-                const text = 'Time Agent: Are there any specific themes, tools, or formats I should use?';
-                setMessages(prev => [...prev, { id: Date.now(), role: 'assistant', text }]);
-                addLog(text);
-            }, 1000);
-        } else if (chatStage === 2) {
-            addLog(`User: "${userMsg}"`);
-            setTaskContext(prev => prev + " | " + userMsg);
-            setChatStage(0);
-
-            setTimeout(() => {
-                addLog('Time Agent: Perfect. I have enough context. Decomposing task into daily objectives...');
-                generateTasks(pendingTask, taskContext + " | " + userMsg);
-
+                // 3. Add Assistant Message
                 setMessages(prev => [...prev, {
-                    id: Date.now(),
+                    id: Date.now() + 1,
                     role: 'assistant',
-                    text: 'Perfect. I have enough context. I have decomposed the task and updated your calendar.'
+                    text: response.message
                 }]);
-                handleAddTodo(`Execute: ${pendingTask}`);
-            }, 1000);
+
+                // 4. Update Objectives (Calendar Dots)
+                if (planning.schedule) {
+                    const newObjectives = planning.schedule.map((s, i) => ({
+                        id: Date.now() + i + 100,
+                        targetDay: s.targetDay,
+                        title: s.title,
+                        status: 'pending'
+                    }));
+                    setObjectives(prev => [...prev, ...newObjectives]);
+
+                    // 5. Update Todos (Sidebar List)
+                    const newTodos = planning.schedule.map((s, i) => ({
+                        id: Date.now() + i + 1000,
+                        text: `${s.timeLabel}: ${s.title}`,
+                        completed: false,
+                        priority: intent.urgency === 'high' || intent.urgency === 'critical' ? 'high' : 'medium'
+                    }));
+                    setTodos(prev => [...newTodos, ...prev]);
+                }
+
+                addLog(`Time Agent: Scaling intensity to ${planning.intensity || 'optimal'} level.`);
+            }
+        } catch (err) {
+            console.error("Planning failed:", err);
+            addLog("System Error: Temporal planning engine offline.");
+            setMessages(prev => [...prev, {
+                id: Date.now() + 1,
+                role: 'assistant',
+                text: "I encountered an error while planning your schedule. Please try again with a more specific deadline."
+            }]);
         }
     };
 
@@ -307,7 +317,13 @@ const TimeAgentPage = () => {
                             <div>
                                 <div className="ta-chat-header__title">{isTodoView ? 'Grounded To-Do' : 'Time Agent AI'}</div>
                                 <div className="ta-chat-header__status">
-                                    <div className="ta-status-dot" /> {isTodoView ? `${todos.filter(t => !t.completed).length} Pending` : 'Neural Status: Optimal'}
+                                    <div className="ta-status-dot" />
+                                    {isTodoView
+                                        ? `${todos.filter(t => !t.completed).length} Pending`
+                                        : lastPlanning
+                                            ? `Deadline: ${lastPlanning.deadline} | ${lastPlanning.urgency.toUpperCase()}`
+                                            : 'Neural Status: Optimal'
+                                    }
                                 </div>
                             </div>
                         </div>
