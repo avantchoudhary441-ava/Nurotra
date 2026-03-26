@@ -114,6 +114,7 @@ const planTask = async (req, res) => {
                 scheduledDocument: null,
                 message: docResult
                     ? `Priority hand-off complete. I have skipped the planning phase to deliver your ${docResult.type} instantly. It is ready for download below. \n\n**Evaluation Phase:** Please review the document and let me know if you'd like any adjustments! I can iterate on it right away.`
+                    ? `Priority hand-off complete. I have skipped the planning phase to deliver your ${docResult.type} instantly. It is ready for download below.`
                     : `I have prioritized your request for instant execution.`,
                 coordination: {
                     agents: intent.agents || ["time"],
