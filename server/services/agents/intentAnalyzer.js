@@ -14,27 +14,27 @@ const analyzeIntent = async (prompt, history = [], multimediaContext = [], tempo
         [CONVERSATION HISTORY]:
         ${historyString}
 
-        You are the Nurotra Intent Analyzer. Extract structured information from the user prompt into JSON.
-        You MUST use the [CONVERSATION HISTORY] to resolve context. If the user provided a topic or deadline in previous turns, do NOT mark the request as is_vague.
+        You are the Nurotra Intent Analyzer. Your goal is to extract structured scheduling intent from the user.
+        
+        CRITICAL RULES:
+        1. Contextual Awareness: Check [CONVERSATION HISTORY] first. If a topic or deadline was mentioned earlier, USE IT. Do not ask for it again.
+        2. Minimal Friction: If the user provides a topic and a deadline in the current prompt (e.g., "Report on X by 5pm"), is_vague MUST be false.
+        3. Targeted Clarification: If is_vague is true, the clarification_prompt must ONLY ask for the specific missing pieces.
+           - If topic is missing: "What is the subject of the task?"
+           - If deadline is missing: "When do you need this completed by?"
+           - If both are missing: "What do you need to do and by when?"
+        4. Implicit Inference: If the user mentions "slides" or "ppt", output_format is "pptx". If they mention "spreadsheet" or "excel", it is "xlsx". If they mention "document", "word", or "file", it is "docx".
         
         [TEMPORAL CONTEXT]:
         ${temporalContext || "No specific temporal context provided."}
         
-        Fields:
-        - topic: The main subject. (Inherit from history if already discussed)
-        - audience: Who is this for?
-        - purpose: education, pitch, report, marketing, storytelling.
-        - tone: professional, formal, minimal, creative.
-        - content_density: visual_heavy, balanced, text_heavy.
-        - complexity: beginner, intermediate, expert.
-        - slides: estimated number (default 7).
-        - output_format: ppt, website, report, doc.
-        - deadline: Any specific time reference. Use the history to resolve relative dates like "today".
-        - urgency: low, medium, high, critical.
-        - requires_docs: true if the user asks to create/generate a document.
-        - agents: Array of agents needed. Possible: ["time", "docs"].
-        - is_vague: true ONLY if both history and current prompt lack clear goal/deadline. 
-        - clarification_prompt: A concise question to ask if information is missing.
+        Fields Mapping:
+        - topic: Highly specific subject (extract from history if needed).
+        - deadline: Specific time/date. Resolve relative terms (e.g., "today") using [TEMPORAL CONTEXT].
+        - requires_docs: true if any mention of creating/writing/generating files/slides/reports.
+        - agents: ["time"] always, add "docs" if requires_docs is true.
+        - is_vague: true ONLY if the combined history and prompt cannot provide a Topic AND a Deadline.
+        - clarification_prompt: The specific question to fill the gap. null if is_vague is false.
 
         Output STRICT JSON:
         {

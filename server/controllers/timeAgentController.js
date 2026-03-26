@@ -39,6 +39,17 @@ const planTask = async (req, res) => {
 
         // 4. Conversational Check: Handle vague schedules
         if (intent.is_vague || !intent.deadline) {
+            // Use AI-generated clarification or a smart fallback
+            let message = intent.clarification_prompt;
+
+            if (!message) {
+                if (docResult) {
+                    message = `I've started generating your ${docResult.type}, but I need a deadline to create your schedule. When do you need this by?`;
+                } else {
+                    message = "I'm ready to help, but I need a specific goal and deadline. What can I plan for you today?";
+                }
+            }
+
             return res.json({
                 success: true,
                 intent,
@@ -49,9 +60,7 @@ const planTask = async (req, res) => {
                     type: docResult.type,
                     status: 'ready'
                 } : null,
-                message: intent.clarification_prompt || (docResult
-                    ? `I've started generating your ${docResult.type}, but I need a specific deadline (e.g., 'by 5pm') to create a schedule for you. When do you need this finished?`
-                    : "I need a specific deadline (e.g., 'by 5pm') to generate a detailed schedule for you. When do you need this completed?"),
+                message,
                 coordination: {
                     agents: intent.agents || ["time"],
                     status: docResult ? "Document ready, waiting for temporal context" : "waiting_for_input"

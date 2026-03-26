@@ -6,7 +6,10 @@ const { generateWebsite } = require("./websiteGenerator");
 const cloudExportService = require("../cloudExportService");
 
 const renderOutput = async (processedData, format) => {
-    switch (format) {
+    // Normalize format keys
+    const f = (format || 'docx').toLowerCase();
+
+    switch (f) {
         case 'website':
             return await generateWebsite(processedData);
         case 'ppt':
@@ -17,15 +20,16 @@ const renderOutput = async (processedData, format) => {
                 type: 'ppt',
                 rawStructure: { slides: processedData.slides }
             }, 'pptx');
-            return { 
-                type: 'ppt', 
-                buffer: pptResult.buffer, 
+            return {
+                type: 'ppt',
+                buffer: pptResult.buffer,
                 fileName: pptResult.fileName,
                 mimeType: pptResult.mimeType
             };
         }
         case 'report':
         case 'word':
+        case 'doc':
         case 'docx': {
             // Map 'slides' from content generator to 'sections' for the Word engine
             if (processedData.slides && !processedData.sections) {
@@ -41,11 +45,25 @@ const renderOutput = async (processedData, format) => {
                 type: 'docx',
                 rawStructure: processedData
             }, 'docx');
-            return { 
-                type: 'word', 
-                buffer: wordResult.buffer, 
+            return {
+                type: 'word',
+                buffer: wordResult.buffer,
                 fileName: wordResult.fileName,
                 mimeType: wordResult.mimeType
+            };
+        }
+        case 'excel':
+        case 'xlsx': {
+            const excelResult = await cloudExportService.generateBuffer({
+                name: processedData.topic || "Data_Export",
+                type: 'excel',
+                rawStructure: processedData
+            }, 'xlsx');
+            return {
+                type: 'excel',
+                buffer: excelResult.buffer,
+                fileName: excelResult.fileName,
+                mimeType: excelResult.mimeType
             };
         }
         default:
