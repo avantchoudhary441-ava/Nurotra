@@ -235,20 +235,30 @@ export const workspaceService = {
                 responseType: 'blob'
             });
 
-            // Extract filename from Content-Disposition
+            // Extract filename and mime type from headers
             let finalName = fileName || 'document';
-            const cdHeader = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+            const headers = response.headers || {};
+            const cdHeader = headers['content-disposition'] || headers['Content-Disposition'];
+            const mimeType = headers['content-type'] || headers['Content-Type'] || 'application/octet-stream';
 
             if (cdHeader) {
                 const match = cdHeader.match(/filename="?([^"]+)"?/);
                 if (match && match[1]) {
                     finalName = match[1];
                 }
-            } else if (format && !finalName.toLowerCase().endsWith('.' + format)) {
-                finalName = finalName.split('.')[0] + '.' + format;
             }
 
-            const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+            // Ensure correct extension based on format or mime type
+            if (format && typeof format === 'string' && !finalName.toLowerCase().endsWith('.' + format.toLowerCase())) {
+                finalName = finalName.split('.')[0] + '.' + format.replace('.', '');
+            } else if (!finalName.includes('.')) {
+                if (mimeType.includes('wordprocessingml')) finalName += '.docx';
+                else if (mimeType.includes('spreadsheetml')) finalName += '.xlsx';
+                else if (mimeType.includes('presentationml')) finalName += '.pptx';
+                else if (mimeType.includes('pdf')) finalName += '.pdf';
+            }
+
+            const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }));
             const link = document.createElement('a');
             link.href = blobUrl;
             link.setAttribute('download', finalName);
@@ -272,20 +282,43 @@ export const workspaceService = {
             ? fullUrl.replace(window.location.origin, "").replace(/^https?:\/\/[^\/]+/, "")
             : fullUrl;
 
-        const response = await api.get(path, {
-            responseType: 'blob'
-        });
+        try {
+            const response = await api.get(path, {
+                responseType: 'blob'
+            });
 
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', fileName || 'download');
-        document.body.appendChild(link);
-        link.click();
+            const headers = response.headers || {};
+            const cdHeader = headers['content-disposition'] || headers['Content-Disposition'];
+            const mimeType = headers['content-type'] || headers['Content-Type'] || 'application/octet-stream';
 
-        link.parentNode.removeChild(link);
-        window.URL.revokeObjectURL(url);
-        return { success: true };
+            let finalName = fileName || 'document';
+            if (cdHeader) {
+                const match = cdHeader.match(/filename="?([^"]+)"?/);
+                if (match && match[1]) {
+                    finalName = match[1];
+                }
+            } else if (!finalName.includes('.')) {
+                // Fallback extensions based on MIME
+                if (mimeType.includes('wordprocessingml')) finalName += '.docx';
+                else if (mimeType.includes('spreadsheetml')) finalName += '.xlsx';
+                else if (mimeType.includes('presentationml')) finalName += '.pptx';
+                else if (mimeType.includes('pdf')) finalName += '.pdf';
+            }
+
+            const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }));
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.setAttribute('download', finalName);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Download by URL failed:', error);
+            return { success: false, error: error.message };
+        }
     }
 };
 

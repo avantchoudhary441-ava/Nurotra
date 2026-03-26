@@ -195,6 +195,7 @@ const TimeAgentPage = () => {
                     setLogs(prev => [
                         { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: "Docs Agent Handover: Initializing 14-stage pipeline" },
                         { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${docType.toUpperCase()} generation synchronized` },
+                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${(response.document?.type || 'DOC').toUpperCase()} generation synchronized` },
                         ...prev
                     ]);
                 }
@@ -677,6 +678,7 @@ const TimeAgentPage = () => {
                                         ? `${todos.filter(t => !t.completed).length} Pending`
                                         : lastPlanning
                                             ? `Deadline: ${lastPlanning.deadline} | ${(lastPlanning.urgency || "optimal").toUpperCase()}`
+                                            ? `Deadline: ${lastPlanning.deadline} | ${(lastPlanning.urgency || 'Normal').toUpperCase()}`
                                             : 'Neural Status: Optimal'
                                     }
                                 </div>
@@ -750,6 +752,7 @@ const TimeAgentPage = () => {
                                                                     <div className="ta-doc-info">
                                                                         <div className="ta-doc-name">{msg.document.name}</div>
                                                                         <div className="ta-doc-type">{(msg.document.type || "document").toUpperCase()} ready</div>
+                                                                        <div className="ta-doc-type">{(msg.document?.type || 'DOC').toUpperCase()} ready</div>
                                                                     </div>
                                                                     <button
                                                                         className="ta-doc-download"

@@ -85,6 +85,19 @@ const planTask = async (req, res) => {
 
         if (isFastTrack) {
             console.log(`[TimeAgent] FAST TRACK Triggered: Skipping temporal planning for instant execution.`);
+        // 4. Conversational Check: Handle vague schedules
+        if (intent.is_vague || !intent.deadline) {
+            // Use AI-generated clarification or a smart fallback
+            let message = intent.clarification_prompt;
+
+            if (!message) {
+                if (docResult) {
+                    message = `I've started generating your ${docResult.type}, but I need a deadline to create your schedule. When do you need this by?`;
+                } else {
+                    message = "I'm ready to help, but I need a specific goal and deadline. What can I plan for you today?";
+                }
+            }
+
             return res.json({
                 success: true,
                 intent,
@@ -105,6 +118,11 @@ const planTask = async (req, res) => {
                 message: docResult 
                     ? `Priority hand-off complete. I have skipped the planning phase to deliver your ${docResult.type} instantly. It is ready for download below.`
                     : `I have prioritized your request for instant execution.`
+                message,
+                coordination: {
+                    agents: intent.agents || ["time"],
+                    status: docResult ? "Document ready, waiting for temporal context" : "waiting_for_input"
+                }
             });
         }
 
