@@ -118,14 +118,14 @@ const TimeAgentPage = () => {
                     }
                     return msg;
                 });
-                
+
                 if (changed) {
                     setLogs(l => [{
                         time: now.toLocaleTimeString([], { hour12: false }),
                         msg: "System: Deadline reached. Scheduled file delivery executed."
                     }, ...l]);
                 }
-                
+
                 return changed ? next : prev;
             });
         }, 1000);
@@ -194,7 +194,6 @@ const TimeAgentPage = () => {
                     const docType = response.document.type || 'document';
                     setLogs(prev => [
                         { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: "Docs Agent Handover: Initializing 14-stage pipeline" },
-                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${docType.toUpperCase()} generation synchronized` },
                         { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${(response.document?.type || 'DOC').toUpperCase()} generation synchronized` },
                         ...prev
                     ]);
@@ -207,7 +206,7 @@ const TimeAgentPage = () => {
                 let existingTaskIndex = -1;
                 let activeTaskId = Date.now();
                 const safeTopic = (intent?.topic || "").toLowerCase();
-                
+
                 if (safeTopic && Array.isArray(tasks)) {
                     existingTaskIndex = tasks.findIndex(t => {
                         const safeName = (t.name || "").toLowerCase();
@@ -257,7 +256,7 @@ const TimeAgentPage = () => {
                     if (existingTaskIndex !== -1) {
                         // REFINEMENT LOGIC: Replace old objectives/todos for this topic
                         const oldTaskName = tasks[existingTaskIndex].name;
-                        
+
                         setTasks(prev => {
                             const updated = [...prev];
                             updated[existingTaskIndex] = {
@@ -678,7 +677,6 @@ const TimeAgentPage = () => {
                                         ? `${todos.filter(t => !t.completed).length} Pending`
                                         : lastPlanning
                                             ? `Deadline: ${lastPlanning.deadline} | ${(lastPlanning.urgency || "optimal").toUpperCase()}`
-                                            ? `Deadline: ${lastPlanning.deadline} | ${(lastPlanning.urgency || 'Normal').toUpperCase()}`
                                             : 'Neural Status: Optimal'
                                     }
                                 </div>

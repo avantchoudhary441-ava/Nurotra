@@ -24,15 +24,15 @@ const planTask = async (req, res) => {
         const lowerPrompt = prompt.toLowerCase().trim();
         const words = lowerPrompt.split(/\s+/);
         const isVaguePattern = ['report', 'ppt', 'presentation', 'doc', 'document'].some(p => lowerPrompt.includes(p)) && words.length <= 2;
-        
+
         if (history.length <= 1 && (isVaguePattern || words.length < 2)) {
-             const type = lowerPrompt.includes('ppt') || lowerPrompt.includes('presentation') ? 'presentation' : 'report';
-             return res.json({
-                 success: true,
-                 intent: { is_vague: true, clarification_prompt: `What should the ${type} be about?` },
-                 planning: null,
-                 message: `What should the ${type} be about? I need a topic to get started.`
-             });
+            const type = lowerPrompt.includes('ppt') || lowerPrompt.includes('presentation') ? 'presentation' : 'report';
+            return res.json({
+                success: true,
+                intent: { is_vague: true, clarification_prompt: `What should the ${type} be about?` },
+                planning: null,
+                message: `What should the ${type} be about? I need a topic to get started.`
+            });
         }
 
         // 2. Extract Intent (Pass history for multi-turn context)
@@ -61,11 +61,11 @@ const planTask = async (req, res) => {
             try {
                 // Synthesize the prompt to ensure Python microservices receive the full topic context
                 // even if the user's current prompt is just a deadline update (e.g., "in 10 sec").
-                const synthesizedPrompt = intent.topic 
+                const synthesizedPrompt = intent.topic
                     ? `Create a ${intent.output_format || 'presentation'} about ${intent.topic}. User's latest instruction: ${prompt}`
                     : prompt;
-                
-                docResult = await docsAgentService.generateFullDocument(req.user, { 
+
+                docResult = await docsAgentService.generateFullDocument(req.user, {
                     prompt: synthesizedPrompt,
                     history: history
                 });
@@ -85,19 +85,6 @@ const planTask = async (req, res) => {
 
         if (isFastTrack) {
             console.log(`[TimeAgent] FAST TRACK Triggered: Skipping temporal planning for instant execution.`);
-        // 4. Conversational Check: Handle vague schedules
-        if (intent.is_vague || !intent.deadline) {
-            // Use AI-generated clarification or a smart fallback
-            let message = intent.clarification_prompt;
-
-            if (!message) {
-                if (docResult) {
-                    message = `I've started generating your ${docResult.type}, but I need a deadline to create your schedule. When do you need this by?`;
-                } else {
-                    message = "I'm ready to help, but I need a specific goal and deadline. What can I plan for you today?";
-                }
-            }
-
             return res.json({
                 success: true,
                 intent,
@@ -105,7 +92,7 @@ const planTask = async (req, res) => {
                     intensity: 'critical',
                     totalPhases: 1,
                     schedule: [
-                        { timeLabel: "Now", title: "Instant Generation", description: "Doc Agent has prioritized your request.", status: "completed", targetDay: new Date().getDate() }
+                        { timeLabel: "Now", title: "Instant Generation", description: "System has prioritized your request for immediate delivery.", status: "completed", targetDay: new Date().getDate() }
                     ]
                 },
                 document: docResult ? {
@@ -115,13 +102,12 @@ const planTask = async (req, res) => {
                     status: 'ready'
                 } : null,
                 scheduledDocument: null,
-                message: docResult 
+                message: docResult
                     ? `Priority hand-off complete. I have skipped the planning phase to deliver your ${docResult.type} instantly. It is ready for download below.`
-                    : `I have prioritized your request for instant execution.`
-                message,
+                    : `I have prioritized your request for instant execution.`,
                 coordination: {
                     agents: intent.agents || ["time"],
-                    status: docResult ? "Document ready, waiting for temporal context" : "waiting_for_input"
+                    status: docResult ? "Document ready, priority delivered" : "Instant task marked complete"
                 }
             });
         }
@@ -130,7 +116,7 @@ const planTask = async (req, res) => {
         const planning = await temporalPlanner.generateTimeline(prompt, intent, temporalContext);
         console.log(`[TimeAgent] Schedule Generated: ${planning.totalPhases} phases.`);
 
-        // 4. Return coordinated result to frontend
+        // 6. Return coordinated result to frontend
         res.json({
             success: true,
             intent,
