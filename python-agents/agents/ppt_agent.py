@@ -218,6 +218,12 @@ def run_ppt_generation(prompt: str, context: str, slide_count: int = 7) -> str:
     model = ModelFactory.create(model_platform=ModelPlatformType.OPENAI, model_type="gpt-4o", model_config_dict={"temperature": 0.8})
     
     sys_prompt = f"""You are a Lead Designer for Gamma AI. Create a high-end presentation blueprint for: "{prompt}".
+
+**CONTEXTUAL HANDLING:**
+- If the [CONTEXT] contains an existing presentation structure, you are performing a **REVISION/EVALUATION**.
+- Respect existing slides but apply the requested changes or additions.
+- Ensure the narrative flow remains consistent.
+
 **DESIGN REQUIREMENTS:**
 1. **Design System**: Suggest a professional HEX palette (BG, Text, Accent, Muted) based on topic mood.
 2. **Layout Mix**: High variety. Use `GRID` for cards, `SPLIT` for images, `HERO` for impact, and `BULLET` for detail.

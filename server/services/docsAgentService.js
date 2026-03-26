@@ -65,6 +65,16 @@ const docsAgentService = {
                     fileName: f.originalname
                 }));
 
+            // [NEW] Extract Previous Document State from history for Revisions
+            let previousState = "";
+            if (Array.isArray(history)) {
+                const lastDocMsg = [...history].reverse().find(m => m.document || m.content?.includes('###'));
+                if (lastDocMsg) {
+                    previousState = `\n\n### [CURRENT DOCUMENT STATE - FOR REVISION]:\n${lastDocMsg.text || lastDocMsg.content || ""}`;
+                }
+            }
+            sourceContent += previousState;
+
             const multimediaBrief = multimediaContext.map(mm => ({
                 fileName: mm.fileName,
                 mimeType: mm.mimeType,
@@ -129,13 +139,32 @@ const docsAgentService = {
 
             const document = new Document({
                 name: (finalOutput && finalOutput.fileName) || intentData.topic || 'Generated_Document',
-                type: intentData.output_format === 'website' ? 'website' : (intentData.output_format === 'ppt' ? 'ppt' : 'generic'),
+                type: ['website', 'ppt', 'pptx', 'docx', 'excel', 'xlsx'].includes(intentData.output_format)
+                    ? intentData.output_format
+                    : (['word', 'doc', 'report'].includes(intentData.output_format) ? 'docx' : 'generic'),
                 content: displayContent,
                 rawStructure: { slides: processedSlides, intent: intentData, classification, sections: structure.sections },
                 userId: user._id,
                 status: 'draft'
             });
             await document.save();
+
+            // 5. Persistent Sync: Save the binary buffer to the Workspace for instant download
+            if (finalOutput && finalOutput.buffer) {
+                const ext = intentData.output_format === 'website' ? 'html' : (intentData.output_format === 'ppt' ? 'pptx' : 'docx');
+                await WorkspaceFile.findOneAndUpdate(
+                    { userId: user._id, documentId: document._id },
+                    {
+                        userId: user._id,
+                        documentId: document._id,
+                        fileName: finalOutput.fileName || document.name,
+                        fileType: ext,
+                        fileData: finalOutput.buffer,
+                        size: finalOutput.buffer.length
+                    },
+                    { upsert: true, new: true }
+                );
+            }
 
             return {
                 success: true,

@@ -152,8 +152,6 @@
     color: var(--ta-blue);
 }
 
-}
-
 /* Header Toggle Interface */
 .ta-header-toggle {
     display: flex;
@@ -894,3 +892,82 @@
     transform: scale(1.05);
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
+
+/* ── Calendar Tooltip (Floating Context) ── */
+.ta-day-tooltip {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 220px;
+    background: rgba(13, 13, 20, 0.95);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.ta-day-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: rgba(59, 130, 246, 0.3) transparent transparent transparent;
+}
+
+.ta-day-tooltip__header {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--ta-blue);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.ta-day-tooltip__list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ta-day-tooltip__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ta-tooltip-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.ta-tooltip-status-dot--completed { background: #22c55e; }
+.ta-tooltip-status-dot--running { background: #eab308; }
+.ta-tooltip-status-dot--planned { background: var(--ta-blue); }
+
+.ta-tooltip-time {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--ta-text-muted);
+    min-width: 45px;
+}
+
+.ta-tooltip-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ta-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+

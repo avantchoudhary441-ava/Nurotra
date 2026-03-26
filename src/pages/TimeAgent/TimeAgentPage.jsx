@@ -113,19 +113,19 @@ const TimeAgentPage = () => {
                             ...msg,
                             document: msg.scheduledDocument,
                             scheduledDocument: null,
-                            text: msg.text + "\n\n**UPDATE:** The deadline has arrived. Your document has been securely delivered below!"
+                            text: msg.text + "\n\n**UPDATE:** The deadline has arrived. Your document has been securely delivered below!\n\n**Evaluation Phase:** Please review the document. If you need any changes, just tell me and I'll adjust it right away."
                         };
                     }
                     return msg;
                 });
-                
+
                 if (changed) {
                     setLogs(l => [{
                         time: now.toLocaleTimeString([], { hour12: false }),
                         msg: "System: Deadline reached. Scheduled file delivery executed."
                     }, ...l]);
                 }
-                
+
                 return changed ? next : prev;
             });
         }, 1000);
@@ -194,7 +194,7 @@ const TimeAgentPage = () => {
                     const docType = response.document.type || 'document';
                     setLogs(prev => [
                         { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: "Docs Agent Handover: Initializing 14-stage pipeline" },
-                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${docType.toUpperCase()} generation synchronized` },
+                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${(response.document?.type || 'DOC').toUpperCase()} generation synchronized` },
                         ...prev
                     ]);
                 }
@@ -206,7 +206,7 @@ const TimeAgentPage = () => {
                 let existingTaskIndex = -1;
                 let activeTaskId = Date.now();
                 const safeTopic = (intent?.topic || "").toLowerCase();
-                
+
                 if (safeTopic && Array.isArray(tasks)) {
                     existingTaskIndex = tasks.findIndex(t => {
                         const safeName = (t.name || "").toLowerCase();
@@ -245,7 +245,7 @@ const TimeAgentPage = () => {
                         status: i === 0 ? 'completed' : i === 1 ? 'running' : 'pending'
                     }));
 
-                    const newTodos = planning.schedule.map((s, i) => ({
+                    const scheduleTodos = planning.schedule.map((s, i) => ({
                         id: Date.now() + i + 1000,
                         taskId: activeTaskId,
                         text: `${s.timeLabel}: ${s.title}`,
@@ -253,10 +253,22 @@ const TimeAgentPage = () => {
                         priority: (intent.urgency === 'high' || intent.urgency === 'critical') ? 'high' : 'medium'
                     }));
 
+                    // Map specific user prep-tasks if provided by the agent
+                    const agentSuggestedTodos = (response.userTodos || []).map((ut, i) => ({
+                        id: Date.now() + i + 2000,
+                        taskId: activeTaskId,
+                        text: ut.text,
+                        completed: false,
+                        priority: ut.priority || 'medium',
+                        isSuggested: true
+                    }));
+
+                    const newTodos = [...scheduleTodos, ...agentSuggestedTodos];
+
                     if (existingTaskIndex !== -1) {
                         // REFINEMENT LOGIC: Replace old objectives/todos for this topic
                         const oldTaskName = tasks[existingTaskIndex].name;
-                        
+
                         setTasks(prev => {
                             const updated = [...prev];
                             updated[existingTaskIndex] = {
@@ -418,9 +430,13 @@ const TimeAgentPage = () => {
     };
 
     const calendarDays = Array.from({ length: 35 }, (_, i) => {
-        const todayNum = new Date().getDate();
-        const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay();
-        const day = i - (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1) + 1; // Simplified grid offset
+        const now = new Date();
+        const todayNum = now.getDate();
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
+        
+        // Correctly handle Monday-start offset
+        const offset = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+        const day = i - offset + 1;
 
         return {
             day,
@@ -514,6 +530,7 @@ const TimeAgentPage = () => {
                                                         ))}
                                                     </div>
                                                 )}
+
                                                 {d.day === 25 && <div className="ta-day__dot" />}
 
                                                 {/* Hover Tooltip rendered contextually inside the relatively-positioned grid item */}
@@ -750,6 +767,7 @@ const TimeAgentPage = () => {
                                                                     <div className="ta-doc-info">
                                                                         <div className="ta-doc-name">{msg.document.name}</div>
                                                                         <div className="ta-doc-type">{(msg.document.type || "document").toUpperCase()} ready</div>
+                                                                        <div className="ta-doc-type">{(msg.document?.type || 'DOC').toUpperCase()} ready</div>
                                                                     </div>
                                                                     <button
                                                                         className="ta-doc-download"

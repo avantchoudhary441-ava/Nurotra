@@ -297,11 +297,21 @@ const rescueToFormat = (docData, ext) => {
     }
 
     if (ext === '.docx') {
+        // If we have slides (PowerPoint/DocsAgent internal) but no sections, map them.
+        if (rescued.slides && !rescued.sections) {
+            rescued.sections = rescued.slides.map(s => ({
+                heading: s.title || s.heading || "Slide",
+                level: 1,
+                blocks: (s.bullets || s.bullet_points || []).map(b => ({ type: 'paragraph', text: String(b) })),
+                image_url: s.image_query ? `https://loremflickr.com/800/600/${encodeURIComponent(s.image_query.split(' ')[0])}` : null
+            }));
+        }
+
         if (!rescued.sections || !Array.isArray(rescued.sections)) {
             rescued.sections = [{
                 heading: String(rescued.title || docData.name || "Document"),
                 level: 1,
-                content: String(content || "")
+                blocks: [{ type: 'paragraph', text: String(content || "") }]
             }];
         }
     }

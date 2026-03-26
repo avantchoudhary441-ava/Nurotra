@@ -30,17 +30,25 @@ const generateTimeline = async (prompt, intentData, temporalContext) => {
            - "Low Urgency": Sequential, detailed phases.
         
         RULES:
-        - Output a "schedule" array of objects.
-        - Each object MUST have: "timeLabel" (e.g., "Day 1", "2:00 PM"), "title", "description", and "status" (pending).
-        - Each object MUST have a "timestamp" for the calendar (targetDay as a Number, 1-31).
+        1. Output a "schedule" array of objects.
+        2. Each object MUST have: "timeLabel" (e.g., "Day 1", "2:00 PM"), "title", "description", and "status" (pending).
+        3. Each object MUST have a "timestamp" for the calendar (targetDay as a Number, 1-31).
+        4. [NEW: USER EMPOWERMENT]: Include a "user_todos" array in the root object.
+           - Generate 1-4 tasks that the USER should do on their end to succeed.
+           - BE SPECIFIC: If it's a presentation, add "Practice slides". If it's dance, add "Rehearsals". If it's cooking, add "Wash utensils/Pre-heat".
+           - Use natural, helpful language for these tasks.
+           - Each user todo should have { "text": "...", "priority": "high/medium/low" }.
         
         Respond ONLY with a JSON object.
         Example: { 
             "intensity": "high", 
             "totalPhases": 3,
             "schedule": [
-                { "timeLabel": "Next 2 Hours", "title": "Data Ingestion", "description": "Gathering sources...", "status": "pending", "targetDay": 25 },
-                { "timeLabel": "Next 4 Hours", "title": "Drafting", "description": "Core layout...", "status": "pending", "targetDay": 25 }
+                { "timeLabel": "Next 2 Hours", "title": "Data Ingestion", "description": "Gathering sources...", "status": "pending", "targetDay": 25 }
+            ],
+            "user_todos": [
+                { "text": "Review presentation flow", "priority": "high" },
+                { "text": "Practice verbal delivery", "priority": "medium" }
             ]
         }
     `;

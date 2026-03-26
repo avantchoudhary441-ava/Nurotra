@@ -11,16 +11,10 @@ const path = require("path");
 const app = express();
 app.set("trust proxy", 1);
 
-// Middleware
-// Middleware
 app.use(helmet({
-    contentSecurityPolicy: false, // Disable CSP in dev to avoid blocking cross-port requests
+    contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false
 }));
-// app.use(compression()); // Temporarily disabled to rule out connection reset issues
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-app.use(helmet());
 app.use(compression());
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
@@ -58,7 +52,8 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Disposition']
 }));
 
 // Rate Limiting
