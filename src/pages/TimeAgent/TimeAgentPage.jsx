@@ -99,7 +99,36 @@ const TimeAgentPage = () => {
 
     // Effects
     useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        const timer = setInterval(() => {
+            const now = new Date();
+            setCurrentTime(now);
+
+            // Check for scheduled documents that are ready to be delivered
+            setMessages(prev => {
+                let changed = false;
+                const next = prev.map(msg => {
+                    if (msg.scheduledDocument && new Date(msg.scheduledDocument.deliverAt) <= now) {
+                        changed = true;
+                        return {
+                            ...msg,
+                            document: msg.scheduledDocument,
+                            scheduledDocument: null,
+                            text: msg.text + "\n\n**UPDATE:** The deadline has arrived. Your document has been securely delivered below!"
+                        };
+                    }
+                    return msg;
+                });
+                
+                if (changed) {
+                    setLogs(l => [{
+                        time: now.toLocaleTimeString([], { hour12: false }),
+                        msg: "System: Deadline reached. Scheduled file delivery executed."
+                    }, ...l]);
+                }
+                
+                return changed ? next : prev;
+            });
+        }, 1000);
         return () => clearInterval(timer);
     }, []);
 
@@ -146,6 +175,15 @@ const TimeAgentPage = () => {
 
         addLog(`User: "${userMsg}"`);
 
+        // Check for Auth session
+        if (!user || (!user.token && !localStorage.getItem('nurotra_user'))) {
+            const errorMsg = "Your session has expired. Please log in again to use the Time Agent.";
+            const assistantMsg = { id: Date.now(), role: 'assistant', text: errorMsg };
+            setMessages(prev => [...prev, assistantMsg]);
+            addLog(`Error: ${errorMsg}`);
+            return;
+        }
+
         try {
             // 2. Call Plan API with current message history for context
             const response = await timeAgentService.planTask(userMsg, messages);
@@ -153,9 +191,10 @@ const TimeAgentPage = () => {
             if (response.success) {
                 // Add coordination logs if triggered
                 if (response.document) {
+                    const docType = response.document.type || 'document';
                     setLogs(prev => [
                         { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: "Docs Agent Handover: Initializing 14-stage pipeline" },
-                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${response.document.type.toUpperCase()} generation synchronized` },
+                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${docType.toUpperCase()} generation synchronized` },
                         ...prev
                     ]);
                 }
@@ -163,16 +202,97 @@ const TimeAgentPage = () => {
                 const { intent, planning } = response;
                 if (intent) setLastPlanning(intent);
 
+                // Check for existing tasks with similar topics to allow "refinement"
+                let existingTaskIndex = -1;
+                let activeTaskId = Date.now();
+                const safeTopic = (intent?.topic || "").toLowerCase();
+                
+                if (safeTopic && Array.isArray(tasks)) {
+                    existingTaskIndex = tasks.findIndex(t => {
+                        const safeName = (t.name || "").toLowerCase();
+                        return safeName && (safeName.includes(safeTopic) || safeTopic.includes(safeName));
+                    });
+                    if (existingTaskIndex !== -1) {
+                        activeTaskId = tasks[existingTaskIndex].id;
+                    }
+                }
+
                 // 3. Add Assistant Message
                 const assistantMsg = {
                     id: Date.now() + 1,
                     role: 'assistant',
                     text: response.message,
-                    document: response.document
+                    document: response.document,
+                    scheduledDocument: response.scheduledDocument
                 };
 
                 // If planning has a schedule, we also add a task breakdown visual
                 if (planning && planning.schedule) {
+                    const newTasksFromSchedule = planning.schedule.map((s, i) => ({
+                        id: Date.now() + i + 500,
+                        targetDay: s.targetDay,
+                        timeString: s.timeLabel,
+                        title: s.title,
+                        status: i === 0 ? 'completed' : i === 1 ? 'running' : 'pending'
+                    }));
+
+                    const newObjectives = planning.schedule.map((s, i) => ({
+                        id: Date.now() + i + 100,
+                        taskId: activeTaskId,
+                        targetDay: s.targetDay,
+                        timeString: s.timeLabel,
+                        title: s.title,
+                        status: i === 0 ? 'completed' : i === 1 ? 'running' : 'pending'
+                    }));
+
+                    const newTodos = planning.schedule.map((s, i) => ({
+                        id: Date.now() + i + 1000,
+                        taskId: activeTaskId,
+                        text: `${s.timeLabel}: ${s.title}`,
+                        completed: false,
+                        priority: (intent.urgency === 'high' || intent.urgency === 'critical') ? 'high' : 'medium'
+                    }));
+
+                    if (existingTaskIndex !== -1) {
+                        // REFINEMENT LOGIC: Replace old objectives/todos for this topic
+                        const oldTaskName = tasks[existingTaskIndex].name;
+                        
+                        setTasks(prev => {
+                            const updated = [...prev];
+                            updated[existingTaskIndex] = {
+                                ...updated[existingTaskIndex],
+                                name: intent.topic,
+                                status: 'running',
+                                steps: planning.schedule.slice(0, 2).map(s => s.title)
+                            };
+                            return updated;
+                        });
+
+                        setObjectives(prev => [
+                            ...prev.filter(obj => obj.taskId !== activeTaskId),
+                            ...newObjectives
+                        ]);
+
+                        setTodos(prev => [
+                            ...newTodos,
+                            ...prev.filter(t => t.taskId !== activeTaskId)
+                        ]);
+
+                        addLog(`Time Agent: Refined execution path for "${intent.topic}". Deadlines shifted.`);
+                    } else {
+                        // NEW TASK LOGIC
+                        setTasks(prev => [{
+                            id: activeTaskId,
+                            agent: intent.requires_docs ? 'Docs Agent' : 'Time Agent',
+                            name: intent.topic,
+                            status: 'running',
+                            steps: planning.schedule.slice(0, 2).map(s => s.title)
+                        }, ...prev]);
+
+                        setObjectives(prev => [...prev, ...newObjectives]);
+                        setTodos(prev => [...newTodos, ...prev]);
+                    }
+
                     setMessages(prev => [
                         ...prev,
                         assistantMsg,
@@ -180,35 +300,10 @@ const TimeAgentPage = () => {
                             id: Date.now() + 2,
                             role: 'system',
                             type: 'task_breakdown',
-                            text: 'Task Breakdown',
-                            tasks: planning.schedule.map((s, i) => ({
-                                id: Date.now() + i + 500,
-                                targetDay: s.targetDay,
-                                timeString: s.timeLabel,
-                                title: s.title,
-                                status: i === 0 ? 'completed' : i === 1 ? 'running' : 'pending'
-                            }))
+                            text: 'Updated Task Execution Path',
+                            tasks: newTasksFromSchedule
                         }
                     ]);
-
-                    // 4. Update Objectives (Calendar Dots)
-                    const newObjectives = planning.schedule.map((s, i) => ({
-                        id: Date.now() + i + 100,
-                        targetDay: s.targetDay,
-                        timeString: s.timeLabel,
-                        title: s.title,
-                        status: i === 0 ? 'completed' : i === 1 ? 'running' : 'pending'
-                    }));
-                    setObjectives(prev => [...prev, ...newObjectives]);
-
-                    // 5. Update Todos (Sidebar List)
-                    const newTodos = planning.schedule.map((s, i) => ({
-                        id: Date.now() + i + 1000,
-                        text: `${s.timeLabel}: ${s.title}`,
-                        completed: false,
-                        priority: intent.urgency === 'high' || intent.urgency === 'critical' ? 'high' : 'medium'
-                    }));
-                    setTodos(prev => [...newTodos, ...prev]);
                 } else {
                     setMessages(prev => [...prev, assistantMsg]);
                 }
@@ -243,7 +338,7 @@ const TimeAgentPage = () => {
         let now = new Date();
         now.setDate(todayStr); // Sync internal Date to the mock calendar date for consistent rendering
 
-        const contextStr = timeContext.toLowerCase() || "";
+        const contextStr = (timeContext || "").toLowerCase();
 
         let deadline = new Date(now.getTime()); // Copy current mocked time
 
@@ -304,7 +399,7 @@ const TimeAgentPage = () => {
         const text = customText || newTodo;
         if (!text.trim()) return;
 
-        const priority = text.toLowerCase().includes('#urgent') ? 'high' : 'medium';
+        const priority = (text || "").toLowerCase().includes('#urgent') ? 'high' : 'medium';
         const cleanText = text.replace('#urgent', '').trim();
 
         const newTask = {
@@ -383,67 +478,6 @@ const TimeAgentPage = () => {
                             </div>
                         </header>
 
-                        <div className="ta-calendar-grid">
-                            {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
-                                <div key={day} className="ta-day-label">{day}</div>
-                            ))}
-                            {calendarDays.map((d, i) => {
-                                const dayObjectives = objectives.filter(obj => obj.targetDay === d.day);
-                                const isHovered = hoveredDay === d.day;
-
-                                return (
-                                    <motion.div
-                                        key={i}
-                                        whileHover={{ y: -2 }}
-                                        onClick={() => d.day > 0 && setSelectedDay(d.day)}
-                                        onMouseEnter={() => d.day > 0 && setHoveredDay(d.day)}
-                                        onMouseLeave={() => setHoveredDay(null)}
-                                        className={`ta-day ${selectedDay === d.day ? 'ta-day--selected' : ''} ${d.status === 'past' ? 'ta-day--past' : ''}`}
-                                        style={{ position: 'relative' }}
-                                    >
-                                        <span className="ta-day__num">
-                                            {d.day > 0 ? String(d.day).padStart(2, '0') : ''}
-                                        </span>
-
-                                        {d.day > 0 && dayObjectives.length > 0 && (
-                                            <div className="ta-day__dots">
-                                                {dayObjectives.map(obj => (
-                                                    <div key={obj.id} className={`ta-day__mini-dot ${obj.status === 'completed' ? 'ta-day__mini-dot--green' : obj.status === 'running' ? 'ta-day__mini-dot--yellow' : 'ta-day__mini-dot--blue'}`} />
-                                                ))}
-                                            </div>
-                                        )}
-                                        {d.day === 25 && <div className="ta-day__dot" />}
-
-                                        {/* Hover Tooltip rendered contextually inside the relatively-positioned grid item */}
-                                        <AnimatePresence>
-                                            {isHovered && dayObjectives.length > 0 && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                    exit={{ opacity: 0, y: 5, scale: 0.95 }}
-                                                    transition={{ duration: 0.15 }}
-                                                    className="ta-day-tooltip"
-                                                >
-                                                    <div className="ta-day-tooltip__header">
-                                                        <span>March {d.day}</span> Schedule
-                                                    </div>
-                                                    <div className="ta-day-tooltip__list">
-                                                        {dayObjectives.map(obj => (
-                                                            <div key={obj.id} className="ta-day-tooltip__item">
-                                                                <div className={`ta-tooltip-status-dot ta-tooltip-status-dot--${obj.status}`} />
-                                                                <span className="ta-tooltip-time">{obj.timeString || 'Anytime'}</span>
-                                                                <span className="ta-tooltip-title">{obj.title}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-
-                                    </motion.div>
-                                );
-                            })}
-                        </div>
                         <AnimatePresence mode="wait">
                             {leftView === 'calendar' ? (
                                 <motion.div
@@ -458,12 +492,16 @@ const TimeAgentPage = () => {
                                     ))}
                                     {calendarDays.map((d, i) => {
                                         const dayObjectives = objectives.filter(obj => obj.targetDay === d.day);
+                                        const isHovered = hoveredDay === d.day;
                                         return (
                                             <motion.div
                                                 key={i}
                                                 whileHover={{ y: -2 }}
                                                 onClick={() => d.day > 0 && setSelectedDay(d.day)}
+                                                onMouseEnter={() => d.day > 0 && setHoveredDay(d.day)}
+                                                onMouseLeave={() => setHoveredDay(null)}
                                                 className={`ta-day ${selectedDay === d.day ? 'ta-day--selected' : ''} ${d.status === 'past' ? 'ta-day--past' : ''}`}
+                                                style={{ position: 'relative' }}
                                             >
                                                 <span className="ta-day__num">
                                                     {d.day > 0 ? String(d.day).padStart(2, '0') : ''}
@@ -476,7 +514,34 @@ const TimeAgentPage = () => {
                                                         ))}
                                                     </div>
                                                 )}
-                                                {d.day === new Date().getDate() && <div className="ta-day__dot" />}
+                                                {d.day === 25 && <div className="ta-day__dot" />}
+
+                                                {/* Hover Tooltip rendered contextually inside the relatively-positioned grid item */}
+                                                <AnimatePresence>
+                                                    {isHovered && dayObjectives.length > 0 && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                                                            transition={{ duration: 0.15 }}
+                                                            className="ta-day-tooltip"
+                                                            style={{ pointerEvents: 'none', zIndex: 100 }}
+                                                        >
+                                                            <div className="ta-day-tooltip__header">
+                                                                <span>March {d.day}</span> Schedule
+                                                            </div>
+                                                            <div className="ta-day-tooltip__list">
+                                                                {dayObjectives.map(obj => (
+                                                                    <div key={obj.id} className="ta-day-tooltip__item">
+                                                                        <div className={`ta-tooltip-status-dot ta-tooltip-status-dot--${obj.status}`} />
+                                                                        <span className="ta-tooltip-time">{obj.timeString || 'Anytime'}</span>
+                                                                        <span className="ta-tooltip-title">{obj.title}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
                                             </motion.div>
                                         );
                                     })}
@@ -550,7 +615,10 @@ const TimeAgentPage = () => {
                                                                 />
                                                             </div>
                                                             <div className="ta-objective-grid">
-                                                                {objectives.filter(o => o.title.includes(task.name.split(' ').pop())).map(obj => (
+                                                                {objectives.filter(o => {
+                                                                    const namePart = (task.name || "").split(' ').pop() || "";
+                                                                    return namePart && o.title.includes(namePart);
+                                                                }).map(obj => (
                                                                     <div key={obj.id} className="ta-obj-item">
                                                                         <div className={`ta-obj-status ${obj.status === 'completed' ? 'bg-green-500' : obj.status === 'running' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
                                                                         <span className="ta-obj-text">{obj.title}</span>
@@ -608,7 +676,7 @@ const TimeAgentPage = () => {
                                     {isTodoView
                                         ? `${todos.filter(t => !t.completed).length} Pending`
                                         : lastPlanning
-                                            ? `Deadline: ${lastPlanning.deadline} | ${lastPlanning.urgency.toUpperCase()}`
+                                            ? `Deadline: ${lastPlanning.deadline} | ${(lastPlanning.urgency || "optimal").toUpperCase()}`
                                             : 'Neural Status: Optimal'
                                     }
                                 </div>
@@ -681,7 +749,7 @@ const TimeAgentPage = () => {
                                                                     </div>
                                                                     <div className="ta-doc-info">
                                                                         <div className="ta-doc-name">{msg.document.name}</div>
-                                                                        <div className="ta-doc-type">{msg.document.type.toUpperCase()} ready</div>
+                                                                        <div className="ta-doc-type">{(msg.document.type || "document").toUpperCase()} ready</div>
                                                                     </div>
                                                                     <button
                                                                         className="ta-doc-download"
