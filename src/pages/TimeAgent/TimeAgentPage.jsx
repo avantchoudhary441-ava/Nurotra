@@ -155,7 +155,7 @@ const TimeAgentPage = () => {
                 if (response.document) {
                     setLogs(prev => [
                         { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: "Docs Agent Handover: Initializing 14-stage pipeline" },
-                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${response.document.type.toUpperCase()} generation synchronized` },
+                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${(response.document?.type || 'DOC').toUpperCase()} generation synchronized` },
                         ...prev
                     ]);
                 }
@@ -608,7 +608,7 @@ const TimeAgentPage = () => {
                                     {isTodoView
                                         ? `${todos.filter(t => !t.completed).length} Pending`
                                         : lastPlanning
-                                            ? `Deadline: ${lastPlanning.deadline} | ${lastPlanning.urgency.toUpperCase()}`
+                                            ? `Deadline: ${lastPlanning.deadline} | ${(lastPlanning.urgency || 'Normal').toUpperCase()}`
                                             : 'Neural Status: Optimal'
                                     }
                                 </div>
@@ -681,7 +681,7 @@ const TimeAgentPage = () => {
                                                                     </div>
                                                                     <div className="ta-doc-info">
                                                                         <div className="ta-doc-name">{msg.document.name}</div>
-                                                                        <div className="ta-doc-type">{msg.document.type.toUpperCase()} ready</div>
+                                                                        <div className="ta-doc-type">{(msg.document?.type || 'DOC').toUpperCase()} ready</div>
                                                                     </div>
                                                                     <button
                                                                         className="ta-doc-download"
