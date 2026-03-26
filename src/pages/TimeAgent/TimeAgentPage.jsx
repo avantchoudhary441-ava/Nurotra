@@ -32,6 +32,7 @@ const TimeAgentPage = () => {
     const [calendarWidth, setCalendarWidth] = useState(50);
     const [isResizing, setIsResizing] = useState(false);
     const [selectedDay, setSelectedDay] = useState(25);
+    const [hoveredDay, setHoveredDay] = useState(null);
     const [isSyncExpanded, setIsSyncExpanded] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [isAutoMode, setIsAutoMode] = useState(true);
@@ -170,26 +171,109 @@ const TimeAgentPage = () => {
 
             setTimeout(() => {
                 addLog('Time Agent: Perfect. I have enough context. Decomposing task into daily objectives...');
-                generateTasks(pendingTask, taskContext + " | " + userMsg);
+                const newObjs = generateTasks(pendingTask, taskContext + " | " + userMsg);
 
-                setMessages(prev => [...prev, {
-                    id: Date.now(),
-                    role: 'assistant',
-                    text: 'Perfect. I have enough context. I have decomposed the task and updated your calendar.'
-                }]);
+                setMessages(prev => [
+                    ...prev,
+                    {
+                        id: Date.now(),
+                        role: 'assistant',
+                        text: 'Perfect. I have enough context. I have decomposed the task and updated your calendar.'
+                    },
+                    {
+                        id: Date.now() + 1,
+                        role: 'system',
+                        type: 'task_breakdown',
+                        text: 'Task Breakdown', // fallback text
+                        tasks: newObjs
+                    }
+                ]);
                 handleAddTodo(`Execute: ${pendingTask}`);
             }, 1000);
         }
     };
 
     const generateTasks = (taskName, timeContext) => {
-        const today = new Date().getDate();
+        const todayStr = 25; // Still mocking day 25 internally to match the active UI calendar
+        let now = new Date();
+        now.setDate(todayStr); // Sync internal Date to the mock calendar date for consistent rendering
+
+        const contextStr = timeContext.toLowerCase() || "";
+        
+        let deadline = new Date(now.getTime()); // Copy current mocked time
+
+        // 1. Check relative times (e.g. "in 10 min", "in 10 sec")
+        const relMatch = contextStr.match(/in\s+(\d+)\s*(min|minute|sec|second)s?/i);
+        if (relMatch) {
+            const amount = parseInt(relMatch[1], 10);
+            const unit = relMatch[2];
+            if (unit.startsWith('min')) deadline.setMinutes(deadline.getMinutes() + amount);
+            if (unit.startsWith('sec')) deadline.setSeconds(deadline.getSeconds() + amount);
+        } else {
+            // 2. Check absolute times (e.g. "10:30 am", "2pm")
+            const timeMatch = contextStr.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+            if (timeMatch) {
+                let hours = parseInt(timeMatch[1], 10);
+                const isPM = timeMatch[3] === 'pm';
+                if (isPM && hours < 12) hours += 12;
+                if (!isPM && hours === 12) hours = 0;
+                let minutes = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+                deadline.setHours(hours, minutes, 0);
+            } else {
+                deadline.setHours(23, 59, 59); // Default end of day
+            }
+
+            // 3. Check absolute dates (e.g. "27 march")
+            const dateMatch = contextStr.match(/(\d{1,2})(st|nd|rd|th)?/i);
+            if (dateMatch && parseInt(dateMatch[1], 10) > 0) {
+                deadline.setDate(parseInt(dateMatch[1], 10));
+            } else {
+                deadline.setDate(todayStr + 2); // Default fallback: +2 days
+            }
+        }
+
+        // Calculate milestones by interpolating time between 'now' and 'deadline'
+        const totalMs = deadline.getTime() - now.getTime();
+        
+        // If deadline is somehow in the past relative to mock, shift it forward arbitrarily (fallback)
+        const validTotalMs = totalMs > 0 ? totalMs : 60000; 
+
+        const draftTime = new Date(now.getTime() + validTotalMs * 0.33);
+        const reviewTime = new Date(now.getTime() + validTotalMs * 0.66);
+
+        const formatTime = (dateObj) => {
+            return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        };
+
         const newObjectives = [
-            { id: Date.now(), targetDay: today, title: `Initialize: ${taskName}`, status: 'completed' },
-            { id: Date.now() + 1, targetDay: today + 1, title: `Drafting: ${taskName}`, status: 'running' },
-            { id: Date.now() + 2, targetDay: today + 2, title: `Review: ${taskName}`, status: 'pending' }
+            { 
+                id: Date.now(), 
+                targetDay: now.getDate(),
+                timeString: formatTime(now),
+                title: `Collecting resources & context for: ${taskName}`, 
+                status: 'completed' 
+            },
+            { 
+                id: Date.now() + 1, 
+                targetDay: draftTime.getDate(),
+                timeString: formatTime(draftTime),
+                title: `Initiating live execution on: ${taskName}`, 
+                status: 'running' 
+            },
+            { 
+                id: Date.now() + 2, 
+                targetDay: deadline.getDate(),
+                timeString: formatTime(deadline),
+                title: `Tracking metrics & finalizing: ${taskName}`, 
+                status: 'pending' 
+            }
         ];
-        setObjectives(prev => [...prev, ...newObjectives]);
+        
+        setObjectives(prev => {
+            return [...prev, ...newObjectives];
+        });
+        
+        return newObjectives;
     };
 
     const handleAddTodo = (customText = null) => {
@@ -269,6 +353,67 @@ const TimeAgentPage = () => {
                             </div>
                         </header>
 
+                        <div className="ta-calendar-grid">
+                            {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
+                                <div key={day} className="ta-day-label">{day}</div>
+                            ))}
+                            {calendarDays.map((d, i) => {
+                                const dayObjectives = objectives.filter(obj => obj.targetDay === d.day);
+                                const isHovered = hoveredDay === d.day;
+                                
+                                return (
+                                    <motion.div
+                                        key={i}
+                                        whileHover={{ y: -2 }}
+                                        onClick={() => d.day > 0 && setSelectedDay(d.day)}
+                                        onMouseEnter={() => d.day > 0 && setHoveredDay(d.day)}
+                                        onMouseLeave={() => setHoveredDay(null)}
+                                        className={`ta-day ${selectedDay === d.day ? 'ta-day--selected' : ''} ${d.status === 'past' ? 'ta-day--past' : ''}`}
+                                        style={{ position: 'relative' }}
+                                    >
+                                        <span className="ta-day__num">
+                                            {d.day > 0 ? String(d.day).padStart(2, '0') : ''}
+                                        </span>
+
+                                        {d.day > 0 && dayObjectives.length > 0 && (
+                                            <div className="ta-day__dots">
+                                                {dayObjectives.map(obj => (
+                                                    <div key={obj.id} className={`ta-day__mini-dot ${obj.status === 'completed' ? 'ta-day__mini-dot--green' : obj.status === 'running' ? 'ta-day__mini-dot--yellow' : 'ta-day__mini-dot--blue'}`} />
+                                                ))}
+                                            </div>
+                                        )}
+                                        {d.day === 25 && <div className="ta-day__dot" />}
+                                        
+                                        {/* Hover Tooltip rendered contextually inside the relatively-positioned grid item */}
+                                        <AnimatePresence>
+                                            {isHovered && dayObjectives.length > 0 && (
+                                                <motion.div 
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                                                    transition={{ duration: 0.15 }}
+                                                    className="ta-day-tooltip"
+                                                >
+                                                    <div className="ta-day-tooltip__header">
+                                                        <span>March {d.day}</span> Schedule
+                                                    </div>
+                                                    <div className="ta-day-tooltip__list">
+                                                        {dayObjectives.map(obj => (
+                                                            <div key={obj.id} className="ta-day-tooltip__item">
+                                                                <div className={`ta-tooltip-status-dot ta-tooltip-status-dot--${obj.status}`} />
+                                                                <span className="ta-tooltip-time">{obj.timeString || 'Anytime'}</span>
+                                                                <span className="ta-tooltip-title">{obj.title}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                        
+                                    </motion.div>
+                                );
+                            })}
+                        </div>
                         <AnimatePresence mode="wait">
                             {leftView === 'calendar' ? (
                                 <motion.div 
@@ -460,10 +605,39 @@ const TimeAgentPage = () => {
                                         <div key={msg.id} className={`ta-msg-row ta-msg-row--${msg.role}`}>
                                             <div className="ta-msg-wrap">
                                                 <div className={`ta-msg-avatar ta-msg-avatar--${msg.role}`}>
-                                                    {msg.role === 'user' ? <Zap size={14} /> : <Cpu size={14} />}
+                                                    {msg.role === 'user' ? <Zap size={14} /> : msg.role === 'system' ? <Settings size={14} /> : <Cpu size={14} />}
                                                 </div>
                                                 <div className={`ta-msg-bubble ta-msg-bubble--${msg.role}`}>
-                                                    {msg.text}
+                                                    {msg.type === 'task_breakdown' ? (
+                                                        <div className="ta-task-breakdown">
+                                                            <p className="ta-task-breakdown-title">Decomposed Task Execution Path</p>
+                                                            <div className="ta-task-breakdown-list">
+                                                                {msg.tasks.map((task, idx) => (
+                                                                    <motion.div 
+                                                                        key={task.id}
+                                                                        initial={{ opacity: 0, x: -10 }}
+                                                                        animate={{ opacity: 1, x: 0 }}
+                                                                        transition={{ delay: idx * 0.4, duration: 0.3 }}
+                                                                        className="ta-task-step"
+                                                                    >
+                                                                        <div className={`ta-task-step-icon ta-task-step-icon--${task.status}`}>
+                                                                            {task.status === 'completed' ? <CheckCircle2 size={12} /> : 
+                                                                             task.status === 'running' ? <Play size={12} /> : 
+                                                                             <Clock size={12} />}
+                                                                        </div>
+                                                                        <div className="ta-task-step-content">
+                                                                            <span className="ta-task-step-day">
+                                                                                Mar {task.targetDay} <span className="ta-task-step-time">• {task.timeString}</span>
+                                                                            </span>
+                                                                            <span className="ta-task-step-title">{task.title}</span>
+                                                                        </div>
+                                                                    </motion.div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <>{msg.text}</>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
