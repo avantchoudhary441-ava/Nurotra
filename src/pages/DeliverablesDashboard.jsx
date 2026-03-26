@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import FileUploadModal from "../components/FileUploadModal";
-import api, { profileService } from "../services/apiService";
+import api, { profileService, workspaceService } from "../services/apiService";
 import { localizeText } from "../utils/textUtils";
 import "../styles/deliverables.css";
 
@@ -57,7 +57,7 @@ export default function DeliverablesDashboard({ role }) {
     };
 
     const handleFileClick = (doc) => {
-        window.open(doc.fileUrl, "_blank");
+        workspaceService.downloadByUrl(doc.fileUrl, doc.fileName);
     };
 
     return (
