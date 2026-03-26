@@ -26,12 +26,14 @@ const analyzeIntent = async (prompt, sourceContent = "", multimediaContext = [],
         - output_format: ppt, website, report.
         - deadline: Any specific time reference (e.g., "tomorrow", "Friday", "2 hours", "ISO-8601 string"). Default: null.
         - urgency: low, medium, high, critical.
+        - requires_docs: true if the user explicitly asks to create/generate a document, ppt, or report.
+        - agents: Array of agents needed. Possible: ["time", "docs"].
 
         Output STRICT JSON:
         {
           "topic": "...", "audience": "...", "purpose": "...", "tone": "...",
           "content_density": "...", "complexity": "...", "slides": 7, "output_format": "ppt",
-          "deadline": "...", "urgency": "..."
+          "deadline": "...", "urgency": "...", "requires_docs": false, "agents": ["time"]
         }
     `;
 

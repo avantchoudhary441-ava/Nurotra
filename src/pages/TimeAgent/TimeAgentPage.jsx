@@ -12,16 +12,16 @@ import {
     Settings,
     ArrowLeft,
     Maximize2,
-    Plus,
     Play,
     LayoutDashboard,
-    Trello
+    Trello,
+    Download,
+    FileText
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { timeAgentService } from '../../services/apiService';
 import './TimeAgent.css';
-import { useAuth } from "../../context/AuthContext";
 
 const TimeAgentPage = () => {
     const navigate = useNavigate();
@@ -145,19 +145,30 @@ const TimeAgentPage = () => {
         addLog(`User: "${userMsg}"`);
 
         try {
-            // 2. Call Time Agent API
-            const response = await timeAgentService.planTask(userMsg);
+            // 2. Call Plan API
+            const response = await timeAgentService.planTask(command);
 
             if (response.success) {
+                // Add coordination logs if triggered
+                if (response.document) {
+                    setLogs(prev => [
+                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: "Docs Agent Handover: Initializing 14-stage pipeline" },
+                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${response.document.type.toUpperCase()} generation synchronized` },
+                        ...prev
+                    ]);
+                }
+
                 const { intent, planning } = response;
                 setLastPlanning(intent);
 
                 // 3. Add Assistant Message
-                setMessages(prev => [...prev, {
+                const assistantMsg = {
                     id: Date.now() + 1,
                     role: 'assistant',
-                    text: response.message
-                }]);
+                    text: response.message,
+                    document: response.document
+                };
+                setMessages(prev => [...prev, assistantMsg]);
 
                 // 4. Update Objectives (Calendar Dots)
                 if (planning.schedule) {
@@ -486,6 +497,23 @@ const TimeAgentPage = () => {
                                                 </div>
                                                 <div className={`ta-msg-bubble ta-msg-bubble--${msg.role}`}>
                                                     {msg.text}
+                                                    {msg.document && (
+                                                        <div className="ta-document-card">
+                                                            <div className="ta-doc-icon">
+                                                                <FileText size={18} />
+                                                            </div>
+                                                            <div className="ta-doc-info">
+                                                                <div className="ta-doc-name">{msg.document.name}</div>
+                                                                <div className="ta-doc-type">{msg.document.type.toUpperCase()} ready</div>
+                                                            </div>
+                                                            <button
+                                                                className="ta-doc-download"
+                                                                onClick={() => window.open(`/api/workspace/download/${msg.document.id}`, '_blank')}
+                                                            >
+                                                                <Download size={16} />
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
