@@ -217,4 +217,76 @@ export const adminService = {
     }
 };
 
+export const timeAgentService = {
+    planTask: async (prompt, history = []) => {
+        const response = await api.post("/time-agent/plan", { prompt, history });
+        return response.data;
+    }
+};
+
+export const workspaceService = {
+    downloadFile: async (docId, fileName, format) => {
+        try {
+            const url = format
+                ? `/workspace/download/${docId}?format=${format}`
+                : `/workspace/download/${docId}`;
+
+            const response = await api.get(url, {
+                responseType: 'blob'
+            });
+
+            // Extract filename from Content-Disposition
+            let finalName = fileName || 'document';
+            const cdHeader = response.headers['content-disposition'] || response.headers['Content-Disposition'];
+
+            if (cdHeader) {
+                const match = cdHeader.match(/filename="?([^"]+)"?/);
+                if (match && match[1]) {
+                    finalName = match[1];
+                }
+            } else if (format && !finalName.toLowerCase().endsWith('.' + format)) {
+                finalName = finalName.split('.')[0] + '.' + format;
+            }
+
+            const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.setAttribute('download', finalName);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Failed to download file:', error);
+            throw error;
+        }
+    },
+
+    downloadByUrl: async (fullUrl, fileName) => {
+        if (!fullUrl) return;
+
+        // Ensure we only use the path if it's a relative/same-origin URL
+        const path = fullUrl.includes('http')
+            ? fullUrl.replace(window.location.origin, "").replace(/^https?:\/\/[^\/]+/, "")
+            : fullUrl;
+
+        const response = await api.get(path, {
+            responseType: 'blob'
+        });
+
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', fileName || 'download');
+        document.body.appendChild(link);
+        link.click();
+
+        link.parentNode.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        return { success: true };
+    }
+};
+
 export default api;

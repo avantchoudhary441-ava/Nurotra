@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { chatService, aiService } from "../../services/apiService";
+import { chatService, aiService, workspaceService } from "../../services/apiService";
 import "../../styles/chat.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import GrowthPathModal from "../../components/GrowthPathModal";
@@ -404,7 +404,7 @@ export default function ChatPage() {
                                                             alt="sent"
                                                             className="chat-msg-img"
                                                             style={{ maxWidth: '200px', borderRadius: '8px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}
-                                                            onClick={() => window.open(m.attachments[0], '_blank')}
+                                                            onClick={() => workspaceService.downloadByUrl(m.attachments[0], m.attachments[0].split('/').pop())}
                                                         />
                                                     </div>
                                                 ) : m.type === 'file' && m.attachments?.length > 0 ? (
@@ -421,7 +421,7 @@ export default function ChatPage() {
                                                             cursor: 'pointer',
                                                             border: '1px solid rgba(255,255,255,0.1)'
                                                         }}
-                                                        onClick={() => window.open(m.attachments[0], '_blank')}
+                                                        onClick={() => workspaceService.downloadByUrl(m.attachments[0], m.attachments[0].split('/').pop())}
                                                     >
                                                         <div style={{ background: '#3b82f6', padding: '8px', borderRadius: '50%', display: 'flex', minWidth: '36px', justifyContent: 'center' }}>
                                                             <Paperclip size={20} color="white" />

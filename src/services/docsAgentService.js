@@ -1,16 +1,5 @@
-import api from './apiService';
+import api, { workspaceService } from './apiService';
 
-// Helper: trigger a browser file download from a blob response
-const triggerBlobDownload = (blob, fileName) => {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-};
 
 /**
  * Service for Docs Agent Cognitive Logic
@@ -258,59 +247,14 @@ export const docsAgentService = {
     },
     /**
      * Download a file from the cloud workspace by document ID.
-     * Triggers a real browser download.
+     * Triggers a real browser download via centralized workspaceService.
      */
     downloadFile: async (documentId, fileName, format) => {
         try {
-            console.log(`[docsAgentService] downloadFile: ${documentId}, format: ${format}`);
-            const url = format
-                ? `/workspace/download/${documentId}?format=${format}`
-                : `/workspace/download/${documentId}`;
-
-            const response = await api.get(url, {
-                responseType: 'blob'
-            });
-
-            // Extract filename from Content-Disposition (handles case-insensitivity)
-            let finalName = fileName || 'document';
-            const cdHeader = response.headers['content-disposition'] || response.headers['Content-Disposition'];
-
-            if (cdHeader) {
-                const match = cdHeader.match(/filename="?([^"]+)"?/);
-                if (match && match[1]) {
-                    finalName = match[1];
-                }
-            } else if (format && !finalName.toLowerCase().endsWith('.' + format)) {
-                // Heuristic: if header is missing, at least try to append correct extension
-                const extensionMap = { pbi: 'xlsx' };
-                const ext = extensionMap[format] || format;
-                finalName = finalName.split('.')[0] + '.' + ext;
-            }
-
-            console.log(`[docsAgentService] Triggering download with name: ${finalName}`);
-            triggerBlobDownload(response.data, finalName);
-            return { success: true };
+            return await workspaceService.downloadFile(documentId, fileName, format);
         } catch (error) {
             console.error('Failed to download file:', error);
-
-            // Handle Blob error response: convert blob to JSON
-            if (error.response?.data instanceof Blob) {
-                const blob = error.response.data;
-                const reader = new FileReader();
-                const errorData = await new Promise((resolve) => {
-                    reader.onload = () => {
-                        try {
-                            resolve(JSON.parse(reader.result));
-                        } catch (e) {
-                            resolve({ message: "Unknown download error" });
-                        }
-                    };
-                    reader.readAsText(blob);
-                });
-                throw new Error(errorData.message || "Failed to download file");
-            }
-
-            throw new Error(error.response?.data?.message || error.message || "Failed to download file");
+            throw error;
         }
     },
 

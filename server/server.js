@@ -48,7 +48,7 @@ app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
-        
+
         if (finalOrigins.indexOf(origin) !== -1 || finalOrigins.some(o => origin && origin.startsWith(o))) {
             callback(null, true);
         } else {
@@ -88,6 +88,7 @@ app.use("/api/workspace", require("./routes/workspaceRoutes"));
 app.use("/api/deliverables", require("./routes/deliverableRoutes"));
 app.use("/api/health", require("./routes/healthRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/time-agent", require("./routes/timeAgentRoutes"));
 
 // Global Error Handler
 app.use((err, req, res, next) => {

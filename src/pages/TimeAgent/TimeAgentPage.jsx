@@ -12,31 +12,35 @@ import {
     Settings,
     ArrowLeft,
     Maximize2,
-    Plus,
     Play,
     LayoutDashboard,
-    Trello
+    Trello,
+    Download,
+    FileText,
+    Plus
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { timeAgentService, workspaceService } from '../../services/apiService';
 import './TimeAgent.css';
-import { useAuth } from "../../context/AuthContext";
 
 const TimeAgentPage = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const firstName = user?.name ? user.name.split(' ')[0] : 'Akshat';
+    const userName = user?.name ? user.name.split(' ')[0] : 'User';
 
     // UI State
     const [command, setCommand] = useState('');
     const [currentTime, setCurrentTime] = useState(new Date());
     const [calendarWidth, setCalendarWidth] = useState(50);
     const [isResizing, setIsResizing] = useState(false);
-    const [selectedDay, setSelectedDay] = useState(25);
+    const [selectedDay, setSelectedDay] = useState(new Date().getDate());
     const [hoveredDay, setHoveredDay] = useState(null);
     const [isSyncExpanded, setIsSyncExpanded] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [isAutoMode, setIsAutoMode] = useState(true);
     const [isTodoView, setIsTodoView] = useState(false);
+    const [lastPlanning, setLastPlanning] = useState(null);
     const [leftView, setLeftView] = useState('calendar'); // 'calendar' or 'tracker'
     const [trackerSubView, setTrackerSubView] = useState('agents'); // 'agents' or 'users'
 
@@ -59,11 +63,10 @@ const TimeAgentPage = () => {
     ]);
 
     const [logs, setLogs] = useState([
-        { time: '11:52:16', msg: 'System: Heuristic sync complete.' },
-        { time: '11:52:09', msg: 'Time Agent: Analyzing temporal drift...' },
-        { time: '11:52:00', msg: 'Docs Agent: Research phase initiated.' },
-        { time: '11:51:52', msg: 'Comm Agent: Monitoring inbox.' },
-        { time: '11:51:46', msg: 'System: Resources optimized.' }
+        { time: new Date().toLocaleTimeString([], { hour12: false }), msg: `System: Neural Engine initialized for ${userName}.` },
+        { time: new Date(Date.now() - 60000).toLocaleTimeString([], { hour12: false }), msg: 'Time Agent: Calibrating temporal nexus...' },
+        { time: new Date(Date.now() - 120000).toLocaleTimeString([], { hour12: false }), msg: 'Docs Agent: Syncing project manifest.' },
+        { time: new Date(Date.now() - 180000).toLocaleTimeString([], { hour12: false }), msg: 'Comm Agent: Monitoring encrypted channels.' }
     ]);
 
     const [chatStage, setChatStage] = useState(0);
@@ -88,7 +91,7 @@ const TimeAgentPage = () => {
         {
             id: 1,
             role: 'assistant',
-            text: `Welcome back, ${firstName}. Autonomous monitoring is active. I have coordinated with the Docs and Comm agents to streamline your Q3 preparations. How would you like to proceed?`
+            text: `Welcome back, ${userName}. Autonomous monitoring is active. I have coordinated with the Docs and Comm agents to streamline your schedule. How would you like to proceed?`
         }
     ]);
 
@@ -125,11 +128,13 @@ const TimeAgentPage = () => {
     }, [isResizing]);
 
     // Handlers
-    const handleCommand = () => {
+    const handleCommand = async () => {
         if (!command.trim()) return;
 
-        const userMsg = command;
+        const userMsg = command.trim();
         setCommand('');
+
+        // 1. Instantly update UI with user message
         setMessages(prev => [...prev, { id: Date.now(), role: 'user', text: userMsg }]);
 
         const addLog = (msgText) => {
@@ -139,67 +144,107 @@ const TimeAgentPage = () => {
             }, ...prev]);
         };
 
-        if (chatStage === 0) {
-            addLog(`User: "${userMsg}"`);
-            setPendingTask(userMsg);
-            setTaskContext(userMsg);
-            setChatStage(1);
+        addLog(`User: "${userMsg}"`);
 
-            setTimeout(() => {
-                const hasDeadline = userMsg.match(/(\d+)(st|nd|rd|th)?/i) || userMsg.toLowerCase().includes('tomorrow') || userMsg.toLowerCase().includes('today');
-                const question = hasDeadline
-                    ? 'Time Agent: I see the deadline. Could you specify any additional constraints or who the target audience is?'
-                    : 'Time Agent: Need details. What is the deadline for this task and who is the audience?';
+        try {
+            // 2. Call Plan API with current message history for context
+            const response = await timeAgentService.planTask(userMsg, messages);
 
-                setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', text: question }]);
-                addLog(question);
-            }, 1000);
-        } else if (chatStage === 1) {
-            addLog(`User: "${userMsg}"`);
-            setTaskContext(prev => prev + " | " + userMsg);
-            setChatStage(2);
+            if (response.success) {
+                // Add coordination logs if triggered
+                if (response.document) {
+                    setLogs(prev => [
+                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: "Docs Agent Handover: Initializing 14-stage pipeline" },
+                        { time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), msg: `Docs Agent: ${response.document.type.toUpperCase()} generation synchronized` },
+                        ...prev
+                    ]);
+                }
 
-            setTimeout(() => {
-                const text = 'Time Agent: Are there any specific themes, tools, or formats I should use?';
-                setMessages(prev => [...prev, { id: Date.now(), role: 'assistant', text }]);
-                addLog(text);
-            }, 1000);
-        } else if (chatStage === 2) {
-            addLog(`User: "${userMsg}"`);
-            setTaskContext(prev => prev + " | " + userMsg);
-            setChatStage(0);
+                const { intent, planning } = response;
+                if (intent) setLastPlanning(intent);
 
-            setTimeout(() => {
-                addLog('Time Agent: Perfect. I have enough context. Decomposing task into daily objectives...');
-                const newObjs = generateTasks(pendingTask, taskContext + " | " + userMsg);
+                // 3. Add Assistant Message
+                const assistantMsg = {
+                    id: Date.now() + 1,
+                    role: 'assistant',
+                    text: response.message,
+                    document: response.document
+                };
 
-                setMessages(prev => [
-                    ...prev,
-                    {
-                        id: Date.now(),
-                        role: 'assistant',
-                        text: 'Perfect. I have enough context. I have decomposed the task and updated your calendar.'
-                    },
-                    {
-                        id: Date.now() + 1,
-                        role: 'system',
-                        type: 'task_breakdown',
-                        text: 'Task Breakdown', // fallback text
-                        tasks: newObjs
-                    }
-                ]);
-                handleAddTodo(`Execute: ${pendingTask}`);
-            }, 1000);
+                // If planning has a schedule, we also add a task breakdown visual
+                if (planning && planning.schedule) {
+                    setMessages(prev => [
+                        ...prev,
+                        assistantMsg,
+                        {
+                            id: Date.now() + 2,
+                            role: 'system',
+                            type: 'task_breakdown',
+                            text: 'Task Breakdown',
+                            tasks: planning.schedule.map((s, i) => ({
+                                id: Date.now() + i + 500,
+                                targetDay: s.targetDay,
+                                timeString: s.timeLabel,
+                                title: s.title,
+                                status: i === 0 ? 'completed' : i === 1 ? 'running' : 'pending'
+                            }))
+                        }
+                    ]);
+
+                    // 4. Update Objectives (Calendar Dots)
+                    const newObjectives = planning.schedule.map((s, i) => ({
+                        id: Date.now() + i + 100,
+                        targetDay: s.targetDay,
+                        timeString: s.timeLabel,
+                        title: s.title,
+                        status: i === 0 ? 'completed' : i === 1 ? 'running' : 'pending'
+                    }));
+                    setObjectives(prev => [...prev, ...newObjectives]);
+
+                    // 5. Update Todos (Sidebar List)
+                    const newTodos = planning.schedule.map((s, i) => ({
+                        id: Date.now() + i + 1000,
+                        text: `${s.timeLabel}: ${s.title}`,
+                        completed: false,
+                        priority: intent.urgency === 'high' || intent.urgency === 'critical' ? 'high' : 'medium'
+                    }));
+                    setTodos(prev => [...newTodos, ...prev]);
+                } else {
+                    setMessages(prev => [...prev, assistantMsg]);
+                }
+
+                if (planning) {
+                    addLog(`Time Agent: Scaling intensity to ${planning.intensity || 'optimal'} level.`);
+                }
+            }
+        } catch (err) {
+            console.error("Planning failed:", err);
+
+            let errorMsg = "I encountered an error while planning your schedule. Please try again with a more specific deadline.";
+
+            if (err.response?.status === 401) {
+                errorMsg = "Your session has expired. Please refresh the page and log in again to continue.";
+                addLog("Security Alert: Session expired. Authorization required.");
+            } else {
+                addLog("System Error: Temporal planning engine encountered an exception.");
+            }
+
+            setMessages(prev => [...prev, {
+                id: Date.now() + 1,
+                role: 'assistant',
+                text: errorMsg
+            }]);
         }
     };
 
+    // Keep generateTasks as a fallback or for other UI parts if needed
     const generateTasks = (taskName, timeContext) => {
         const todayStr = 25; // Still mocking day 25 internally to match the active UI calendar
         let now = new Date();
         now.setDate(todayStr); // Sync internal Date to the mock calendar date for consistent rendering
 
         const contextStr = timeContext.toLowerCase() || "";
-        
+
         let deadline = new Date(now.getTime()); // Copy current mocked time
 
         // 1. Check relative times (e.g. "in 10 min", "in 10 sec")
@@ -234,9 +279,9 @@ const TimeAgentPage = () => {
 
         // Calculate milestones by interpolating time between 'now' and 'deadline'
         const totalMs = deadline.getTime() - now.getTime();
-        
+
         // If deadline is somehow in the past relative to mock, shift it forward arbitrarily (fallback)
-        const validTotalMs = totalMs > 0 ? totalMs : 60000; 
+        const validTotalMs = totalMs > 0 ? totalMs : 60000;
 
         const draftTime = new Date(now.getTime() + validTotalMs * 0.33);
         const reviewTime = new Date(now.getTime() + validTotalMs * 0.66);
@@ -246,33 +291,12 @@ const TimeAgentPage = () => {
         };
 
         const newObjectives = [
-            { 
-                id: Date.now(), 
-                targetDay: now.getDate(),
-                timeString: formatTime(now),
-                title: `Collecting resources & context for: ${taskName}`, 
-                status: 'completed' 
-            },
-            { 
-                id: Date.now() + 1, 
-                targetDay: draftTime.getDate(),
-                timeString: formatTime(draftTime),
-                title: `Initiating live execution on: ${taskName}`, 
-                status: 'running' 
-            },
-            { 
-                id: Date.now() + 2, 
-                targetDay: deadline.getDate(),
-                timeString: formatTime(deadline),
-                title: `Tracking metrics & finalizing: ${taskName}`, 
-                status: 'pending' 
-            }
+            { id: Date.now(), targetDay: now.getDate(), timeString: formatTime(now), title: `Collecting resources for: ${taskName}`, status: 'completed' },
+            { id: Date.now() + 1, targetDay: draftTime.getDate(), timeString: formatTime(draftTime), title: `Initiating execution on: ${taskName}`, status: 'running' },
+            { id: Date.now() + 2, targetDay: deadline.getDate(), timeString: formatTime(deadline), title: `Finalizing: ${taskName}`, status: 'pending' }
         ];
-        
-        setObjectives(prev => {
-            return [...prev, ...newObjectives];
-        });
-        
+
+        setObjectives(prev => [...prev, ...newObjectives]);
         return newObjectives;
     };
 
@@ -299,8 +323,14 @@ const TimeAgentPage = () => {
     };
 
     const calendarDays = Array.from({ length: 35 }, (_, i) => {
-        const day = i - 3; // Mocking March
-        return { day, status: day === 25 ? 'active' : (day < 25 && day > 0) ? 'past' : 'future' };
+        const todayNum = new Date().getDate();
+        const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay();
+        const day = i - (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1) + 1; // Simplified grid offset
+
+        return {
+            day,
+            status: day === todayNum ? 'active' : (day < todayNum && day > 0) ? 'past' : 'future'
+        };
     });
 
     return (
@@ -320,7 +350,7 @@ const TimeAgentPage = () => {
                                     <ArrowLeft size={14} /> Executive Hub
                                 </button>
                                 <div className="ta-header-toggle">
-                                    <button 
+                                    <button
                                         className={`ta-header-btn ${leftView === 'calendar' ? 'ta-header-btn--active' : ''}`}
                                         onClick={() => setLeftView('calendar')}
                                     >
@@ -328,7 +358,7 @@ const TimeAgentPage = () => {
                                         Nurotra <span>Space</span>
                                     </button>
                                     <div className="ta-header-divider" />
-                                    <button 
+                                    <button
                                         className={`ta-header-btn ${leftView === 'tracker' ? 'ta-header-btn--active' : ''}`}
                                         onClick={() => setLeftView('tracker')}
                                     >
@@ -337,7 +367,7 @@ const TimeAgentPage = () => {
                                     </button>
                                 </div>
                                 <p className="ta-cal-subtitle">
-                                    March 2026 <span className="dot" /> <span className="dim">Time Agent Active</span>
+                                    {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })} <span className="dot" /> <span className="dim">Time Agent Active</span>
                                 </p>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
@@ -360,7 +390,7 @@ const TimeAgentPage = () => {
                             {calendarDays.map((d, i) => {
                                 const dayObjectives = objectives.filter(obj => obj.targetDay === d.day);
                                 const isHovered = hoveredDay === d.day;
-                                
+
                                 return (
                                     <motion.div
                                         key={i}
@@ -383,11 +413,11 @@ const TimeAgentPage = () => {
                                             </div>
                                         )}
                                         {d.day === 25 && <div className="ta-day__dot" />}
-                                        
+
                                         {/* Hover Tooltip rendered contextually inside the relatively-positioned grid item */}
                                         <AnimatePresence>
                                             {isHovered && dayObjectives.length > 0 && (
-                                                <motion.div 
+                                                <motion.div
                                                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                                     exit={{ opacity: 0, y: 5, scale: 0.95 }}
@@ -409,14 +439,14 @@ const TimeAgentPage = () => {
                                                 </motion.div>
                                             )}
                                         </AnimatePresence>
-                                        
+
                                     </motion.div>
                                 );
                             })}
                         </div>
                         <AnimatePresence mode="wait">
                             {leftView === 'calendar' ? (
-                                <motion.div 
+                                <motion.div
                                     key="calendar"
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -446,13 +476,13 @@ const TimeAgentPage = () => {
                                                         ))}
                                                     </div>
                                                 )}
-                                                {d.day === 25 && <div className="ta-day__dot" />}
+                                                {d.day === new Date().getDate() && <div className="ta-day__dot" />}
                                             </motion.div>
                                         );
                                     })}
                                 </motion.div>
                             ) : (
-                                <motion.div 
+                                <motion.div
                                     key="tracker"
                                     initial={{ opacity: 0, x: 20 }}
                                     animate={{ opacity: 1, x: 0 }}
@@ -461,13 +491,13 @@ const TimeAgentPage = () => {
                                 >
                                     <div className="flex justify-between items-center">
                                         <div className="ta-subview-selector">
-                                            <button 
+                                            <button
                                                 className={`ta-subview-btn ${trackerSubView === 'agents' ? 'ta-subview-btn--active' : ''}`}
                                                 onClick={() => setTrackerSubView('agents')}
                                             >
                                                 Agent's Tasks
                                             </button>
-                                            <button 
+                                            <button
                                                 className={`ta-subview-btn ${trackerSubView === 'users' ? 'ta-subview-btn--active' : ''}`}
                                                 onClick={() => setTrackerSubView('users')}
                                             >
@@ -513,10 +543,10 @@ const TimeAgentPage = () => {
                                                                 <span className="ta-task-percentage">{progress}%</span>
                                                             </div>
                                                             <div className="ta-progress-track">
-                                                                <motion.div 
+                                                                <motion.div
                                                                     initial={{ width: 0 }}
                                                                     animate={{ width: `${progress}%` }}
-                                                                    className="ta-progress-fill" 
+                                                                    className="ta-progress-fill"
                                                                 />
                                                             </div>
                                                             <div className="ta-objective-grid">
@@ -574,7 +604,13 @@ const TimeAgentPage = () => {
                             <div>
                                 <div className="ta-chat-header__title">{isTodoView ? 'Grounded To-Do' : 'Time Agent AI'}</div>
                                 <div className="ta-chat-header__status">
-                                    <div className="ta-status-dot" /> {isTodoView ? `${todos.filter(t => !t.completed).length} Pending` : 'Neural Status: Optimal'}
+                                    <div className="ta-status-dot" />
+                                    {isTodoView
+                                        ? `${todos.filter(t => !t.completed).length} Pending`
+                                        : lastPlanning
+                                            ? `Deadline: ${lastPlanning.deadline} | ${lastPlanning.urgency.toUpperCase()}`
+                                            : 'Neural Status: Optimal'
+                                    }
                                 </div>
                             </div>
                         </div>
@@ -613,7 +649,7 @@ const TimeAgentPage = () => {
                                                             <p className="ta-task-breakdown-title">Decomposed Task Execution Path</p>
                                                             <div className="ta-task-breakdown-list">
                                                                 {msg.tasks.map((task, idx) => (
-                                                                    <motion.div 
+                                                                    <motion.div
                                                                         key={task.id}
                                                                         initial={{ opacity: 0, x: -10 }}
                                                                         animate={{ opacity: 1, x: 0 }}
@@ -621,9 +657,9 @@ const TimeAgentPage = () => {
                                                                         className="ta-task-step"
                                                                     >
                                                                         <div className={`ta-task-step-icon ta-task-step-icon--${task.status}`}>
-                                                                            {task.status === 'completed' ? <CheckCircle2 size={12} /> : 
-                                                                             task.status === 'running' ? <Play size={12} /> : 
-                                                                             <Clock size={12} />}
+                                                                            {task.status === 'completed' ? <CheckCircle2 size={12} /> :
+                                                                                task.status === 'running' ? <Play size={12} /> :
+                                                                                    <Clock size={12} />}
                                                                         </div>
                                                                         <div className="ta-task-step-content">
                                                                             <span className="ta-task-step-day">
@@ -636,14 +672,33 @@ const TimeAgentPage = () => {
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <>{msg.text}</>
+                                                        <>
+                                                            {msg.text}
+                                                            {msg.document && (
+                                                                <div className="ta-document-card">
+                                                                    <div className="ta-doc-icon">
+                                                                        <FileText size={18} />
+                                                                    </div>
+                                                                    <div className="ta-doc-info">
+                                                                        <div className="ta-doc-name">{msg.document.name}</div>
+                                                                        <div className="ta-doc-type">{msg.document.type.toUpperCase()} ready</div>
+                                                                    </div>
+                                                                    <button
+                                                                        className="ta-doc-download"
+                                                                        onClick={() => workspaceService.downloadFile(msg.document.id, msg.document.name)}
+                                                                    >
+                                                                        <Download size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
-                                            </div>
-                                        </div>
+                                            </div >
+                                        </div >
                                     ))}
                                     <div ref={chatEndRef} />
-                                </motion.div>
+                                </motion.div >
                             ) : (
                                 <motion.div
                                     key="todos"
@@ -693,8 +748,8 @@ const TimeAgentPage = () => {
                                     <div ref={chatEndRef} />
                                 </motion.div>
                             )}
-                        </AnimatePresence>
-                    </div>
+                        </AnimatePresence >
+                    </div >
 
                     <div className="ta-command-bar">
                         <div className="ta-command-inner">
@@ -729,10 +784,10 @@ const TimeAgentPage = () => {
                             <div className="ta-brand">Nurotra Neural Engine v4.0</div>
                         </div>
                     </div>
-                </div>
+                </div >
 
                 {/* MONITOR */}
-                <div
+                < div
                     className={`ta-monitor ${isSyncExpanded ? 'ta-monitor--expanded' : 'ta-monitor--collapsed'}`}
                     onMouseEnter={() => setIsSyncExpanded(true)}
                     onMouseLeave={() => setIsSyncExpanded(false)}
@@ -758,9 +813,9 @@ const TimeAgentPage = () => {
                             </div>
                         </div>
                     )}
-                </div>
-            </main>
-        </div>
+                </div >
+            </main >
+        </div >
     );
 };
 
