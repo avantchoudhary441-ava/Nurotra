@@ -16,27 +16,75 @@ const planTask = async (req, res) => {
     }
 
     try {
-        console.log(`[TimeAgent] Analyzing temporal goal: "${prompt}" with ${history.length} messages in history`);
-
         // 1. Get current ground truth time
         const temporalContext = getTemporalContext();
+
+        // 1.5 Hardcoded Vagueness Check (Pre-Agent)
+        // Only trigger on first turn (history length 1 is just the welcome message)
+        const lowerPrompt = prompt.toLowerCase().trim();
+        const words = lowerPrompt.split(/\s+/);
+        const isVaguePattern = ['report', 'ppt', 'presentation', 'doc', 'document'].some(p => lowerPrompt.includes(p)) && words.length <= 2;
+        
+        if (history.length <= 1 && (isVaguePattern || words.length < 2)) {
+             const type = lowerPrompt.includes('ppt') || lowerPrompt.includes('presentation') ? 'presentation' : 'report';
+             return res.json({
+                 success: true,
+                 intent: { is_vague: true, clarification_prompt: `What should the ${type} be about?` },
+                 planning: null,
+                 message: `What should the ${type} be about? I need a topic to get started.`
+             });
+        }
 
         // 2. Extract Intent (Pass history for multi-turn context)
         const intent = await intentAnalyzer.analyzeIntent(prompt, history, [], temporalContext);
         console.log(`[TimeAgent] Deadline: ${intent.deadline} | Docs Req: ${intent.requires_docs}`);
 
-        // 3. Coordination Logic (Can start even if schedule is vague)
+        // 4. Conversational Check: Handle vague schedules
+        if (intent.is_vague || !intent.deadline) {
+            return res.json({
+                success: true,
+                intent,
+                planning: null,
+                document: null, // NO document during qualification
+                message: intent.clarification_prompt || "I need a specific deadline (e.g., 'by 5pm') to generate a detailed schedule for you. When do you need this completed?",
+                coordination: {
+                    agents: intent.agents || ["time"],
+                    status: "waiting_for_input"
+                }
+            });
+        }
+
+        // 4.1 Orchestration: Generate document only after qualification is complete
         let docResult = null;
         if (intent.requires_docs || (intent.agents && intent.agents.includes("docs"))) {
-            console.log(`[TimeAgent] Coordination Triggered: Starting Docs Agent in background...`);
+            console.log(`[TimeAgent] Coordination Triggered: Starting Docs Agent for topic: ${intent.topic}`);
             try {
-                // We generate the doc immediately to buy the user time
-                docResult = await docsAgentService.generateFullDocument(req.user, { prompt });
+                // Synthesize the prompt to ensure Python microservices receive the full topic context
+                // even if the user's current prompt is just a deadline update (e.g., "in 10 sec").
+                const synthesizedPrompt = intent.topic 
+                    ? `Create a ${intent.output_format || 'presentation'} about ${intent.topic}. User's latest instruction: ${prompt}`
+                    : prompt;
+                
+                docResult = await docsAgentService.generateFullDocument(req.user, { 
+                    prompt: synthesizedPrompt,
+                    history: history
+                });
             } catch (docErr) {
                 console.warn("[TimeAgent] Docs coordination failed:", docErr.message);
             }
         }
 
+        // 4.5 Fast Track Execution: Skip Planning if deadline is ultra-short (< 2 mins)
+        let isFastTrack = false;
+        if (intent.deadline) {
+            const timeDiff = new Date(intent.deadline).getTime() - Date.now();
+            if (timeDiff <= 120000) { // 2 minutes or less
+                isFastTrack = true;
+            }
+        }
+
+        if (isFastTrack) {
+            console.log(`[TimeAgent] FAST TRACK Triggered: Skipping temporal planning for instant execution.`);
         // 4. Conversational Check: Handle vague schedules
         if (intent.is_vague || !intent.deadline) {
             // Use AI-generated clarification or a smart fallback
@@ -53,13 +101,23 @@ const planTask = async (req, res) => {
             return res.json({
                 success: true,
                 intent,
-                planning: null,
+                planning: {
+                    intensity: 'critical',
+                    totalPhases: 1,
+                    schedule: [
+                        { timeLabel: "Now", title: "Instant Generation", description: "Doc Agent has prioritized your request.", status: "completed", targetDay: new Date().getDate() }
+                    ]
+                },
                 document: docResult ? {
                     id: docResult.document._id,
                     name: docResult.document.name,
                     type: docResult.type,
                     status: 'ready'
                 } : null,
+                scheduledDocument: null,
+                message: docResult 
+                    ? `Priority hand-off complete. I have skipped the planning phase to deliver your ${docResult.type} instantly. It is ready for download below.`
+                    : `I have prioritized your request for instant execution.`
                 message,
                 coordination: {
                     agents: intent.agents || ["time"],
@@ -77,18 +135,19 @@ const planTask = async (req, res) => {
             success: true,
             intent,
             planning,
-            document: docResult ? {
+            document: null, // Hidden for long tasks until deadline
+            scheduledDocument: docResult ? {
                 id: docResult.document._id,
                 name: docResult.document.name,
                 type: docResult.type,
-                status: 'ready'
+                deliverAt: intent.deadline
             } : null,
             coordination: {
                 agents: intent.agents || ["time"],
-                status: docResult ? "Document synchronized with timeline" : "Standalone temporal plan"
+                status: docResult ? "Document ready, waiting for temporal deadline" : "Standalone temporal plan"
             },
             message: docResult
-                ? `I have planned your execution strategy and initialized the **Docs Agent** to generate your ${docResult.type}. It is ready for download.`
+                ? `I have planned your execution strategy based on the ${intent.deadline || 'requested'} deadline. Your ${docResult.type} will be securely delivered here the moment the deadline arrives.`
                 : `Time Agent has planned your execution strategy based on the ${intent.deadline || 'requested'} deadline.`
         });
 
