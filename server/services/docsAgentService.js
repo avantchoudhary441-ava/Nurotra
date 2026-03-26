@@ -65,6 +65,16 @@ const docsAgentService = {
                     fileName: f.originalname
                 }));
 
+            // [NEW] Extract Previous Document State from history for Revisions
+            let previousState = "";
+            if (Array.isArray(history)) {
+                const lastDocMsg = [...history].reverse().find(m => m.document || m.content?.includes('###'));
+                if (lastDocMsg) {
+                    previousState = `\n\n### [CURRENT DOCUMENT STATE - FOR REVISION]:\n${lastDocMsg.text || lastDocMsg.content || ""}`;
+                }
+            }
+            sourceContent += previousState;
+
             const multimediaBrief = multimediaContext.map(mm => ({
                 fileName: mm.fileName,
                 mimeType: mm.mimeType,

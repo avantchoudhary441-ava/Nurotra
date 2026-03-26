@@ -18,7 +18,7 @@ const getTemporalContext = () => {
     };
 
     const humanReadable = now.toLocaleString('en-US', options);
-    const isoDate = now.toISOString().split('T')[0];
+    const localIsoDate = now.toLocaleDateString('en-CA'); // 'en-CA' gives YYYY-MM-DD format
     const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
 
     // Calculate relative dates for better grounding
@@ -30,9 +30,9 @@ const getTemporalContext = () => {
     return `
 [TEMPORAL_CONTEXT]
 Current Time: ${humanReadable}
-Today's Date: ${isoDate} (${dayOfWeek})
-Yesterday was: ${yesterday.toISOString().split('T')[0]}
-Tomorrow is: ${tomorrow.toISOString().split('T')[0]}
+Today's Date: ${localIsoDate} (${dayOfWeek})
+Yesterday was: ${yesterday.toLocaleDateString('en-CA')}
+Tomorrow is: ${tomorrow.toLocaleDateString('en-CA')}
 Month: ${now.toLocaleString('en-US', { month: 'long' })}
 Year: ${now.getFullYear()}
     `.trim();

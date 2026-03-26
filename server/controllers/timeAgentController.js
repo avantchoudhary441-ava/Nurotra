@@ -76,9 +76,19 @@ const planTask = async (req, res) => {
 
         // 4.5 Fast Track Execution: Skip Planning if deadline is ultra-short (< 2 mins)
         let isFastTrack = false;
+        const deadlineStr = String(intent.deadline || "").toLowerCase();
+        
+        // Match natural language short deadlines which LLM might return literally
+        const isShortLiteral = /\b(10|20|30|40|50|60)\s*(sec|s)\b/.test(deadlineStr) || 
+                               /\b(1|2)\s*(min|m)\b/.test(deadlineStr);
+
         if (intent.deadline) {
-            const timeDiff = new Date(intent.deadline).getTime() - Date.now();
-            if (timeDiff <= 120000) { // 2 minutes or less
+            const dateVal = new Date(intent.deadline);
+            const timeDiff = dateVal.getTime() - Date.now();
+            
+            if (!isNaN(timeDiff) && timeDiff <= 120000) { // 2 minutes or less
+                isFastTrack = true;
+            } else if (isShortLiteral) {
                 isFastTrack = true;
             }
         }
@@ -103,6 +113,7 @@ const planTask = async (req, res) => {
                 } : null,
                 scheduledDocument: null,
                 message: docResult
+                    ? `Priority hand-off complete. I have skipped the planning phase to deliver your ${docResult.type} instantly. It is ready for download below. \n\n**Evaluation Phase:** Please review the document and let me know if you'd like any adjustments! I can iterate on it right away.`
                     ? `Priority hand-off complete. I have skipped the planning phase to deliver your ${docResult.type} instantly. It is ready for download below.`
                     : `I have prioritized your request for instant execution.`,
                 coordination: {
@@ -133,8 +144,9 @@ const planTask = async (req, res) => {
                 status: docResult ? "Document ready, waiting for temporal deadline" : "Standalone temporal plan"
             },
             message: docResult
-                ? `I have planned your execution strategy based on the ${intent.deadline || 'requested'} deadline. Your ${docResult.type} will be securely delivered here the moment the deadline arrives.`
-                : `Time Agent has planned your execution strategy based on the ${intent.deadline || 'requested'} deadline.`
+                ? `I have planned your execution strategy based on the ${intent.deadline || 'requested'} deadline. Your ${docResult.type} will be securely delivered here the moment the deadline arrives. \n\nOnce delivered, I'll be waiting for your **evaluation** to make any necessary changes.`
+                : `Time Agent has planned your execution strategy based on the ${intent.deadline || 'requested'} deadline.`,
+            userTodos: planning.user_todos || []
         });
 
     } catch (error) {

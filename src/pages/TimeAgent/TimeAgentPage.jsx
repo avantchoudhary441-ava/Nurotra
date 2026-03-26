@@ -113,7 +113,7 @@ const TimeAgentPage = () => {
                             ...msg,
                             document: msg.scheduledDocument,
                             scheduledDocument: null,
-                            text: msg.text + "\n\n**UPDATE:** The deadline has arrived. Your document has been securely delivered below!"
+                            text: msg.text + "\n\n**UPDATE:** The deadline has arrived. Your document has been securely delivered below!\n\n**Evaluation Phase:** Please review the document. If you need any changes, just tell me and I'll adjust it right away."
                         };
                     }
                     return msg;
@@ -245,13 +245,25 @@ const TimeAgentPage = () => {
                         status: i === 0 ? 'completed' : i === 1 ? 'running' : 'pending'
                     }));
 
-                    const newTodos = planning.schedule.map((s, i) => ({
+                    const scheduleTodos = planning.schedule.map((s, i) => ({
                         id: Date.now() + i + 1000,
                         taskId: activeTaskId,
                         text: `${s.timeLabel}: ${s.title}`,
                         completed: false,
                         priority: (intent.urgency === 'high' || intent.urgency === 'critical') ? 'high' : 'medium'
                     }));
+
+                    // Map specific user prep-tasks if provided by the agent
+                    const agentSuggestedTodos = (response.userTodos || []).map((ut, i) => ({
+                        id: Date.now() + i + 2000,
+                        taskId: activeTaskId,
+                        text: ut.text,
+                        completed: false,
+                        priority: ut.priority || 'medium',
+                        isSuggested: true
+                    }));
+
+                    const newTodos = [...scheduleTodos, ...agentSuggestedTodos];
 
                     if (existingTaskIndex !== -1) {
                         // REFINEMENT LOGIC: Replace old objectives/todos for this topic
@@ -418,9 +430,13 @@ const TimeAgentPage = () => {
     };
 
     const calendarDays = Array.from({ length: 35 }, (_, i) => {
-        const todayNum = new Date().getDate();
-        const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getDay();
-        const day = i - (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1) + 1; // Simplified grid offset
+        const now = new Date();
+        const todayNum = now.getDate();
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getDay();
+        
+        // Correctly handle Monday-start offset
+        const offset = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
+        const day = i - offset + 1;
 
         return {
             day,
@@ -514,6 +530,7 @@ const TimeAgentPage = () => {
                                                         ))}
                                                     </div>
                                                 )}
+
                                                 {d.day === 25 && <div className="ta-day__dot" />}
 
                                                 {/* Hover Tooltip rendered contextually inside the relatively-positioned grid item */}
