@@ -13,13 +13,18 @@ import {
     ArrowLeft,
     Maximize2,
     Plus,
-    Play
+    Play,
+    LayoutDashboard,
+    Trello
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './TimeAgent.css';
+import { useAuth } from "../../context/AuthContext";
 
 const TimeAgentPage = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const firstName = user?.name ? user.name.split(' ')[0] : 'Akshat';
 
     // UI State
     const [command, setCommand] = useState('');
@@ -32,6 +37,8 @@ const TimeAgentPage = () => {
     const [isListening, setIsListening] = useState(false);
     const [isAutoMode, setIsAutoMode] = useState(true);
     const [isTodoView, setIsTodoView] = useState(false);
+    const [leftView, setLeftView] = useState('calendar'); // 'calendar' or 'tracker'
+    const [trackerSubView, setTrackerSubView] = useState('agents'); // 'agents' or 'users'
 
     // Data State
     const [tasks, setTasks] = useState([
@@ -81,7 +88,7 @@ const TimeAgentPage = () => {
         {
             id: 1,
             role: 'assistant',
-            text: 'Welcome back, Avant. Autonomous monitoring is active. I have coordinated with the Docs and Comm agents to streamline your Q3 preparations. How would you like to proceed?'
+            text: `Welcome back, ${firstName}. Autonomous monitoring is active. I have coordinated with the Docs and Comm agents to streamline your Q3 preparations. How would you like to proceed?`
         }
     ]);
 
@@ -312,10 +319,23 @@ const TimeAgentPage = () => {
                                 <button className="ta-back-btn" onClick={() => navigate('/')}>
                                     <ArrowLeft size={14} /> Executive Hub
                                 </button>
-                                <h2 className="ta-cal-title">
-                                    <CalendarIcon size={32} strokeWidth={2.5} />
-                                    Nurotra <span>Space</span>
-                                </h2>
+                                <div className="ta-header-toggle">
+                                    <button 
+                                        className={`ta-header-btn ${leftView === 'calendar' ? 'ta-header-btn--active' : ''}`}
+                                        onClick={() => setLeftView('calendar')}
+                                    >
+                                        <CalendarIcon size={32} strokeWidth={2.5} />
+                                        Nurotra <span>Space</span>
+                                    </button>
+                                    <div className="ta-header-divider" />
+                                    <button 
+                                        className={`ta-header-btn ${leftView === 'tracker' ? 'ta-header-btn--active' : ''}`}
+                                        onClick={() => setLeftView('tracker')}
+                                    >
+                                        <LayoutDashboard size={32} strokeWidth={2.5} />
+                                        Progress <span>Tracker</span>
+                                    </button>
+                                </div>
                                 <p className="ta-cal-subtitle">
                                     March 2026 <span className="dot" /> <span className="dim">Time Agent Active</span>
                                 </p>
@@ -394,6 +414,145 @@ const TimeAgentPage = () => {
                                 );
                             })}
                         </div>
+                        <AnimatePresence mode="wait">
+                            {leftView === 'calendar' ? (
+                                <motion.div 
+                                    key="calendar"
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 20 }}
+                                    className="ta-calendar-grid"
+                                >
+                                    {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
+                                        <div key={day} className="ta-day-label">{day}</div>
+                                    ))}
+                                    {calendarDays.map((d, i) => {
+                                        const dayObjectives = objectives.filter(obj => obj.targetDay === d.day);
+                                        return (
+                                            <motion.div
+                                                key={i}
+                                                whileHover={{ y: -2 }}
+                                                onClick={() => d.day > 0 && setSelectedDay(d.day)}
+                                                className={`ta-day ${selectedDay === d.day ? 'ta-day--selected' : ''} ${d.status === 'past' ? 'ta-day--past' : ''}`}
+                                            >
+                                                <span className="ta-day__num">
+                                                    {d.day > 0 ? String(d.day).padStart(2, '0') : ''}
+                                                </span>
+
+                                                {d.day > 0 && dayObjectives.length > 0 && (
+                                                    <div className="ta-day__dots">
+                                                        {dayObjectives.map(obj => (
+                                                            <div key={obj.id} className={`ta-day__mini-dot ${obj.status === 'completed' ? 'ta-day__mini-dot--green' : obj.status === 'running' ? 'ta-day__mini-dot--yellow' : 'ta-day__mini-dot--blue'}`} />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {d.day === 25 && <div className="ta-day__dot" />}
+                                            </motion.div>
+                                        );
+                                    })}
+                                </motion.div>
+                            ) : (
+                                <motion.div 
+                                    key="tracker"
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -20 }}
+                                    className="ta-tracker-container"
+                                >
+                                    <div className="flex justify-between items-center">
+                                        <div className="ta-subview-selector">
+                                            <button 
+                                                className={`ta-subview-btn ${trackerSubView === 'agents' ? 'ta-subview-btn--active' : ''}`}
+                                                onClick={() => setTrackerSubView('agents')}
+                                            >
+                                                Agent's Tasks
+                                            </button>
+                                            <button 
+                                                className={`ta-subview-btn ${trackerSubView === 'users' ? 'ta-subview-btn--active' : ''}`}
+                                                onClick={() => setTrackerSubView('users')}
+                                            >
+                                                User's Tasks
+                                            </button>
+                                        </div>
+                                        <div className="ta-stat-label" style={{ fontSize: '9px' }}>
+                                            {trackerSubView === 'agents' ? `${tasks.length} Active System Threads` : `${todos.length} Personal Items`}
+                                        </div>
+                                    </div>
+
+                                    {trackerSubView === 'agents' ? (
+                                        <>
+                                            <div className="ta-tracker-stats">
+                                                <div className="ta-stat-card">
+                                                    <span className="ta-stat-val">
+                                                        {Math.round((objectives.filter(o => o.status === 'completed').length / (objectives.length || 1)) * 100)}%
+                                                    </span>
+                                                    <span className="ta-stat-label">Agent Efficiency</span>
+                                                </div>
+                                                <div className="ta-stat-card">
+                                                    <span className="ta-stat-val">{tasks.length}</span>
+                                                    <span className="ta-stat-label">Active Agents</span>
+                                                </div>
+                                                <div className="ta-stat-card">
+                                                    <span className="ta-stat-val">
+                                                        {objectives.filter(o => o.status === 'completed').length}
+                                                    </span>
+                                                    <span className="ta-stat-label">Objectives Met</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="ta-task-list">
+                                                {tasks.map(task => {
+                                                    const progress = task.status === 'running' ? 65 : task.status === 'completed' ? 100 : 0;
+                                                    return (
+                                                        <div key={task.id} className="ta-task-card">
+                                                            <div className="ta-task-header">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Trello size={14} className="text-blue-400" />
+                                                                    <span className="ta-task-name">{task.name}</span>
+                                                                </div>
+                                                                <span className="ta-task-percentage">{progress}%</span>
+                                                            </div>
+                                                            <div className="ta-progress-track">
+                                                                <motion.div 
+                                                                    initial={{ width: 0 }}
+                                                                    animate={{ width: `${progress}%` }}
+                                                                    className="ta-progress-fill" 
+                                                                />
+                                                            </div>
+                                                            <div className="ta-objective-grid">
+                                                                {objectives.filter(o => o.title.includes(task.name.split(' ').pop())).map(obj => (
+                                                                    <div key={obj.id} className="ta-obj-item">
+                                                                        <div className={`ta-obj-status ${obj.status === 'completed' ? 'bg-green-500' : obj.status === 'running' ? 'bg-yellow-500' : 'bg-blue-500'}`} />
+                                                                        <span className="ta-obj-text">{obj.title}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="ta-task-list">
+                                            {todos.map(todo => (
+                                                <div key={todo.id} className="ta-task-card" style={{ padding: '16px' }}>
+                                                    <div className="ta-task-header" style={{ marginBottom: '8px' }}>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`ta-obj-status ${todo.completed ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: '10px', height: '10px' }} />
+                                                            <span className="ta-task-name" style={{ opacity: todo.completed ? 0.5 : 1 }}>{todo.text}</span>
+                                                        </div>
+                                                        {todo.priority === 'high' && <div className="todo-urgent-badge">Urgent</div>}
+                                                    </div>
+                                                    <div className="ta-stat-label" style={{ fontSize: '9px', marginLeft: '26px' }}>
+                                                        Target: March 2026
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </div>
 
