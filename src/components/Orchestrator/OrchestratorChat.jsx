@@ -1,109 +1,190 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, ArrowUp, ArrowRight, Loader2, Bot, User } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Plus, Mic, ArrowUp, ArrowRight, Loader2, Bot, User, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import { useAuth } from '../../context/AuthContext';
+import LoginModal from '../LoginModal';
+
+// --- Typewriter Hook/Component ---
+const TypewriterText = ({ text, speed = 20, onComplete, className }) => {
+  const [displayedText, setDisplayedText] = useState("");
+  const [isTyping, setIsTyping] = useState(true);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    if (!text) return;
+
+    let i = 0;
+    setDisplayedText("");
+    setIsTyping(true);
+
+    const timer = setInterval(() => {
+      if (i < text.length - 1) {
+        setDisplayedText(text.substring(0, i + 1));
+        i++;
+      } else {
+        setDisplayedText(text);
+        clearInterval(timer);
+        setIsTyping(false);
+        if (onCompleteRef.current) {
+          onCompleteRef.current();
+        }
+      }
+    }, speed);
+
+    return () => clearInterval(timer);
+  }, [text, speed]);
+
+  return (
+    <span className={className}>
+      {displayedText}
+      {isTyping && <span className="typing-cursor">▋</span>}
+    </span>
+  );
+};
 
 const OrchestratorChat = () => {
+  const { user } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [prompt, setPrompt] = useState("");
+
+  // Chat History State
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef(null);
+
+  // SSE Execution State
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const [activeUserPrompt, setActiveUserPrompt] = useState("");
+  const [executionUpdates, setExecutionUpdates] = useState([]);
+  const [visibleExecutionIndex, setVisibleExecutionIndex] = useState(-1);
+  const [isExecuting, setIsExecuting] = useState(false);
+
+  const scrollRef = useRef(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, executionUpdates, visibleExecutionIndex]);
+
+  const unlockNextExecution = useCallback((idx) => {
+    setVisibleExecutionIndex((prev) => (prev === idx ? prev + 1 : prev));
+  }, []);
 
   const handleIntentClick = (intentType) => {
-    const intentBaseText = `${intentType}: `;
-    setPrompt(intentBaseText);
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    setPrompt(`${intentType}: `);
   };
 
   const handleSend = async () => {
     if (!prompt.trim()) return;
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
 
-    const userMessage = prompt.trim();
+    const payloadPrompt = prompt.trim();
     setPrompt("");
+    setHasInteracted(true);
 
-    // Add user message to UI
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    // Add to static chat history
+    setMessages(prev => [...prev, { role: 'user', content: payloadPrompt }]);
     setIsLoading(true);
 
+    // Reset SSE blocks
+    setExecutionUpdates([]);
+    setVisibleExecutionIndex(-1);
+    setIsExecuting(false);
+    setActiveUserPrompt("");
+
     try {
-      // Call the Intent Routing Guard Layer
-      // We assume the backend is running on the same domain or proxied. 
-      // Using full URL for local dev safety, adjust if proxy is set.
-      const response = await axios.post('http://localhost:5000/api/orchestrator/intent', {
-        prompt: userMessage
+      // 1. Pass through Conversational Guard
+      const intentRes = await axios.post('http://localhost:5000/api/orchestrator/intent', {
+        prompt: payloadPrompt
       });
+      const guardDecision = intentRes.data;
 
-      const { classification, response_strategy, response: agentResponse, confidence } = response.data;
-
-      console.log(`[Intent Router Log]`, { classification, response_strategy, confidence });
-
-      // Handle the strict Routing Behavior Rules
-      switch (response_strategy) {
-        case 'DIRECT_RESPONSE':
-        case 'REDIRECT_WITH_CAPABILITIES':
-          // The guard handles this directly without involving the orchestrator
-          setMessages(prev => [...prev, {
-            role: 'agent',
-            content: agentResponse,
-            type: classification // SMALL_TALK, BASIC_QA, or OUT_OF_SCOPE
-          }]);
-          break;
-
-        case 'ROUTE_TO_SYSTEM':
-          // This is a TASK_REQUEST. The guard acknowledges passing it to the Orchestrator.
-          // The agentResponse is expected to be empty as per rules, so we generate a loading/handoff message.
-          setMessages(prev => [...prev, {
-            role: 'agent',
-            content: "Task request recognized. Forwarding to the Nurotra execution system...",
-            type: classification,
-            isSystem: true
-          }]);
-
-          // TODO: Actually trigger the main orchestrator agent workflow here
-          // e.g. dispatch(runOrchestrator(userMessage))
-
-          break;
-
-        default:
-          setMessages(prev => [...prev, { role: 'agent', content: "I encountered an error understanding how to route this.", isError: true }]);
+      // 2. Direct Response Routing
+      if (guardDecision.response_strategy === 'DIRECT_RESPONSE' || guardDecision.response_strategy === 'REDIRECT_WITH_CAPABILITIES') {
+        setMessages(prev => [...prev, {
+          role: 'agent',
+          content: guardDecision.response,
+          type: guardDecision.classification
+        }]);
+        setIsLoading(false);
+        return;
       }
 
-    } catch (error) {
-      console.error("Intent Routing Error:", error);
-      setMessages(prev => [...prev, { role: 'agent', content: "System error: Unable to reach the conversational guard.", isError: true }]);
-    } finally {
+      // 3. Task Request Routing (pass to Execution Stream)
+      setMessages(prev => [...prev, {
+        role: 'agent',
+        content: "Processing task handoff to execution system...",
+        type: guardDecision.classification,
+        isSystem: true
+      }]);
+      setIsLoading(false);
+
+      setActiveUserPrompt(payloadPrompt);
+      setIsExecuting(true);
+
+      const response = await fetch('http://localhost:5000/api/orchestrator/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: payloadPrompt, guardDecision })
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              setExecutionUpdates(prev => [...prev, data]);
+              if (data.phase === 'complete' || data.phase === 'error' || data.bypassed) {
+                setIsExecuting(false);
+              }
+            } catch (e) { }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Orchestrator Routing/Streaming Error:", e);
+      setMessages(prev => [...prev, { role: 'agent', content: "System error: Unable to process request.", isError: true }]);
+      setIsExecuting(false);
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="orchestrator-chat-area" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div className={`orchestrator-chat-area ${hasInteracted ? 'interacted' : 'centered'}`} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-      {/* Scrollable Message History Area */}
-      <div className="chat-history-container" style={{ flexGrow: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {messages.length === 0 ? (
-          <div className="greeting-container" style={{ marginTop: 'auto', marginBottom: 'auto', textAlign: 'center' }}>
-            <h1 className="orchestrator-greeting">Hey Avant,</h1>
-            <h2 className="orchestrator-greeting-sub gradient-text-orchestrator">Ready to Lock In!</h2>
+      {/* Scrollable Chat History & Execution Area */}
+      {hasInteracted && (
+        <div className="chat-history-scroll-area" ref={scrollRef} style={{ flexGrow: 1, padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto' }}>
 
-            <ul className="feature-bullets" style={{ marginTop: '40px' }}>
-              <li><ArrowRight size={16} /> Create & Track your To Do List with real time.</li>
-              <li><ArrowRight size={16} /> Create Documents ppts, reports, docs, pdfs.</li>
-              <li><ArrowRight size={16} /> Analyse docs, summarize documents & Export.</li>
-              <li><ArrowRight size={16} /> Manage Your professional workflow.</li>
-            </ul>
-          </div>
-        ) : (
-          messages.map((msg, index) => (
+          {/* Render past chat history */}
+          {messages.map((msg, index) => (
             <div key={index} style={{
-              display: 'flex',
-              gap: '12px',
+              display: 'flex', gap: '12px',
               alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
               maxWidth: '80%'
             }}>
@@ -116,8 +197,7 @@ const OrchestratorChat = () => {
               <div style={{
                 background: msg.role === 'user' ? '#1f2937' : (msg.isSystem ? 'rgba(16, 227, 178, 0.1)' : 'transparent'),
                 color: msg.isSystem ? '#10e3b2' : msg.isError ? '#ef4444' : '#f3f4f6',
-                padding: '16px 20px',
-                borderRadius: '16px',
+                padding: '16px 20px', borderRadius: '16px',
                 border: msg.role === 'agent' && !msg.isSystem ? '1px solid rgba(255,255,255,0.1)' : 'none',
                 lineHeight: '1.6',
                 borderTopRightRadius: msg.role === 'user' ? '4px' : '16px',
@@ -137,66 +217,144 @@ const OrchestratorChat = () => {
                 </div>
               )}
             </div>
-          ))
+          ))}
+
+          {/* Render loading state for intent routing gap */}
+          {isLoading && (
+            <div style={{ display: 'flex', gap: '12px', alignSelf: 'flex-start' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #10e3b2 0%, #00bfff 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Bot size={20} color="white" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '16px' }}>
+                <Loader2 size={18} className="animate-spin text-gray-400" />
+                <span style={{ marginLeft: '10px', fontSize: '14px', color: '#9ca3af' }}>Routing Intent...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Render Active Execution Task System */}
+          {(activeUserPrompt || executionUpdates.length > 0) && (
+            <motion.div
+              style={{
+                alignSelf: 'flex-start',
+                width: '100%',
+                background: 'rgba(0,0,0,0.2)',
+                padding: '24px',
+                borderRadius: '16px',
+                border: '1px solid rgba(16, 227, 178, 0.2)',
+                marginTop: '10px'
+              }}
+              initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="user-prompt-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#9ca3af' }}>
+                <User size={16} /> <span style={{ fontWeight: '500' }}>Active Task Scope</span>
+              </div>
+              <div className="user-prompt-text" style={{ fontSize: '1.1rem', color: '#fff', marginBottom: '24px' }}>
+                <TypewriterText
+                  text={activeUserPrompt}
+                  speed={15}
+                  onComplete={() => setVisibleExecutionIndex(0)}
+                />
+              </div>
+
+              {/* Execution Stream Logs */}
+              <div className="execution-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <AnimatePresence>
+                  {executionUpdates.map((update, idx) => {
+                    if (idx > visibleExecutionIndex) return null;
+
+                    return (
+                      <motion.div
+                        key={idx}
+                        className={`execution-item ${update.complete ? 'complete' : 'active'}`}
+                        style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', color: update.complete ? '#10e3b2' : '#a78bfa' }}
+                        initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3 }}
+                      >
+                        <div style={{ marginTop: '2px' }}>
+                          {update.complete ? <CheckCircle2 size={18} /> : <Loader2 size={18} className="animate-spin" />}
+                        </div>
+                        <TypewriterText
+                          text={update.status}
+                          speed={20}
+                          onComplete={() => unlockNextExecution(idx)}
+                        />
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+
+        </div>
+      )}
+
+      {/* Floating Centered Logic (Only visible before first interaction) */}
+      <AnimatePresence>
+        {!hasInteracted && (
+          <motion.div
+            key="greeting"
+            className="greeting-container"
+            initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -20 }} transition={{ duration: 0.4, ease: "easeOut" }}
+            style={{ margin: 'auto', textAlign: 'center' }}
+          >
+            <h1 className="orchestrator-greeting">Hey {user ? user.name.split(' ')[0] : 'User'},</h1>
+            <h2 className="orchestrator-greeting-sub gradient-text-orchestrator">Ready to Lock In!</h2>
+          </motion.div>
         )}
+      </AnimatePresence>
 
-        {isLoading && (
-          <div style={{ display: 'flex', gap: '12px', alignSelf: 'flex-start' }}>
-            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #10e3b2 0%, #00bfff 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Bot size={20} color="white" />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '16px' }}>
-              <Loader2 size={24} className="animate-spin text-gray-400" />
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+      <motion.div layout className="master-input-wrapper" style={{ marginTop: 'auto' }}>
+        <div className="master-input-container">
+          <div className="master-input-inner">
+            <textarea
+              className="master-textarea"
+              placeholder="What are we Executing today with Nurotra..."
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              disabled={isLoading || isExecuting}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
 
-      <div className="master-input-container" style={{ flexShrink: 0, paddingBottom: '20px' }}>
-        <div className="master-input-inner">
-          <textarea
-            className="master-textarea"
-            placeholder="What are we Executing today with Nurotra..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={isLoading}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-          />
+            <div className="master-input-actions">
+              <div className="action-row-left">
+                <button className="icon-btn" title="Attach Resources" disabled={isLoading || isExecuting}><Plus size={20} /></button>
+                <button className="intent-btn" onClick={() => handleIntentClick('Create')} disabled={isLoading || isExecuting}>Create</button>
+                <button className="intent-btn" onClick={() => handleIntentClick('Manage')} disabled={isLoading || isExecuting}>Manage</button>
+                <button className="intent-btn" onClick={() => handleIntentClick('Communicate')} disabled={isLoading || isExecuting}>Communicate</button>
+              </div>
 
-          <div className="master-input-actions">
-            <div className="action-row-left">
-              <button className="icon-btn" title="Attach Resources" disabled={isLoading}>
-                <Plus size={20} />
-              </button>
-              <button className="intent-btn" onClick={() => handleIntentClick('Create')} disabled={isLoading}>
-                Create
-              </button>
-              <button className="intent-btn" onClick={() => handleIntentClick('Manage')} disabled={isLoading}>
-                Manage
-              </button>
-              <button className="intent-btn" onClick={() => handleIntentClick('Communicate')} disabled={isLoading}>
-                Communicate
-              </button>
-            </div>
-
-            <div className="action-row-right">
-              <button className="icon-btn" title="Voice Input" disabled={isLoading}>
-                <Mic size={20} />
-              </button>
-              <button className="send-btn" title="Send" onClick={handleSend} disabled={isLoading || !prompt.trim()}>
-                <ArrowUp size={20} />
-              </button>
+              <div className="action-row-right">
+                <button className="icon-btn" title="Voice Input" disabled={isLoading || isExecuting}><Mic size={20} /></button>
+                <button className="send-btn" title="Send" onClick={handleSend} disabled={isLoading || isExecuting || !prompt.trim()}><ArrowUp size={20} /></button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
+      <AnimatePresence>
+        {!hasInteracted && (
+          <motion.ul
+            key="features"
+            className="feature-bullets"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.3 }}
+            style={{ margin: '0 auto 40px auto' }}
+          >
+            <li><ArrowRight size={16} /> Create & Track your To Do List with real time.</li>
+            <li><ArrowRight size={16} /> Create Documents ppts, reports, docs, pdfs.</li>
+            <li><ArrowRight size={16} /> Analyse docs, summarize documents & Export in form of Ms word, Excel.</li>
+            <li><ArrowRight size={16} /> Manage Your professional workflow.</li>
+          </motion.ul>
+        )}
+      </AnimatePresence>
+
+      <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
     </div>
   );
 };

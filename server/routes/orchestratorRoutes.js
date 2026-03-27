@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const OpenAI = require('openai');
+const orchestratorController = require('../controllers/orchestratorController');
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
+// Guard Layer
 router.post('/intent', async (req, res) => {
     try {
         const { prompt } = req.body;
@@ -46,7 +48,7 @@ Output MUST be a valid JSON object matching this schema perfectly:
 `;
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini", // Using mini for fast routing
+            model: "gpt-4o-mini",
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: prompt }
@@ -63,5 +65,8 @@ Output MUST be a valid JSON object matching this schema perfectly:
         res.status(500).json({ error: "Internal server error during intent classification" });
     }
 });
+
+// Main execution endpoint (Server-Sent Events)
+router.post('/execute', orchestratorController.executeTask);
 
 module.exports = router;
