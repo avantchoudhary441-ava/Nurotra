@@ -1,0 +1,345 @@
+/* Orchestrator CSS */
+.orchestrator-shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background-color: var(--nuro-bg, #0a0a0f); /* Dark color background */
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.orchestrator-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  background-color: #0f0f14;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 1rem;
+  transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.35s;
+}
+
+.orchestrator-sidebar.closed {
+  margin-left: -280px;
+  visibility: hidden;
+}
+
+.orchestrator-sidebar.open {
+  margin-left: 0;
+  visibility: visible;
+}
+
+.orchestrator-sidebar .new-chat-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  padding: 0.75rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-weight: 500;
+  margin-bottom: 1.5rem;
+}
+
+.orchestrator-sidebar .new-chat-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Main Area */
+.orchestrator-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Thin Header */
+.orchestrator-header {
+  height: 60px;
+  background-color: rgba(25, 25, 30, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  padding: 0 1.5rem;
+  backdrop-filter: blur(10px);
+}
+
+.hamburger-btn {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: auto; /* Pushes everything else to the right */
+  transition: background 0.2s;
+}
+
+.hamburger-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.orchestrator-header .operate-agents-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  margin-right: 1.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.orchestrator-header .operate-agents-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Profile Icon */
+.orchestrator-profile {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a855f7, #3b82f6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* Chat Area */
+.orchestrator-chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4rem 2rem 2rem 2rem;
+  background: radial-gradient(circle at center top, rgba(168, 85, 247, 0.03) 0%, transparent 70%);
+  overflow-y: auto;
+}
+
+.greeting-container {
+  width: 100%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 2.5rem;
+}
+
+.orchestrator-greeting {
+  font-size: 2.2rem;
+  font-weight: 400;
+  color: #fff;
+  margin: 0 0 0.5rem 0;
+  line-height: 1.1;
+}
+
+.orchestrator-greeting-sub {
+  font-size: 2.8rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.gradient-text-orchestrator {
+  background: linear-gradient(to right, #a855f7, #3b82f6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Master Input Container */
+.master-input-container {
+  width: 100%;
+  max-width: 800px;
+  position: relative;
+  /* Glowing border logic using conic gradient rotation */
+  padding: 2px; /* Border thickness */
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  margin-bottom: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* The spinning glowing line */
+.master-input-container::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 250%;
+  height: 250%;
+  background: conic-gradient(transparent 0deg, transparent 270deg, #a855f7 320deg, #3b82f6 360deg);
+  transform: translate(-50%, -50%);
+  animation: rotateGlow 3s linear infinite;
+  z-index: 0;
+}
+
+/* Inner overlay to mask the rest of the gradient, making it look like a pure border */
+.master-input-inner {
+  position: relative;
+  border-radius: 14px;
+  background-color: #121218;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.25rem;
+}
+
+@keyframes rotateGlow {
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.master-textarea {
+  background: transparent;
+  border: none;
+  color: #fff;
+  resize: none;
+  font-family: inherit;
+  font-size: 1.1rem;
+  line-height: 1.5;
+  height: 80px;
+  outline: none;
+  box-shadow: none;
+}
+
+.master-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.master-input-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.action-row-left, .action-row-right {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, background 0.2s;
+}
+
+.icon-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Intent Buttons bottom area */
+.intent-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  font-weight: 500;
+}
+
+.intent-btn:hover {
+  border-color: rgba(168, 85, 247, 0.8);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
+  background: rgba(168, 85, 247, 0.1);
+}
+
+/* Feature Bullets */
+.feature-bullets {
+  width: 100%;
+  max-width: 800px;
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.feature-bullets li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.05rem;
+}
+
+.feature-bullets li svg {
+  color: #a855f7;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.history-item {
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.2s, color 0.2s;
+}
+
+.history-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.send-btn {
+  background: #a855f7;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.send-btn:hover {
+  background: #9333ea;
+  transform: scale(1.05);
+}

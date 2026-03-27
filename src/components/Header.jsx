@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import CurrencySelector from "./CurrencySelector";
 import logo from "../assets/NurotraLogo.png";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import "../styles/header.css";
 
 export default function Header() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
   const [theme, setTheme] = useState(
     localStorage.getItem("theme") || "light"
@@ -41,13 +43,36 @@ export default function Header() {
 
   return (
     <header>
-      {/* LOGO AREA (exact HTML structure restored) */}
-      <div className="logo-wrap">
-        <div className="logo-bg-glow"></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginLeft: '1rem' }}>
+        {location.pathname !== '/' && (
+          <button 
+            onClick={() => navigate('/')}
+            style={{ 
+              background: 'transparent', 
+              border: '1px solid rgba(255,255,255,0.15)', 
+              color: '#fff', 
+              padding: '0.4rem', 
+              borderRadius: '8px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
+            }}
+            title="Return to Master Orchestrator"
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <ArrowLeft size={18} />
+          </button>
+        )}
 
-        <img src={logo} alt="Nurotra Logo" className="nav-logo" />
-
-        <div className="logo">Nurotra</div>
+        {/* LOGO AREA (exact HTML structure restored) */}
+        <div className="logo-wrap">
+          <div className="logo-bg-glow"></div>
+          <img src={logo} alt="Nurotra Logo" className="nav-logo" />
+          <div className="logo">Nurotra</div>
+        </div>
       </div>
 
       {/* NAV LINKS */}
