@@ -66,6 +66,25 @@ const OrchestratorChat = () => {
 
   const handleIntentClick = (intentType) => {
     setPrompt(`${intentType}: `);
+import React, { useState } from 'react';
+import { Plus, Mic, ArrowUp, ArrowRight } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import LoginModal from '../LoginModal';
+
+const OrchestratorChat = () => {
+  const [prompt, setPrompt] = useState("");
+  const { user } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  const handleIntentClick = (intentType) => {
+    // Check if user is logged in
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    // E.g., user clicks Create, Manage, etc.
+    const intentBaseText = `${intentType}: `;
+    setPrompt(intentBaseText);
   };
 
   const unlockNextExecution = useCallback((idx) => {
@@ -79,6 +98,13 @@ const OrchestratorChat = () => {
     setActiveUserPrompt(prompt);
     
     const payloadPrompt = prompt;
+    // Check if user is logged in
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    console.log("Submitting orchestrator prompt:", prompt);
+    // Submit logic here
     setPrompt("");
     
     // Hard reset the sequencing array loops
@@ -129,6 +155,26 @@ const OrchestratorChat = () => {
       {/* 1. Dynamic Chat History Area (Above Input) */}
       {hasInteracted && (
         <div className="chat-history-scroll-area" ref={scrollRef}>
+    <div className="orchestrator-chat-area">
+      <div className="greeting-container">
+        <h1 className="orchestrator-greeting">Hey {user ? user.name.split(' ')[0].charAt(0).toUpperCase() + user.name.split(' ')[0].slice(1).toLowerCase() : 'User'},</h1>
+        <h2 className="orchestrator-greeting-sub gradient-text-orchestrator">Ready to Lock In!</h2>
+      </div>
+
+      <div className="master-input-container">
+        <div className="master-input-inner">
+          <textarea
+            className="master-textarea"
+            placeholder="What are we Executing today with Nurotra..."
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+          />
           
           {/* User Bubble with strict Typewriter lead block */}
           <motion.div 
@@ -260,6 +306,21 @@ const OrchestratorChat = () => {
         )}
       </AnimatePresence>
 
+      </div>
+
+      <ul className="feature-bullets">
+        <li><ArrowRight size={16} /> Create & Track your To Do List with real time.</li>
+        <li><ArrowRight size={16} /> Create Documents ppts, reports, docs, pdfs.</li>
+        <li><ArrowRight size={16} /> Analyse docs, summarize documents & Export in form of Ms word, Excel.</li>
+        <li><ArrowRight size={16} /> Manage Your professional workflow.</li>
+        <li><ArrowRight size={16} /> Automate your whole professional world.</li>
+      </ul>
+
+      {/* Login Guard Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+      />
     </div>
   );
 };
