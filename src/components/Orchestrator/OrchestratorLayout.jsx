@@ -1,15 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, MessageSquare, Menu } from 'lucide-react';
 import OrchestratorChat from './OrchestratorChat';
+import { useAuth } from '../../context/AuthContext';
 import '../../styles/orchestrator.css'; 
+import '../../styles/header.css';
 
 const OrchestratorLayout = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   const closeSidebar = () => setIsSidebarOpen(false);
+
+  // Sync theme: Orchestrator is always dark, so set data-theme to dark
+  // This ensures login/profile pages opened from here also render in dark mode
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    localStorage.setItem('theme', 'dark');
+  }, []);
 
   return (
     <div className="orchestrator-shell">
@@ -51,8 +61,13 @@ const OrchestratorLayout = () => {
             Operate agents separately
           </button>
           
-          <div className="orchestrator-profile" title="Signed in as Avant Choudhary">
-            AC
+          <div
+            className="header-profile-icon"
+            title={user ? `Signed in as ${user.name}` : 'Click to Log In'}
+            onClick={() => navigate(user ? '/profile' : '/login')}
+            style={{ cursor: 'pointer' }}
+          >
+            👤
           </div>
         </div>
 
@@ -65,3 +80,4 @@ const OrchestratorLayout = () => {
 };
 
 export default OrchestratorLayout;
+
