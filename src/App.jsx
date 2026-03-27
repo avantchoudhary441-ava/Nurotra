@@ -42,6 +42,7 @@ import History from "./pages/History";
 import SafetyTrust from "./pages/SafetyTrust";
 import DocsAgentPage from "./pages/DocsAgent/DocsAgentPage";
 import TimeAgentPage from "./pages/TimeAgent/TimeAgentPage";
+import OrchestratorLayout from "./components/Orchestrator/OrchestratorLayout";
 
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
@@ -73,8 +74,10 @@ export default function App() {
 
 
 
+            <Route path="/" element={<OrchestratorLayout />} />
+
             <Route
-              path="/"
+              path="/agents"
               element={
                 <>
                   <BackgroundEffects />
