@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
 import { Plus, Mic, ArrowUp, ArrowRight } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import LoginModal from '../LoginModal';
 
 const OrchestratorChat = () => {
   const [prompt, setPrompt] = useState("");
+  const { user } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const handleIntentClick = (intentType) => {
+    // Check if user is logged in
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
     // E.g., user clicks Create, Manage, etc.
     const intentBaseText = `${intentType}: `;
     setPrompt(intentBaseText);
@@ -12,6 +21,11 @@ const OrchestratorChat = () => {
 
   const handleSend = () => {
     if (!prompt.trim()) return;
+    // Check if user is logged in
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
     console.log("Submitting orchestrator prompt:", prompt);
     // Submit logic here
     setPrompt("");
@@ -20,7 +34,7 @@ const OrchestratorChat = () => {
   return (
     <div className="orchestrator-chat-area">
       <div className="greeting-container">
-        <h1 className="orchestrator-greeting">Hey Avant,</h1>
+        <h1 className="orchestrator-greeting">Hey {user ? user.name.split(' ')[0].charAt(0).toUpperCase() + user.name.split(' ')[0].slice(1).toLowerCase() : 'User'},</h1>
         <h2 className="orchestrator-greeting-sub gradient-text-orchestrator">Ready to Lock In!</h2>
       </div>
 
@@ -74,6 +88,12 @@ const OrchestratorChat = () => {
         <li><ArrowRight size={16} /> Manage Your professional workflow.</li>
         <li><ArrowRight size={16} /> Automate your whole professional world.</li>
       </ul>
+
+      {/* Login Guard Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+      />
     </div>
   );
 };
