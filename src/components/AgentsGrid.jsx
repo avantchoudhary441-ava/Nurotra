@@ -3,6 +3,7 @@ import AgentCard from "./AgentCard";
 import { useAuth } from "../context/AuthContext";
 import { useState } from "react";
 import LoginModal from "./LoginModal";
+import { Users, FileText, Calendar, MessageSquare } from "lucide-react";
 
 export default function AgentsGrid() {
   const navigate = useNavigate();
@@ -32,19 +33,19 @@ export default function AgentsGrid() {
       id: 3,
       name: "Time Agent",
       role: "AI Scheduling Assistant",
-      icon: "🕐",
+      icon: "📅",
       skills: "Task Planning • Calendar Sync • Reminders",
       status: "online",
       route: "/time-agent",
     },
     {
       id: 4,
-      name: "Research Analyst AI",
-      role: "Problem Solver",
-      icon: "🔍",
-      skills: "Insights • Summaries",
-      status: "idle",
-      route: "coming-soon",
+      name: "Communication Agent",
+      role: "Unified Communication Hub",
+      icon: "📩",
+      skills: "Gmail Sync • Slack Support • Follow-ups",
+      status: "online",
+      route: "/communication-agent",
     },
   ];
 

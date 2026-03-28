@@ -1,0 +1,704 @@
+const OpenAI = require("openai");
+const nodemailer = require("nodemailer");
+const Contact = require("../models/Contact");
+const CommMessage = require("../models/CommMessage");
+const CommRule = require("../models/CommRule");
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// ─── Email Transporter (Nodemailer + Gmail SMTP) ────────────────────────────
+const emailTransporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// ─── SYSTEM PROMPT ──────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `You are the Communication Agent for Nurotra's AI Workforce Platform.
+You act as the user's intelligent communication layer — executing, managing, and optimizing all communication across platforms.
+
+Your core capabilities:
+1. SEND MESSAGES: Send emails on behalf of the user via Gmail.
+2. AUTO FOLLOW-UPS: Configure automatic follow-ups if recipients don't reply.
+3. TASK BROADCASTS: Notify stakeholders when tasks are completed.
+4. CONTEXT-AWARE DRAFTS: Generate intelligent, relevant messages using context from other agents.
+5. MULTI-PLATFORM ROUTING: Route messages to email or Slack.
+6. COMMUNICATION MEMORY: Remember past conversations and patterns.
+7. FAILURE HANDLING: Retry failed messages and escalate failures.
+8. DAILY DIGEST: Generate summaries of all communication activity.
+9. MEETING COMMUNICATION: Send invitations, reminders, and updates for meetings.
+10. BULK + PERSONALIZED: Send messages to multiple recipients with personal touches.
+
+CRITICAL INSTRUCTIONS:
+- You MUST respond with valid JSON only. No markdown, no code fences, no explanations outside the JSON.
+- Classify the user's intent and extract structured data.
+
+Respond with this exact JSON structure:
+{
+  "intent": "send_message|setup_followup|broadcast_completion|draft_message|platform_route|recall_history|retry_failed|daily_digest|meeting_comm|bulk_send|manage_contacts|general_chat",
+  "needs_clarification": true/false,
+  "clarification_question": "question if needs_clarification is true",
+  "extracted_data": {
+    "recipients": ["email/name array"],
+    "subject": "email subject if applicable",
+    "body": "message body if applicable",
+    "platform": "email|slack",
+    "context": "project/task context",
+    "timing": "follow-up timing if applicable",
+    "group_name": "contact group name if applicable",
+    "contacts": [{"name": "...", "email": "..."}]
+  },
+  "response_text": "Your natural language response to the user"
+}`;
+
+// ─── INTENT CLASSIFICATION ──────────────────────────────────────────────────
+async function classifyIntent(prompt, history = []) {
+    try {
+        const messages = [
+            { role: "system", content: SYSTEM_PROMPT },
+            ...history.slice(-10), // Last 10 turns for context
+            { role: "user", content: prompt }
+        ];
+
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            response_format: { type: "json_object" },
+            messages,
+            temperature: 0.3
+        });
+
+        return JSON.parse(response.choices[0].message.content);
+    } catch (error) {
+        console.error("[CommService] Intent classification failed:", error.message);
+        return {
+            intent: "general_chat",
+            needs_clarification: false,
+            extracted_data: {},
+            response_text: "I encountered an issue processing your request. Could you try rephrasing?"
+        };
+    }
+}
+
+// ─── §2.1 MESSAGE EXECUTION ────────────────────────────────────────────────
+async function executeSendMessage(userId, data) {
+    const { recipients = [], subject, body, platform = "email" } = data;
+
+    if (!recipients.length || !body) {
+        return {
+            success: false,
+            message: "I need a recipient and message content. Who should I send this to, and what should I say?"
+        };
+    }
+
+    const results = [];
+
+    for (const recipient of recipients) {
+        try {
+            if (platform === "email") {
+                // Send real email via Nodemailer
+                await emailTransporter.sendMail({
+                    from: `"Nurotra Agent" <${process.env.EMAIL_USER}>`,
+                    to: recipient,
+                    subject: subject || "Message from Nurotra",
+                    text: body,
+                    html: `<div style="font-family: Inter, sans-serif; padding: 20px;">
+                        <p>${body.replace(/\n/g, '<br>')}</p>
+                        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+                        <p style="color: #94a3b8; font-size: 12px;">Sent via Nurotra Communication Agent</p>
+                    </div>`
+                });
+            }
+
+            // Find or create contact
+            let contact = await Contact.findOne({ userId, email: recipient });
+            if (!contact) {
+                contact = await Contact.create({
+                    userId,
+                    name: recipient.split("@")[0],
+                    email: recipient,
+                    platform
+                });
+            }
+
+            // Log message
+            const msg = await CommMessage.create({
+                userId,
+                contactId: contact._id,
+                direction: "sent",
+                platform,
+                subject: subject || "",
+                body,
+                recipientEmail: recipient,
+                recipientName: contact.name,
+                status: "sent",
+                sentAt: new Date()
+            });
+
+            // Update contact stats
+            await Contact.findByIdAndUpdate(contact._id, {
+                $inc: { "metadata.totalMessagesSent": 1 },
+                $set: { "metadata.lastContacted": new Date() }
+            });
+
+            results.push({ recipient, status: "sent", messageId: msg._id });
+
+        } catch (err) {
+            console.error(`[CommService] Email to ${recipient} failed:`, err.message);
+
+            // Log failed message for retry
+            await CommMessage.create({
+                userId,
+                direction: "sent",
+                platform,
+                subject: subject || "",
+                body,
+                recipientEmail: recipient,
+                status: "failed",
+                retry: { lastError: err.message }
+            });
+
+            results.push({ recipient, status: "failed", error: err.message });
+        }
+    }
+
+    const successCount = results.filter(r => r.status === "sent").length;
+    return {
+        success: successCount > 0,
+        results,
+        message: successCount === recipients.length
+            ? `✅ Successfully sent ${successCount} message(s).`
+            : `Sent ${successCount}/${recipients.length} messages. ${results.filter(r => r.status === "failed").length} failed.`
+    };
+}
+
+// ─── §2.2 AUTO FOLLOW-UP ───────────────────────────────────────────────────
+async function configureFollowUp(userId, data) {
+    const { recipients = [], timing = 48, maxAttempts = 3, priority = "medium" } = data;
+
+    if (!recipients.length) {
+        return {
+            success: false,
+            message: "Who should I follow up with? Give me an email or contact name."
+        };
+    }
+
+    const rules = [];
+    for (const recipient of recipients) {
+        const rule = await CommRule.create({
+            userId,
+            type: "follow_up",
+            name: `Follow-up: ${recipient}`,
+            trigger: {
+                event: "no_reply",
+                condition: `after ${timing} hours`,
+                timingHours: timing
+            },
+            action: {
+                template: "Hi, just following up on my previous message. Let me know if you need anything!",
+                recipients: [recipient],
+                platform: "email"
+            }
+        });
+        rules.push(rule);
+
+        // Mark recent messages to this recipient for follow-up
+        await CommMessage.updateMany(
+            { userId, recipientEmail: recipient, replyReceived: false, "followUp.enabled": false },
+            {
+                $set: {
+                    "followUp.enabled": true,
+                    "followUp.intervalHours": timing,
+                    "followUp.maxAttempts": maxAttempts,
+                    "followUp.priority": priority,
+                    "followUp.nextFollowUpAt": new Date(Date.now() + timing * 3600000)
+                }
+            }
+        );
+    }
+
+    return {
+        success: true,
+        rules,
+        message: `🔔 Follow-up configured! I'll automatically follow up with ${recipients.join(", ")} if they don't reply within ${timing} hours. Maximum ${maxAttempts} follow-ups per contact.`
+    };
+}
+
+// ─── §2.3 TASK BROADCAST ───────────────────────────────────────────────────
+async function broadcastUpdate(userId, data) {
+    const { recipients = [], context = "", body = "" } = data;
+
+    if (!recipients.length) {
+        return {
+            success: false,
+            message: "Who should I notify? Give me the stakeholder emails or a group name."
+        };
+    }
+
+    const broadcastBody = body || `Task Update: ${context || "A task has been completed."}`;
+
+    const result = await executeSendMessage(userId, {
+        recipients,
+        subject: `[Nurotra] Task Update: ${context || "Completed"}`,
+        body: broadcastBody,
+        platform: "email"
+    });
+
+    // Create broadcast rule for future
+    await CommRule.create({
+        userId,
+        type: "broadcast",
+        name: `Broadcast: ${context || "Task completion"}`,
+        trigger: { event: "task_complete", condition: context },
+        action: { template: broadcastBody, recipients, platform: "email" },
+        executionCount: 1,
+        lastExecutedAt: new Date()
+    });
+
+    return {
+        success: result.success,
+        message: `📢 Broadcast sent to ${recipients.length} stakeholder(s): ${recipients.join(", ")}.`
+    };
+}
+
+// ─── §2.4 CONTEXT-AWARE DRAFTING ────────────────────────────────────────────
+async function draftContextual(userId, data) {
+    const { recipients = [], context = "", body = "" } = data;
+
+    try {
+        const draftPrompt = `Draft a professional but warm email for the following context:
+Context: ${context}
+${body ? `User notes: ${body}` : ""}
+${recipients.length ? `Recipients: ${recipients.join(", ")}` : ""}
+
+Write only the email body. Keep it concise, professional, and action-oriented.`;
+
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: draftPrompt }],
+            temperature: 0.7
+        });
+
+        const draft = response.choices[0].message.content;
+
+        return {
+            success: true,
+            draft,
+            message: `📝 Here's your draft:\n\n${draft}\n\nWould you like me to send this, or should I adjust anything?`
+        };
+    } catch (err) {
+        return {
+            success: false,
+            message: "I couldn't generate a draft right now. Please try again."
+        };
+    }
+}
+
+// ─── §2.5 MULTI-PLATFORM ROUTING ───────────────────────────────────────────
+async function routeToPlatform(userId, data) {
+    const { platform = "email" } = data;
+
+    if (platform === "slack") {
+        return {
+            success: false,
+            message: "🔗 Slack integration is not connected yet. Please connect your Slack workspace in Settings to enable this feature. For now, I can send via email."
+        };
+    }
+
+    if (platform === "whatsapp") {
+        return {
+            success: false,
+            message: "📱 WhatsApp integration requires account connection. This feature is coming soon! For now, I can send via email."
+        };
+    }
+
+    // Default to email execution
+    return await executeSendMessage(userId, data);
+}
+
+// ─── §2.6 COMMUNICATION MEMORY ─────────────────────────────────────────────
+async function queryMemory(userId, data) {
+    const { recipients = [], context = "" } = data;
+
+    const query = { userId };
+    if (recipients.length) {
+        query.recipientEmail = { $in: recipients };
+    }
+
+    const messages = await CommMessage.find(query)
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+    if (!messages.length) {
+        return {
+            success: true,
+            messages: [],
+            message: "📭 No communication history found. Start a conversation and I'll remember everything!"
+        };
+    }
+
+    const summary = messages.map(m =>
+        `[${m.direction.toUpperCase()}] ${m.recipientEmail || "Unknown"} — "${m.subject || m.body.substring(0, 50)}..." (${m.status}, ${new Date(m.sentAt || m.createdAt).toLocaleDateString()})`
+    ).join("\n");
+
+    return {
+        success: true,
+        messages,
+        message: `📋 Here's your recent communication history:\n\n${summary}`
+    };
+}
+
+// ─── §2.7 FAILURE HANDLING & RETRY ──────────────────────────────────────────
+async function retryMessage(userId, data) {
+    const failedMessages = await CommMessage.find({
+        userId,
+        status: "failed",
+        "retry.attempts": { $lt: 3 }
+    }).limit(10);
+
+    if (!failedMessages.length) {
+        return {
+            success: true,
+            message: "✅ No failed messages to retry. All clear!"
+        };
+    }
+
+    let retried = 0;
+    for (const msg of failedMessages) {
+        try {
+            if (msg.platform === "email" && msg.recipientEmail) {
+                await emailTransporter.sendMail({
+                    from: `"Nurotra Agent" <${process.env.EMAIL_USER}>`,
+                    to: msg.recipientEmail,
+                    subject: msg.subject || "Message from Nurotra",
+                    text: msg.body
+                });
+
+                msg.status = "sent";
+                msg.sentAt = new Date();
+                retried++;
+            }
+        } catch (err) {
+            msg.retry.lastError = err.message;
+        }
+
+        msg.retry.attempts += 1;
+        await msg.save();
+    }
+
+    return {
+        success: true,
+        message: `🔄 Retried ${failedMessages.length} message(s). ${retried} succeeded, ${failedMessages.length - retried} still failing.`
+    };
+}
+
+// ─── §2.8 DAILY DIGEST ─────────────────────────────────────────────────────
+async function generateDigest(userId) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 1. Core aggregates
+    const [sentCount, receivedCount, failedCount, pendingFollowUps] = await Promise.all([
+        CommMessage.countDocuments({ userId, direction: "sent", sentAt: { $gte: today } }),
+        CommMessage.countDocuments({ userId, direction: "received", createdAt: { $gte: today } }),
+        CommMessage.countDocuments({ userId, status: "failed" }),
+        CommMessage.countDocuments({ userId, "followUp.enabled": true, replyReceived: false })
+    ]);
+
+    // 2. Platform breakdown
+    const platformStats = await CommMessage.aggregate([
+        { $match: { userId, createdAt: { $gte: today } } },
+        { 
+            $group: { 
+                _id: "$platform", 
+                sent: { $sum: { $cond: [{ $eq: ["$direction", "sent"] }, 1, 0] } },
+                received: { $sum: { $cond: [{ $eq: ["$direction", "received"] }, 1, 0] } }
+            } 
+        }
+    ]);
+
+    // 3. Flagged Items
+    const flagged = [];
+    
+    // Failed messages
+    const failures = await CommMessage.find({ userId, status: "failed" })
+        .limit(3)
+        .lean();
+    failures.forEach(f => flagged.push({ 
+        type: "failure", 
+        text: `Transmission to ${f.recipientEmail} failed`,
+        meta: f.retry.lastError 
+    }));
+
+    // Follow-ups
+    const followUps = await CommMessage.find({ userId, "followUp.enabled": true, replyReceived: false })
+        .sort({ "followUp.nextFollowUpAt": 1 })
+        .limit(3)
+        .lean();
+    followUps.forEach(f => flagged.push({ 
+        type: "follow_up", 
+        text: `${f.recipientName || f.recipientEmail} hasn't replied yet`,
+        meta: `Follow-up pending`
+    }));
+
+    const recentMessages = await CommMessage.find({ userId, sentAt: { $gte: today } })
+        .sort({ sentAt: -1 })
+        .limit(5)
+        .lean();
+
+    const recentSummary = recentMessages.map(m =>
+        `• ${m.recipientEmail}: "${m.subject || m.body.substring(0, 40)}..." (${m.status})`
+    ).join("\n");
+
+    return {
+        success: true,
+        digest: { 
+            sentCount, 
+            receivedCount, 
+            failedCount, 
+            pendingFollowUps,
+            platforms: platformStats.reduce((acc, curr) => {
+                acc[curr._id] = { sent: curr.sent, received: curr.received };
+                return acc;
+            }, {}),
+            flaggedItems: flagged
+        },
+        message: `📊 **Daily Communication Digest**\n\n` +
+            `📤 Messages Sent Today: **${sentCount}**\n` +
+            `📥 Replies Received: **${receivedCount}**\n` +
+            `❌ Failed Messages: **${failedCount}**\n` +
+            `⏳ Pending Follow-ups: **${pendingFollowUps}**\n` +
+            (recentSummary ? `\n**Recent Activity:**\n${recentSummary}` : "\nNo messages sent today yet.")
+    };
+}
+
+// ─── §2.9 MEETING COMMUNICATION ────────────────────────────────────────────
+async function handleMeetingComm(userId, data) {
+    const { recipients = [], context = "", timing = "", body = "" } = data;
+
+    if (!recipients.length) {
+        return {
+            success: false,
+            message: "Who's joining this meeting? Give me their emails or names."
+        };
+    }
+
+    const meetingBody = body || `You're invited to a meeting: ${context}\nTime: ${timing || "TBD"}\n\nPlease confirm your attendance.`;
+
+    const result = await executeSendMessage(userId, {
+        recipients,
+        subject: `[Nurotra] Meeting Invitation: ${context || "Upcoming Meeting"}`,
+        body: meetingBody,
+        platform: "email"
+    });
+
+    // Create reminder rule
+    if (timing) {
+        await CommRule.create({
+            userId,
+            type: "reminder",
+            name: `Meeting Reminder: ${context}`,
+            trigger: { event: "meeting_start", condition: context, timingHours: 1 },
+            action: {
+                template: `Reminder: Your meeting "${context}" starts in 1 hour.`,
+                recipients,
+                platform: "email"
+            }
+        });
+    }
+
+    return {
+        success: result.success,
+        message: `📅 Meeting invitations sent to ${recipients.length} participant(s). ${timing ? "I'll also send a reminder 1 hour before." : "Let me know the time and I'll set up reminders."}`
+    };
+}
+
+// ─── §2.10 BULK + PERSONALIZED ──────────────────────────────────────────────
+async function executeBulkSend(userId, data) {
+    const { recipients = [], body = "", context = "" } = data;
+
+    if (!recipients.length) {
+        return {
+            success: false,
+            message: "Upload or add the list of people you want to message. You can give me emails separated by commas."
+        };
+    }
+
+    // Generate personalized versions using LLM
+    const personalizedMessages = [];
+    for (const recipient of recipients) {
+        try {
+            const response = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [{
+                    role: "user",
+                    content: `Personalize this message for ${recipient}. Keep it professional but add a personal touch. Original: "${body}". Context: ${context}. Return ONLY the personalized message text.`
+                }],
+                temperature: 0.7
+            });
+
+            personalizedMessages.push({
+                recipient,
+                body: response.choices[0].message.content
+            });
+        } catch {
+            personalizedMessages.push({ recipient, body }); // Fallback to original
+        }
+    }
+
+    // Send all
+    let successCount = 0;
+    for (const pm of personalizedMessages) {
+        const result = await executeSendMessage(userId, {
+            recipients: [pm.recipient],
+            subject: data.subject || `Message from Nurotra`,
+            body: pm.body,
+            platform: "email"
+        });
+        if (result.success) successCount++;
+    }
+
+    return {
+        success: successCount > 0,
+        message: `📨 Bulk send complete! ${successCount}/${recipients.length} personalized messages sent successfully.`
+    };
+}
+
+// ─── CONTACT MANAGEMENT ────────────────────────────────────────────────────
+async function manageContacts(userId, data) {
+    const { contacts = [], group_name = "" } = data;
+
+    if (!contacts.length) {
+        // List existing contacts 
+        const existing = await Contact.find({ userId, isArchived: false })
+            .sort({ "metadata.lastContacted": -1 })
+            .limit(20)
+            .lean();
+
+        if (!existing.length) {
+            return {
+                success: true,
+                contacts: [],
+                message: "📇 No contacts saved yet. Tell me a name and email, and I'll add them for you!"
+            };
+        }
+
+        const list = existing.map(c =>
+            `• **${c.name}** — ${c.email} (${c.groups.length ? c.groups.join(", ") : "no group"})`
+        ).join("\n");
+
+        return {
+            success: true,
+            contacts: existing,
+            message: `📇 Your contacts:\n\n${list}\n\nWant to add someone or create a group?`
+        };
+    }
+
+    // Add new contacts
+    const added = [];
+    for (const c of contacts) {
+        try {
+            const contact = await Contact.findOneAndUpdate(
+                { userId, email: c.email },
+                {
+                    $set: {
+                        name: c.name || c.email.split("@")[0],
+                        email: c.email,
+                        platform: c.platform || "email"
+                    },
+                    $addToSet: group_name ? { groups: group_name } : {}
+                },
+                { upsert: true, new: true }
+            );
+            added.push(contact);
+        } catch (err) {
+            console.error(`[CommService] Failed to add contact ${c.email}:`, err.message);
+        }
+    }
+
+    return {
+        success: added.length > 0,
+        contacts: added,
+        message: `✅ Added ${added.length} contact(s)${group_name ? ` to group "${group_name}"` : ""}. ${group_name ? "Should I remember this as your core team?" : ""}`
+    };
+}
+
+// ─── MAIN ENTRY POINT ──────────────────────────────────────────────────────
+async function processMessage(userId, prompt, history = []) {
+    console.log(`[CommService] Processing: "${prompt.substring(0, 80)}..."`);
+
+    // Step 1: Classify intent
+    const classification = await classifyIntent(prompt, history);
+    console.log(`[CommService] Intent: ${classification.intent}`);
+
+    // Step 2: If clarification needed, return question
+    if (classification.needs_clarification) {
+        return {
+            intent: classification.intent,
+            message: classification.clarification_question || classification.response_text,
+            action: null
+        };
+    }
+
+    // Step 3: Route to handler
+    const data = classification.extracted_data || {};
+    let actionResult = null;
+
+    switch (classification.intent) {
+        case "send_message":
+            actionResult = await executeSendMessage(userId, data);
+            break;
+        case "setup_followup":
+            actionResult = await configureFollowUp(userId, data);
+            break;
+        case "broadcast_completion":
+            actionResult = await broadcastUpdate(userId, data);
+            break;
+        case "draft_message":
+            actionResult = await draftContextual(userId, data);
+            break;
+        case "platform_route":
+            actionResult = await routeToPlatform(userId, data);
+            break;
+        case "recall_history":
+            actionResult = await queryMemory(userId, data);
+            break;
+        case "retry_failed":
+            actionResult = await retryMessage(userId, data);
+            break;
+        case "daily_digest":
+            actionResult = await generateDigest(userId);
+            break;
+        case "meeting_comm":
+            actionResult = await handleMeetingComm(userId, data);
+            break;
+        case "bulk_send":
+            actionResult = await executeBulkSend(userId, data);
+            break;
+        case "manage_contacts":
+            actionResult = await manageContacts(userId, data);
+            break;
+        default:
+            // General conversation — return the LLM's response directly
+            return {
+                intent: "general_chat",
+                message: classification.response_text,
+                action: null
+            };
+    }
+
+    return {
+        intent: classification.intent,
+        message: actionResult?.message || classification.response_text,
+        action: actionResult
+    };
+}
+
+module.exports = {
+    processMessage,
+    generateDigest,
+    executeSendMessage,
+    manageContacts
+};

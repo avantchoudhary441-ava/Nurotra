@@ -1,0 +1,28 @@
+const express = require("express");
+const router = express.Router();
+const commController = require("../controllers/communicationController");
+const { protect } = require("../middleware/authMiddleware");
+
+/**
+ * Communication Agent Routes
+ * Base: /api/communication
+ */
+
+// Main conversational endpoint — all 10 capabilities through chat
+router.post("/chat", protect, commController.chat);
+
+// Contacts management
+router.get("/contacts", protect, commController.getContacts);
+router.post("/contacts", protect, commController.upsertContact);
+
+// Daily digest
+router.get("/digest", protect, commController.getDigest);
+
+// Message history
+router.get("/history", protect, commController.getHistory);
+
+// Automation rules
+router.get("/rules", protect, commController.getRules);
+router.post("/rules", protect, commController.createRule);
+
+module.exports = router;

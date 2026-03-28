@@ -6,62 +6,30 @@
   padding: 30px 40px 50px;
 }
 
-/* AGENT CARDS WITH GRADIENT BORDER */
+/* AGENT CARDS - VIBRANT RESTORE */
+/* AGENT GRID - NEON GRADIENT BORDER RESTORE */
 .agent-card {
-  border-radius: 18px;
-  padding: 1px;
-  /* The "border" width */
-  background: linear-gradient(135deg,
-      rgba(99, 102, 241, 0.9),
-      rgba(16, 185, 129, 0.5),
-      rgba(236, 72, 153, 0.8));
-  box-shadow: var(--shadow-soft);
-  transition: transform 0.2s ease, box-shadow 0.25s ease;
+  border-radius: 12px;
+  padding: 1px; /* The "patla" border width */
+  background: linear-gradient(135deg, #3b82f6, #ec4899); /* Blue to Pink Gradient */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
   height: 100%;
 }
 
 .agent-inner {
-  background: var(--card-bg);
-  border-radius: 16px;
-  /* slightly smaller than card radius */
-  padding: 22px;
+  background: #0f121a;
+  border-radius: 11px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
   height: 100%;
 }
 
 .agent-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 22px 45px rgba(79, 70, 229, 0.45);
-}
-
-/* Custom Gradient Button for Agent Cards */
-.agent-inner button.btn-secondary {
-  background: linear-gradient(90deg, var(--accent-1), var(--accent-2)) !important;
-  color: #ffffff !important;
-  border: none;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
-  transition: all 0.3s ease;
-  font-weight: 600;
-  margin-top: auto;
-  opacity: 1 !important;
-}
-
-.agent-inner button.btn-secondary:hover {
-  transform: translateY(-2px) !important;
-  /* Darker indigo for perfect visibility in light mode */
-  background: #4338ca !important;
-  background: linear-gradient(90deg, #4338ca, #6d28d9) !important;
-  color: #ffffff !important;
-  box-shadow: 0 10px 25px rgba(67, 56, 202, 0.4) !important;
-  opacity: 1 !important;
-}
-
-/* Dark theme specific hover - pink-ish accent */
-:root[data-theme="dark"] .agent-inner button.btn-secondary:hover {
-  background: linear-gradient(90deg, #6366f1, #ec4899) !important;
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.5), 0 10px 30px rgba(99, 102, 241, 0.3) !important;
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(59, 130, 246, 0.2);
 }
 
 .agent-inner .icon {
@@ -87,6 +55,25 @@
   color: var(--text-muted);
   margin-top: 4px;
   margin-bottom: 12px;
+}
+
+/* Gradient Button Style */
+.agent-inner button.btn-secondary {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  padding: 12px 20px;
+  border-radius: 100px; /* Pillow style button */
+  transition: all 0.3s;
+  font-weight: 600;
+  margin-top: auto;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+}
+
+.agent-inner button.btn-secondary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  filter: brightness(1.1);
 }
 
 /* STATUS + DETAILS */
