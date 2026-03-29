@@ -86,6 +86,7 @@ app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/time-agent", require("./routes/timeAgentRoutes"));
 app.use("/api/orchestrator", require("./routes/orchestratorRoutes"));
 app.use("/api/communication", require("./routes/communicationRoutes"));
+app.use("/api/integrations", require("./routes/integrationRoutes"));
 
 // Global Error Handler
 app.use((err, req, res, next) => {

@@ -1,4 +1,5 @@
 const communicationService = require("../services/communicationService");
+const CommunicationFactory = require("../services/communication/CommunicationFactory");
 const Contact = require("../models/Contact");
 const CommMessage = require("../models/CommMessage");
 const CommRule = require("../models/CommRule");
@@ -171,6 +172,38 @@ const getRules = async (req, res) => {
     }
 };
 
+/**
+ * Fetch messages directly from external platforms via Adapters
+ * GET /api/communication/messages?platform=email
+ */
+const getPlatformMessages = async (req, res) => {
+    try {
+        const platform = req.query.platform || "email";
+        const adapter = CommunicationFactory.getService(platform);
+        const messages = await adapter.readMessages(req.user._id, req.query);
+        res.json({ success: true, messages });
+    } catch (error) {
+        console.error(`[CommController] getPlatformMessages error:`, error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * Central Webhook Handler for all platforms 
+ * POST /api/communication/webhook/:platform
+ */
+const handleWebhook = async (req, res) => {
+    const platform = req.params.platform;
+    try {
+        const adapter = CommunicationFactory.getService(platform);
+        await adapter.handleWebhook(req.body);
+        res.status(200).send("Webhook received");
+    } catch (error) {
+        console.error(`[CommController] Webhook error for ${platform}:`, error);
+        res.status(200).send("Ignored or Error");
+    }
+};
+
 module.exports = {
     chat,
     getContacts,
@@ -178,5 +211,7 @@ module.exports = {
     getDigest,
     getHistory,
     createRule,
-    getRules
+    getRules,
+    getPlatformMessages,
+    handleWebhook
 };

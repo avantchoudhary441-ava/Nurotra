@@ -13,6 +13,8 @@ const UserSchema = new mongoose.Schema({
     isVerified: { type: Boolean, default: false },
     totalCollabs: { type: Number, default: 0 },
     successfulCollabs: { type: Number, default: 0 },
+    gmailAccessToken: { type: String },
+    gmailRefreshToken: { type: String },
     seenMatches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 
     // Admin Control Room Fields

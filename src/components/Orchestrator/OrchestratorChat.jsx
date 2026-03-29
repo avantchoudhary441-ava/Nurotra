@@ -87,6 +87,25 @@ const OrchestratorChat = () => {
     setPrompt(`${intentType}: `);
   };
 
+  const handleConnectGmail = async () => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+    try {
+      const userData = JSON.parse(localStorage.getItem('nurotra_user') || '{}');
+      const token = userData.token;
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      const res = await axios.get('http://localhost:5000/api/integrations/gmail/auth', config);
+      if (res.data.url) {
+        window.location.href = res.data.url;
+      }
+    } catch (e) {
+      console.error("Gmail Auth Error", e);
+      alert("Failed to start Gmail connection. Make sure backend is running.");
+    }
+  };
+
   const handleSend = async () => {
     if (!prompt.trim()) return;
     if (!user) {
@@ -327,6 +346,7 @@ const OrchestratorChat = () => {
                 <button className="intent-btn" onClick={() => handleIntentClick('Create')} disabled={isLoading || isExecuting}>Create</button>
                 <button className="intent-btn" onClick={() => handleIntentClick('Manage')} disabled={isLoading || isExecuting}>Manage</button>
                 <button className="intent-btn" onClick={() => handleIntentClick('Communicate')} disabled={isLoading || isExecuting}>Communicate</button>
+                <button className="intent-btn" onClick={handleConnectGmail} style={{ background: 'rgba(16, 227, 178, 0.1)', color: '#10e3b2', border: '1px solid currentColor' }} disabled={isLoading || isExecuting}>Connect Gmail</button>
               </div>
 
               <div className="action-row-right">

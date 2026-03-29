@@ -1,19 +1,10 @@
 const OpenAI = require("openai");
-const nodemailer = require("nodemailer");
+const CommunicationFactory = require("./communication/CommunicationFactory");
 const Contact = require("../models/Contact");
 const CommMessage = require("../models/CommMessage");
 const CommRule = require("../models/CommRule");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// ─── Email Transporter (Nodemailer + Gmail SMTP) ────────────────────────────
-const emailTransporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
 
 // ─── SYSTEM PROMPT ──────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are the Communication Agent for Nurotra's AI Workforce Platform.
@@ -96,19 +87,18 @@ async function executeSendMessage(userId, data) {
 
     for (const recipient of recipients) {
         try {
-            if (platform === "email") {
-                // Send real email via Nodemailer
-                await emailTransporter.sendMail({
-                    from: `"Nurotra Agent" <${process.env.EMAIL_USER}>`,
-                    to: recipient,
+            if (platform) {
+                // Send dynamically via Factory (Email, WhatsApp, etc)
+                const adapter = CommunicationFactory.getService(platform);
+                const adapterResult = await adapter.sendMessage(userId, {
+                    recipients: [recipient],
                     subject: subject || "Message from Nurotra",
-                    text: body,
-                    html: `<div style="font-family: Inter, sans-serif; padding: 20px;">
-                        <p>${body.replace(/\n/g, '<br>')}</p>
-                        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
-                        <p style="color: #94a3b8; font-size: 12px;">Sent via Nurotra Communication Agent</p>
-                    </div>`
+                    body
                 });
+
+                if (!adapterResult.success) {
+                    throw new Error("Adapter failed to send message.");
+                }
             }
 
             // Find or create contact
@@ -368,12 +358,12 @@ async function retryMessage(userId, data) {
     let retried = 0;
     for (const msg of failedMessages) {
         try {
-            if (msg.platform === "email" && msg.recipientEmail) {
-                await emailTransporter.sendMail({
-                    from: `"Nurotra Agent" <${process.env.EMAIL_USER}>`,
-                    to: msg.recipientEmail,
+            if (msg.platform && msg.recipientEmail) {
+                const adapter = CommunicationFactory.getService(msg.platform);
+                await adapter.sendMessage(userId, {
+                    recipients: [msg.recipientEmail],
                     subject: msg.subject || "Message from Nurotra",
-                    text: msg.body
+                    body: msg.body
                 });
 
                 msg.status = "sent";
@@ -410,26 +400,26 @@ async function generateDigest(userId) {
     // 2. Platform breakdown
     const platformStats = await CommMessage.aggregate([
         { $match: { userId, createdAt: { $gte: today } } },
-        { 
-            $group: { 
-                _id: "$platform", 
+        {
+            $group: {
+                _id: "$platform",
                 sent: { $sum: { $cond: [{ $eq: ["$direction", "sent"] }, 1, 0] } },
                 received: { $sum: { $cond: [{ $eq: ["$direction", "received"] }, 1, 0] } }
-            } 
+            }
         }
     ]);
 
     // 3. Flagged Items
     const flagged = [];
-    
+
     // Failed messages
     const failures = await CommMessage.find({ userId, status: "failed" })
         .limit(3)
         .lean();
-    failures.forEach(f => flagged.push({ 
-        type: "failure", 
+    failures.forEach(f => flagged.push({
+        type: "failure",
         text: `Transmission to ${f.recipientEmail} failed`,
-        meta: f.retry.lastError 
+        meta: f.retry.lastError
     }));
 
     // Follow-ups
@@ -437,8 +427,8 @@ async function generateDigest(userId) {
         .sort({ "followUp.nextFollowUpAt": 1 })
         .limit(3)
         .lean();
-    followUps.forEach(f => flagged.push({ 
-        type: "follow_up", 
+    followUps.forEach(f => flagged.push({
+        type: "follow_up",
         text: `${f.recipientName || f.recipientEmail} hasn't replied yet`,
         meta: `Follow-up pending`
     }));
@@ -454,10 +444,10 @@ async function generateDigest(userId) {
 
     return {
         success: true,
-        digest: { 
-            sentCount, 
-            receivedCount, 
-            failedCount, 
+        digest: {
+            sentCount,
+            receivedCount,
+            failedCount,
             pendingFollowUps,
             platforms: platformStats.reduce((acc, curr) => {
                 acc[curr._id] = { sent: curr.sent, received: curr.received };

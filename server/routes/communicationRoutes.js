@@ -25,4 +25,10 @@ router.get("/history", protect, commController.getHistory);
 router.get("/rules", protect, commController.getRules);
 router.post("/rules", protect, commController.createRule);
 
+// Dynamic Platform Messages (e.g., read email inbox)
+router.get("/messages", protect, commController.getPlatformMessages);
+
+// Webhook endpoint for all platforms
+router.post("/webhook/:platform", commController.handleWebhook);
+
 module.exports = router;
