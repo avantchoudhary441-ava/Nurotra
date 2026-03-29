@@ -3,6 +3,7 @@ const CommunicationFactory = require("../services/communication/CommunicationFac
 const Contact = require("../models/Contact");
 const CommMessage = require("../models/CommMessage");
 const CommRule = require("../models/CommRule");
+const learningService = require("../services/learningService");
 
 /**
  * Main Conversational Endpoint
@@ -24,6 +25,12 @@ const chat = async (req, res) => {
         }
 
         const result = await communicationService.processMessage(userId, prompt, history);
+
+        // TRIGGER LEARNING: Analyze the interaction in the background
+        const fullConversation = [...history, { role: "user", content: prompt }, { role: "assistant", content: result.message }];
+        learningService.analyzeInteraction(userId, fullConversation).catch(err => 
+            console.error("[CommController] Learning Trigger failed:", err)
+        );
 
         res.json({
             success: true,

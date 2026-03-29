@@ -4,15 +4,24 @@
  */
 const aiService = require("../aiService");
 
-const analyzeIntent = async (prompt, history = [], multimediaContext = [], temporalContext = "") => {
+const analyzeIntent = async (prompt, history = [], multimediaContext = [], temporalContext = "", userMemory = null, relationshipContext = "") => {
     // Format history for the LLM
     const historyString = Array.isArray(history)
         ? history.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text || m.content}`).join("\n")
         : "No previous history.";
 
+    // Contextual Injection
+    const memorySnippet = userMemory ? `
+[USER PATTERNS]: ${userMemory.behavioralPatterns?.map(p => p.trait).join(", ")}
+[LONG-TERM PLAN]: ${userMemory.longTermPlan?.mission}
+[RELATIONSHIP CONTEXT]: ${relationshipContext}
+` : "";
+
     const systemPrompt = `
         [CONVERSATION HISTORY]:
         ${historyString}
+
+        ${memorySnippet}
 
         You are the Nurotra Intent Analyzer. Extract structured information from the user prompt into JSON.
         

@@ -3,6 +3,8 @@ const temporalPlanner = require("../services/agents/temporalPlanner");
 const { getTemporalContext } = require("../utils/timeHelper");
 
 const docsAgentService = require("../services/docsAgentService");
+const NuroMemory = require("../models/NuroMemory");
+const Contact = require("../models/Contact");
 
 /**
  * Time Agent Planning Endpoint
@@ -36,7 +38,28 @@ const planTask = async (req, res) => {
         }
 
         // 2. Extract Intent (Pass history for multi-turn context)
-        const intent = await intentAnalyzer.analyzeIntent(prompt, history, [], temporalContext);
+        // 2.1 Fetch Memory Context
+        const memory = await NuroMemory.findOne({ userId: req.user._id }).lean();
+        
+        // 2.2 Identify if any high-stakes person is mentioned
+        const wordsForPerson = prompt.split(/\s+/);
+        let relationshipContext = "";
+        
+        // Simple heuristic: if any word matches a contact name, check their role
+        for (const word of wordsForPerson) {
+            const cleanWord = word.replace(/[^\w]/g, "");
+            if (cleanWord.length > 2) {
+                const contact = await Contact.findOne({ userId: req.user._id, name: new RegExp('^' + cleanWord + '$', 'i') }).lean();
+                if (contact && contact.metadata?.relationshipRole) {
+                    relationshipContext += `\nHigh-stakes role detected: ${contact.name} is the user's ${contact.metadata.relationshipRole}. `;
+                    if (["boss", "professor", "teacher", "client"].includes(contact.metadata.relationshipRole.toLowerCase())) {
+                        relationshipContext += `ENFORCE MAXIMUM PROFESSIONALISM AND BUFFER TIME.`;
+                    }
+                }
+            }
+        }
+
+        const intent = await intentAnalyzer.analyzeIntent(prompt, history, [], temporalContext, memory, relationshipContext);
         console.log(`[TimeAgent] Deadline: ${intent.deadline} | Docs Req: ${intent.requires_docs}`);
 
         // 4. Conversational Check: Handle vague schedules
@@ -123,7 +146,7 @@ const planTask = async (req, res) => {
         }
 
         // 5. Generate Temporal Schedule
-        const planning = await temporalPlanner.generateTimeline(prompt, intent, temporalContext);
+        const planning = await temporalPlanner.generateTimeline(prompt, intent, temporalContext, memory, relationshipContext);
         console.log(`[TimeAgent] Schedule Generated: ${planning.totalPhases} phases.`);
 
         // 6. Return coordinated result to frontend

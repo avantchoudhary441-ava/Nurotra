@@ -214,10 +214,18 @@ class GammaRenderer:
 # ==========================================
 # 3. COORDINATOR
 # ==========================================
-def run_ppt_generation(prompt: str, context: str, slide_count: int = 7) -> str:
+def run_ppt_generation(prompt: str, context: str, user_memory: Dict[str, Any] = None, slide_count: int = 7) -> str:
     model = ModelFactory.create(model_platform=ModelPlatformType.OPENAI, model_type="gpt-4o", model_config_dict={"temperature": 0.8})
     
+    # Extract memory snippets
+    memory_str = ""
+    if user_memory:
+        patterns = ", ".join(user_memory.get("behavioralPatterns", []))
+        mission = user_memory.get("longTermPlan", {}).get("mission", "")
+        memory_str = f"\n[USER PREFERENCES]: {patterns}\n[USER MISSION]: {mission}"
+
     sys_prompt = f"""You are a Lead Designer for Gamma AI. Create a high-end presentation blueprint for: "{prompt}".
+{memory_str}
 
 **CONTEXTUAL HANDLING:**
 - If the [CONTEXT] contains an existing presentation structure, you are performing a **REVISION/EVALUATION**.
@@ -242,8 +250,8 @@ def run_ppt_generation(prompt: str, context: str, slide_count: int = 7) -> str:
     resp = ChatAgent(msg, model=model).step(BaseMessage.make_user_message(role_name="User", content=f"Context: {context}\nTopic: {prompt}")).msg.content
     return resp.replace("```json", "").replace("```", "").strip()
 
-async def generate_ppt(prompt: str, context: str, slide_count: int = 7) -> Dict[str, Any]:
-    raw = run_ppt_generation(prompt, context, slide_count)
+async def generate_ppt(prompt: str, context: str, user_memory: Dict[str, Any] = None, slide_count: int = 7) -> Dict[str, Any]:
+    raw = run_ppt_generation(prompt, context, user_memory, slide_count)
     try:
         data = json.loads(raw)
         design = data.get("design", {})

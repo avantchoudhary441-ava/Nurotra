@@ -14,6 +14,18 @@ const nuroMemorySchema = new mongoose.Schema({
         firstDetected: Date,
         lastDetected: Date
     }],
+    // Shared user-defined goals
+    longTermPlan: {
+        mission: { type: String, default: "" }, // The "User's Plan" (e.g., "Scale my agency")
+        activeGoals: [String],
+        lastUpdated: { type: Date, default: Date.now }
+    },
+    // Non-contact entities (e.g. "School", "Wife", "Company")
+    personalEntities: [{
+        name: String,
+        role: String,
+        notes: String
+    }],
     // Moving averages for the "Comparison UI"
     metrics: {
         communicationClarity: { type: Number, default: 50 }, // 0-100

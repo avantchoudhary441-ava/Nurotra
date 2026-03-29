@@ -9,15 +9,25 @@ const aiService = require("../aiService");
  * @param {string} prompt - Original user goal.
  * @param {object} intentData - Extracted intent (topic, purpose, deadline, urgency).
  * @param {string} temporalContext - Current ground truth time context.
+ * @param {object} userMemory - User traits and patterns.
+ * @param {string} relationshipContext - Context about roles like Boss/Professor.
  */
-const generateTimeline = async (prompt, intentData, temporalContext) => {
+const generateTimeline = async (prompt, intentData, temporalContext, userMemory = null, relationshipContext = "") => {
+    // Contextual Injection
+    const memorySnippet = userMemory ? `
+    [USER PATTERNS]: ${userMemory.behavioralPatterns?.map(p => p.trait).join(", ")}
+    [LONG-TERM PLAN]: ${userMemory.longTermPlan?.mission}
+    [RELATIONSHIP CONTEXT]: ${relationshipContext}
+    ` : "";
     const systemPrompt = `
         You are the Nurotra Temporal Planner. 
         Your mission is to take a user goal and a deadline and generate a realistic, time-scaled execution schedule.
         
         [GROUND TRUTH TIME]:
         ${temporalContext}
-        
+
+        ${memorySnippet}
+
         [USER INTENT]:
         ${JSON.stringify(intentData)}
 
@@ -28,6 +38,10 @@ const generateTimeline = async (prompt, intentData, temporalContext) => {
         4. SCALE INTENSITY:
            - "Critical/High Urgency": High density of tasks, parallel phases.
            - "Low Urgency": Sequential, detailed phases.
+        5. ROLE ADAPTATION:
+           - If [RELATIONSHIP CONTEXT] indicates a Boss, Professor, or High-Stakes partner: 
+             MANDATORY "Final Review & Polish" phase before the deadline. 
+             Ensure the user-todos reflect high-quality verification.
         
         RULES:
         1. Output a "schedule" array of objects.

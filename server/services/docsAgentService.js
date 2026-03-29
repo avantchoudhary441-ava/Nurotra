@@ -10,6 +10,8 @@ const designEngine = require("./agents/designEngine");
 const renderingEngine = require("./agents/renderingEngine");
 const { getTemporalContext } = require("../utils/timeHelper");
 const { runDocumentAnalysis } = require("./documentAnalysisService");
+const NuroMemory = require("../models/NuroMemory");
+const Contact = require("../models/Contact");
 
 /**
  * Docs Agent Service
@@ -83,8 +85,24 @@ const docsAgentService = {
 
             const temporalContext = getTemporalContext();
 
+            // 1.5 Fetch Memory Context
+            const memory = await NuroMemory.findOne({ userId: user._id }).lean();
+            
+            // Heuristic for high-stakes person detection in prompt
+            const words = prompt.split(/\s+/);
+            let relationshipContext = "";
+            for (const word of words) {
+                const cleanWord = word.replace(/[^\w]/g, "");
+                if (cleanWord.length > 2) {
+                    const contact = await Contact.findOne({ userId: user._id, name: new RegExp('^' + cleanWord + '$', 'i') }).lean();
+                    if (contact && contact.metadata?.relationshipRole) {
+                        relationshipContext += `\nHigh-stakes role detected: ${contact.name} is the user's ${contact.metadata.relationshipRole}. `;
+                    }
+                }
+            }
+
             // 2. Stages 1 & 2: Intent & Classification
-            const intentData = await intentAnalyzer.analyzeIntent(prompt, sourceContent, multimediaBrief, temporalContext);
+            const intentData = await intentAnalyzer.analyzeIntent(prompt, sourceContent, multimediaBrief, temporalContext, memory, relationshipContext);
             const classification = await classifier.classifyType(prompt, intentData, multimediaBrief, temporalContext);
 
             // 3. Stage 2.5: Python PPT Interception
@@ -93,7 +111,8 @@ const docsAgentService = {
                     console.log(`[DocsAgentService] Routing to Python Agent...`);
                     const fastApiResponse = await axios.post('http://localhost:8000/api/agents/ppt', {
                         prompt: prompt,
-                        context_data: sourceContent
+                        context_data: sourceContent,
+                        user_memory: memory // Pass memory to Python agent
                     }, { timeout: 120000 });
 
                     const agentData = fastApiResponse.data;

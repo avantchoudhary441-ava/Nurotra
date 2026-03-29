@@ -40,7 +40,9 @@ const contactSchema = new mongoose.Schema({
         lastContacted: { type: Date },
         responseRate: { type: Number, default: 0 }, // 0-100 percentage
         totalMessagesSent: { type: Number, default: 0 },
-        totalReplies: { type: Number, default: 0 }
+        totalReplies: { type: Number, default: 0 },
+        relationshipRole: { type: String, default: "" }, // e.g. "Boss", "Professor", "Client"
+        relationshipContext: { type: String, default: "" } // extra context about this person
     },
     isArchived: {
         type: Boolean,
