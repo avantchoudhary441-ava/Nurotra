@@ -10,9 +10,40 @@ const OrchestratorLayout = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [chats, setChats] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
+
+  const fetchHistory = async () => {
+    if (!user || !user.token) return;
+    try {
+      const res = await fetch('http://localhost:5000/api/orchestrator/history', {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChats(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch history:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, [user]);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
   const closeSidebar = () => setIsSidebarOpen(false);
+
+  const handleNewChat = () => {
+    setActiveChatId(null);
+    closeSidebar();
+  };
+
+  const handleSelectChat = (chatId) => {
+    setActiveChatId(chatId);
+    closeSidebar();
+  };
 
   // Sync theme: Orchestrator is always dark, so set data-theme to dark
   // This ensures login/profile pages opened from here also render in dark mode
@@ -25,24 +56,26 @@ const OrchestratorLayout = () => {
     <div className="orchestrator-shell">
       {/* Sidebar */}
       <div className={`orchestrator-sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
-        <button className="new-chat-btn">
+        <button className="new-chat-btn" onClick={handleNewChat}>
           <Plus size={18} />
           <span>New chat</span>
         </button>
         
         <div className="history-list">
-          <div className="history-item">
-            <MessageSquare size={14} style={{ display: 'inline', marginRight: '8px', opacity: 0.6 }} /> 
-            Initial Orchestrator Setup
-          </div>
-          <div className="history-item">
-            <MessageSquare size={14} style={{ display: 'inline', marginRight: '8px', opacity: 0.6 }} /> 
-            Marketing strategy docs
-          </div>
-          <div className="history-item">
-            <MessageSquare size={14} style={{ display: 'inline', marginRight: '8px', opacity: 0.6 }} /> 
-            Automated workflow review
-          </div>
+          {chats.length === 0 ? (
+            <div className="history-empty">No previous chats</div>
+          ) : (
+            chats.map(chat => (
+              <div 
+                key={chat._id} 
+                className={`history-item ${activeChatId === chat._id ? 'active' : ''}`}
+                onClick={() => handleSelectChat(chat._id)}
+              >
+                <MessageSquare size={14} style={{ display: 'inline', marginRight: '8px', opacity: 0.6 }} /> 
+                {chat.chatName || "New Orchestration"}
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -72,7 +105,11 @@ const OrchestratorLayout = () => {
         </div>
 
         {/* Chat Interface */}
-        <OrchestratorChat />
+        <OrchestratorChat 
+          activeChatId={activeChatId} 
+          setActiveChatId={setActiveChatId}
+          onChatCreated={fetchHistory}
+        />
 
       </div>
     </div>

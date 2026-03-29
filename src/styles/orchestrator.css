@@ -328,9 +328,13 @@
   transition: background 0.2s, color 0.2s;
 }
 
-.history-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+.history-item:hover, .history-item.active {
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
+}
+
+.history-item.active {
+  border-left: 2px solid #a855f7;
 }
 
 .send-btn {

@@ -3,6 +3,7 @@ const CommunicationFactory = require("./communication/CommunicationFactory");
 const Contact = require("../models/Contact");
 const CommMessage = require("../models/CommMessage");
 const CommRule = require("../models/CommRule");
+const NuroMemory = require("../models/NuroMemory");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -53,10 +54,18 @@ Respond with this exact JSON structure:
 }`;
 
 // ─── INTENT CLASSIFICATION ──────────────────────────────────────────────────
-async function classifyIntent(prompt, history = []) {
+async function classifyIntent(userId, prompt, history = []) {
     try {
+        // Fetch Memory Context
+        const memory = await NuroMemory.findOne({ userId }).lean();
+        const memoryContext = memory ? `
+USER PATTERNS: ${memory.behavioralPatterns?.map(p => p.trait).join(", ") || "None yet"}
+LONG-TERM PLAN: ${memory.longTermPlan?.mission || "None defined"}
+ACTIVE GOALS: ${memory.longTermPlan?.activeGoals?.join(", ") || "None"}
+` : "";
+
         const messages = [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: SYSTEM_PROMPT + (memoryContext ? `\n\nUSER MEMORY CONTEXT:\n${memoryContext}` : "") },
             ...history.slice(-10), // Last 10 turns for context
             { role: "user", content: prompt }
         ];
@@ -278,7 +287,21 @@ async function draftContextual(userId, data, history = []) {
             ? history.slice(-5).map(m => `${m.role}: ${m.content}`).join('\\n') 
             : "";
 
-        const draftPrompt = `Draft a professional but warm email leveraging the details discussed below. Make sure to apply any specific tone, instructions, or changes the user requested recently.
+        // Check for Recipient Roles (Boss, Professor, etc)
+        let roleContext = "";
+        if (recipients.length > 0) {
+            const contacts = await Contact.find({ userId, email: { $in: recipients } }).lean();
+            const highStakes = contacts.filter(c => 
+                ["boss", "professor", "teacher", "client", "ceo", "manager"].includes(c.metadata?.relationshipRole?.toLowerCase())
+            );
+            
+            if (highStakes.length > 0) {
+                roleContext = `\nCRITICAL: One or more recipients have HIGH-STAKES ROLES: ${highStakes.map(c => `${c.name} (${c.metadata.relationshipRole})`).join(", ")}. 
+                ENFORCE AN ELITE, POLISHED, AND HIGHLY PROFESSIONAL TONE. Avoid slang, be concise, and ensure perfect etiquette.`;
+            }
+        }
+
+        const draftPrompt = `Draft a professional but warm email leveraging the details discussed below. Make sure to apply any specific tone, instructions, or changes the user requested recently.${roleContext}
 
 Current Context/Topic: ${context}
 ${body ? `User specific instructions: ${body}` : ""}
@@ -652,8 +675,8 @@ async function manageContacts(userId, data) {
 async function processMessage(userId, prompt, history = []) {
     console.log(`[CommService] Processing: "${prompt.substring(0, 80)}..."`);
 
-    // Step 1: Classify intent
-    const classification = await classifyIntent(prompt, history);
+    // Step 1: Classify intent (pass userId for memory)
+    const classification = await classifyIntent(userId, prompt, history);
     console.log(`[CommService] Intent: ${classification.intent}`);
 
     // Step 2: If clarification needed, return question
@@ -661,7 +684,8 @@ async function processMessage(userId, prompt, history = []) {
         return {
             intent: classification.intent,
             message: classification.clarification_question || classification.response_text,
-            action: null
+            action: null,
+            needs_clarification: true
         };
     }
 

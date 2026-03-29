@@ -47,7 +47,7 @@ const TypewriterText = ({ text, speed = 20, onComplete, className }) => {
   );
 };
 
-const OrchestratorChat = () => {
+const OrchestratorChat = ({ activeChatId, setActiveChatId, onChatCreated }) => {
   const { user } = useAuth();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [prompt, setPrompt] = useState("");
@@ -62,6 +62,7 @@ const OrchestratorChat = () => {
   const [executionUpdates, setExecutionUpdates] = useState([]);
   const [visibleExecutionIndex, setVisibleExecutionIndex] = useState(-1);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [executionResult, setExecutionResult] = useState(null);
 
   const scrollRef = useRef(null);
 
@@ -74,6 +75,49 @@ const OrchestratorChat = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, executionUpdates, visibleExecutionIndex]);
+
+  // Load messages when activeChatId changes
+  useEffect(() => {
+    if (activeChatId) {
+      // Clear current UI states
+      setHasInteracted(true);
+      setExecutionUpdates([]);
+      setExecutionResult(null);
+      setIsExecuting(false);
+      setIsLoading(true);
+
+      const fetchMessages = async () => {
+        try {
+          const res = await fetch(`/api/orchestrator/chat/${activeChatId}`, {
+            headers: { 'Authorization': `Bearer ${user.token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            // Map backend messages to local format
+            const mapped = data.map(m => ({
+              role: m.sender ? 'user' : 'agent',
+              content: m.content,
+              type: m.type === 'CLARIFICATION' ? 'CLARIFICATION' : null
+            }));
+            setMessages(mapped);
+          }
+        } catch (err) {
+          console.error('Failed to load chat messages:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchMessages();
+    } else {
+      // Reset for "New Chat"
+      setHasInteracted(false);
+      setMessages([]);
+      setExecutionUpdates([]);
+      setExecutionResult(null);
+      setActiveUserPrompt("");
+      setIsLoading(false);
+    }
+  }, [activeChatId, user?.token]);
 
   const unlockNextExecution = useCallback((idx) => {
     setVisibleExecutionIndex((prev) => (prev === idx ? prev + 1 : prev));
@@ -96,7 +140,7 @@ const OrchestratorChat = () => {
       const userData = JSON.parse(localStorage.getItem('nurotra_user') || '{}');
       const token = userData.token;
       const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-      const res = await axios.get('http://localhost:5000/api/integrations/gmail/auth', config);
+      const res = await axios.get('/api/integrations/gmail/auth', config);
       if (res.data.url) {
         window.location.href = res.data.url;
       }
@@ -125,14 +169,35 @@ const OrchestratorChat = () => {
     setExecutionUpdates([]);
     setVisibleExecutionIndex(-1);
     setIsExecuting(false);
+    setExecutionResult(null);
     setActiveUserPrompt("");
 
     try {
-      // 1. Pass through Conversational Guard
-      const intentRes = await axios.post('http://localhost:5000/api/orchestrator/intent', {
-        prompt: payloadPrompt
-      });
+      const config = {
+        headers: {
+          Authorization: `Bearer ${user.token}`
+        }
+      };
+
+      // Build conversation history from existing messages (last 10 turns)
+      const history = messages.slice(-10).map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content
+      }));
+
+      // 1. Pass through Conversational Guard (with history for context)
+      const intentRes = await axios.post('/api/orchestrator/intent', {
+        prompt: payloadPrompt,
+        history,
+        chatId: activeChatId
+      }, config);
       const guardDecision = intentRes.data;
+
+      // Update activeChatId if the intent route created/identified one
+      if (!activeChatId && guardDecision.chatId) {
+        setActiveChatId(guardDecision.chatId);
+        if (onChatCreated) onChatCreated(); // Refresh sidebar title
+      }
 
       // 2. Direct Response Routing
       if (guardDecision.response_strategy === 'DIRECT_RESPONSE' || guardDecision.response_strategy === 'REDIRECT_WITH_CAPABILITIES') {
@@ -157,10 +222,18 @@ const OrchestratorChat = () => {
       setActiveUserPrompt(payloadPrompt);
       setIsExecuting(true);
 
-      const response = await fetch('http://localhost:5000/api/orchestrator/execute', {
+      const response = await fetch('/api/orchestrator/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: payloadPrompt, guardDecision })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}`
+        },
+        body: JSON.stringify({ 
+          prompt: payloadPrompt, 
+          guardDecision, 
+          history,
+          chatId: activeChatId 
+        })
       });
 
       const reader = response.body.getReader();
@@ -178,7 +251,30 @@ const OrchestratorChat = () => {
             try {
               const data = JSON.parse(line.substring(6));
               setExecutionUpdates(prev => [...prev, data]);
-              if (data.phase === 'complete' || data.phase === 'error' || data.bypassed) {
+              
+              if (data.phase === 'complete') {
+                setIsExecuting(false);
+                if (data.data && data.data.result) {
+                  const result = { ...data.data.result, agent: data.data.agent };
+                  setExecutionResult(result);
+                  
+                  // If agent needs clarification, add question to chat history
+                  // If agent needs clarification, add question to chat history
+                  if (result.needs_clarification && result.message) {
+                    setMessages(prev => [...prev, {
+                      role: 'agent',
+                      content: result.message,
+                      type: 'CLARIFICATION'
+                    }]);
+                  }
+
+                  // If this was a new chat, update the activeChatId so further messages belong to it
+                  if (!activeChatId && data.data?.chatId) {
+                    setActiveChatId(data.data.chatId);
+                    if (onChatCreated) onChatCreated(); // Refresh sidebar list
+                  }
+                }
+              } else if (data.phase === 'error' || data.bypassed) {
                 setIsExecuting(false);
               }
             } catch (e) { }
@@ -302,6 +398,76 @@ const OrchestratorChat = () => {
                   })}
                 </AnimatePresence>
               </div>
+
+              {/* Execution Result Card */}
+              {executionResult && (
+                <motion.div
+                  className="execution-result-card"
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  style={{
+                    marginTop: '24px',
+                    padding: '20px',
+                    background: 'rgba(16, 227, 178, 0.05)',
+                    borderRadius: '12px',
+                    border: '1px border rgba(16, 227, 178, 0.3)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ fontSize: '0.9rem', color: executionResult.needs_clarification ? '#facc15' : '#10e3b2', fontWeight: '600' }}>
+                    {executionResult.needs_clarification 
+                      ? `Clarification Required (${executionResult.agent.split('_')[0]} agent)`
+                      : `Final Deliverable: ${executionResult.agent === 'docs_agent' ? 'Document Generated' : 
+                                      executionResult.agent === 'communication_agent' ? 'Message Drafted' : 'Plan Finalized'}`}
+                  </div>
+
+                  {executionResult.needs_clarification ? (
+                     <div style={{ background: 'rgba(250, 204, 21, 0.05)', border: '1px solid rgba(250, 204, 21, 0.2)', padding: '16px', borderRadius: '8px' }}>
+                       <p style={{ color: '#f3f4f6', margin: 0, whiteSpace: 'pre-wrap' }}>{executionResult.message}</p>
+                     </div>
+                  ) : (
+                    <>
+                      {executionResult.agent === 'docs_agent' && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
+                          <span style={{ color: '#fff' }}>{executionResult.document?.name || executionResult.fileName || 'Untitled Document'}</span>
+                          <button 
+                            onClick={() => window.open(`http://localhost:5000/api/workspace/download/${executionResult.document?._id || executionResult.id}`, '_blank')}
+                            style={{ background: '#10e3b2', color: '#000', padding: '6px 16px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: '600' }}
+                          >
+                            Download
+                          </button>
+                        </div>
+                      )}
+
+                      {executionResult.agent === 'communication_agent' && (
+                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px', position: 'relative' }}>
+                          <p style={{ color: '#f3f4f6', margin: 0, whiteSpace: 'pre-wrap' }}>{executionResult.message}</p>
+                          <button 
+                             onClick={() => { navigator.clipboard.writeText(executionResult.message); alert("Copied to clipboard!"); }}
+                             style={{ position: 'absolute', top: '8px', right: '8px', color: '#10e3b2', fontSize: '0.7rem', background: 'rgba(16, 227, 178, 0.1)', border: '1px solid currentColor', padding: '2px 6px', borderRadius: '4px' }}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      )}
+
+                      {executionResult.agent === 'time_agent' && (
+                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '8px' }}>
+                          <p style={{ color: '#f3f4f6', margin: 0 }}>{executionResult.message}</p>
+                          <div style={{ marginTop: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {executionResult.planning?.schedule?.slice(0, 3).map((s, i) => (
+                               <div key={i} style={{ fontSize: '0.75rem', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: '4px' }}>
+                                 {s.timeLabel}: {s.title}
+                               </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              )}
             </motion.div>
           )}
 

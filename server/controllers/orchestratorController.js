@@ -1,7 +1,13 @@
 const orchestratorService = require('../services/orchestratorService');
+const learningService = require('../services/learningService');
+const docsAgentService = require('../services/docsAgentService');
+const communicationService = require('../services/communicationService');
+const timeAgentController = require('./timeAgentController');
+const orchestratorChatController = require('./orchestratorChatController');
 
 const executeTask = async (req, res) => {
-    const { prompt, guardDecision } = req.body;
+    let { prompt, guardDecision, history = [], chatId = null } = req.body;
+    const userId = req.user?._id;
 
     // STEP 0: Guard Layer Validation
     // Exits immediately if the teammate's Guard Layer deemed it conversational/trivial
@@ -28,7 +34,18 @@ const executeTask = async (req, res) => {
         res.write(`data: ${payload}\n\n`);
     };
 
+    let activeChatId = chatId;
+
     try {
+        // STEP -1: Manage Chat Session & Persistence
+        if (userId) {
+            const chat = await orchestratorChatController.getOrCreateChat(userId, activeChatId, prompt);
+            activeChatId = chat._id;
+            
+            // Note: User message is already saved in the /intent route if called before this,
+            // but we might want to check for duplicates if the frontend calls this directly.
+            // For now, we assume /intent saved it if it preceded this.
+        }
         // STEP 1: Understanding Intent
         sendUpdate('intent', 'Decoding architectural intent from raw block...', false);
         
@@ -78,8 +95,65 @@ const executeTask = async (req, res) => {
 
         sendUpdate('mapping', routingDecision, true, mappedAgents);
 
+        // STEP 5: Execution Handoff
+        sendUpdate('execution', `Handoff initiated to ${tasks[0].suggested_agent}...`, false);
+        let executionResult = null;
+
+        try {
+            const firstAgent = tasks[0].suggested_agent;
+            
+            if (firstAgent === 'docs_agent') {
+                sendUpdate('execution', 'Docs Agent: Initializing document generation pipeline...', false);
+                executionResult = await docsAgentService.generateFullDocument(req.user, {
+                    prompt: prompt,
+                    history: []
+                });
+                sendUpdate('execution', 'Docs Agent: Document generation complete.', true);
+            } 
+            else if (firstAgent === 'communication_agent') {
+                sendUpdate('execution', 'Communication Agent: Drafting contextual message...', false);
+                executionResult = await communicationService.processMessage(req.user._id, prompt, history);
+                sendUpdate('execution', 'Communication Agent: Draft completed.', true);
+            }
+            else if (firstAgent === 'time_agent') {
+                sendUpdate('execution', 'Time Agent: Analyzing temporal constraints and generating schedule...', false);
+                // Mock req/res for the controller
+                const mockRes = { json: (data) => { executionResult = data; }, status: () => mockRes };
+                await timeAgentController.planTask({ body: { prompt }, user: req.user }, mockRes);
+                sendUpdate('execution', 'Time Agent: Strategic plan finalized.', true);
+            }
+        } catch (execError) {
+            console.error('[Orchestrator] Execution handoff failed:', execError);
+            sendUpdate('execution', `Execution error: ${execError.message}`, true);
+        }
+
+        // TRIGGER LEARNING: Analyze the interaction to extract patterns/roles
+        const userId = req.user?._id;
+        if (userId) {
+            // Build full conversation for analysis: history + current prompt + result
+            const fullConversation = [
+                ...history.map(h => ({ role: h.role, content: h.content })),
+                { role: "user", content: prompt },
+                ...(executionResult?.message ? [{ role: "assistant", content: executionResult.message }] : [])
+            ];
+            if (fullConversation.length >= 2) {
+                learningService.analyzeInteraction(userId, fullConversation).catch(err => 
+                    console.error("[OrchestratorController] Learning Trigger failed:", err)
+                );
+            }
+        }
+
+        // Save Assistant Message
+        if (userId && executionResult?.message) {
+            await orchestratorChatController.saveMessage(activeChatId, null, executionResult.message);
+        }
+
         // End active execution stream
-        sendUpdate('complete', 'Orchestration Pipeline globally configured and deployed.', true);
+        sendUpdate('complete', 'Task fulfilled successfully via automated orchestration.', true, { 
+            result: executionResult,
+            agent: tasks[0].suggested_agent,
+            chatId: activeChatId
+        });
         res.end();
 
     } catch (error) {
