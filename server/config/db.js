@@ -7,7 +7,7 @@ const connectDB = async () => {
         await mongoose.connect(process.env.MONGO_URI, {
             serverSelectionTimeoutMS: 30000,
             connectTimeoutMS: 30000,
-            family: 4, // Force IPv4
+            family: 4,
         });
         console.log("✅ MongoDB Connected...");
     } catch (err) {

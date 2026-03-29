@@ -24,7 +24,15 @@ Your core capabilities:
 
 CRITICAL INSTRUCTIONS:
 - You MUST respond with valid JSON only. No markdown, no code fences, no explanations outside the JSON.
-- Classify the user's intent and extract structured data.
+- Classify the user's intent and extract structured data based on the entire conversation history.
+- MANDATORY INFORMATION GATHERING: Before executing an intent, you MUST ensure all required parameters are provided. If ANY required parameter is missing, you MUST set "needs_clarification": true and ask a natural, conversational question in "clarification_question" to get the missing info. DO NOT guess or hallucinate missing information.
+  * "send_message": REQUIRES "recipients", "body" (or detailed context to auto-generate the body), and "platform". If "platform" is missing, explicitly ask "Which platform should I use to send this (e.g., Email, Slack)?"
+  * "draft_message": REQUIRES "context" (what to write), "recipients", and "platform".
+  * "setup_followup": REQUIRES "recipients" and "timing".
+  * "broadcast_completion" or "meeting_comm": REQUIRES "recipients" and "context".
+  * "bulk_send": REQUIRES "recipients" and "body" or "context".
+- HIGH-QUALITY DRAFTS: If the user asks you to draft a message, but their context is a vague single word or short phrase (e.g., "life", "update"), you MUST set "needs_clarification": true and ask specific questions (e.g., "What is the goal of the email?", "What tone should I use?", "Any key points to mention?") before creating the draft.
+- ITERATIVE DRAFTING & VERIFICATION: NEVER auto-send a drafted message unless the user explicitly says "send it" AFTER reviewing the draft. If the user asks for changes (e.g. "make it more formal", "add missing details"), classify the intent as "draft_message" so it can be regenerated based on their feedback. Provide context notes containing their requested changes to the draft logic.
 
 Respond with this exact JSON structure:
 {
@@ -41,7 +49,7 @@ Respond with this exact JSON structure:
     "group_name": "contact group name if applicable",
     "contacts": [{"name": "...", "email": "..."}]
   },
-  "response_text": "Your natural language response to the user"
+  "response_text": "Your natural language response to the user if needs_clarification is false"
 }`;
 
 // ─── INTENT CLASSIFICATION ──────────────────────────────────────────────────
@@ -154,12 +162,20 @@ async function executeSendMessage(userId, data) {
     }
 
     const successCount = results.filter(r => r.status === "sent").length;
+    const failures = results.filter(r => r.status === "failed");
+    let returnMessage = successCount === recipients.length
+        ? `✅ Successfully sent ${successCount} message(s).`
+        : `Sent ${successCount}/${recipients.length} messages. ${failures.length} failed.`;
+
+    if (failures.length > 0) {
+        const errorDetails = failures.map(f => `${f.recipient}: ${f.error}`).join(" | ");
+        returnMessage += `\n❌ Reasons: ${errorDetails}`;
+    }
+
     return {
         success: successCount > 0,
         results,
-        message: successCount === recipients.length
-            ? `✅ Successfully sent ${successCount} message(s).`
-            : `Sent ${successCount}/${recipients.length} messages. ${results.filter(r => r.status === "failed").length} failed.`
+        message: returnMessage
     };
 }
 
@@ -253,16 +269,25 @@ async function broadcastUpdate(userId, data) {
 }
 
 // ─── §2.4 CONTEXT-AWARE DRAFTING ────────────────────────────────────────────
-async function draftContextual(userId, data) {
+async function draftContextual(userId, data, history = []) {
     const { recipients = [], context = "", body = "" } = data;
 
     try {
-        const draftPrompt = `Draft a professional but warm email for the following context:
-Context: ${context}
-${body ? `User notes: ${body}` : ""}
+        // Format previous inputs to guide the drafting
+        const historyText = history.length 
+            ? history.slice(-5).map(m => `${m.role}: ${m.content}`).join('\\n') 
+            : "";
+
+        const draftPrompt = `Draft a professional but warm email leveraging the details discussed below. Make sure to apply any specific tone, instructions, or changes the user requested recently.
+
+Current Context/Topic: ${context}
+${body ? `User specific instructions: ${body}` : ""}
 ${recipients.length ? `Recipients: ${recipients.join(", ")}` : ""}
 
-Write only the email body. Keep it concise, professional, and action-oriented.`;
+Recent Conversation History (use this for tone, context, and requested edits):
+${historyText}
+
+Write ONLY the finalized email body. Keep it structured, action-oriented, and perfectly aligned with the user's constraints.`;
 
         const response = await openai.chat.completions.create({
             model: "gpt-4o-mini",
@@ -378,9 +403,17 @@ async function retryMessage(userId, data) {
         await msg.save();
     }
 
+    const failedRetries = failedMessages.filter(m => m.status === "failed");
+    let returnMessage = `🔄 Retried ${failedMessages.length} message(s). ${retried} succeeded, ${failedMessages.length - retried} still failing.`;
+
+    if (failedRetries.length > 0) {
+        const errorDetails = failedRetries.map(f => `${f.recipientEmail}: ${f.retry.lastError}`).join(" | ");
+        returnMessage += `\n❌ Reasons: ${errorDetails}`;
+    }
+
     return {
         success: true,
-        message: `🔄 Retried ${failedMessages.length} message(s). ${retried} succeeded, ${failedMessages.length - retried} still failing.`
+        message: returnMessage
     };
 }
 
@@ -647,7 +680,7 @@ async function processMessage(userId, prompt, history = []) {
             actionResult = await broadcastUpdate(userId, data);
             break;
         case "draft_message":
-            actionResult = await draftContextual(userId, data);
+            actionResult = await draftContextual(userId, data, history);
             break;
         case "platform_route":
             actionResult = await routeToPlatform(userId, data);
