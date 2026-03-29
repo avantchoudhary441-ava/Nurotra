@@ -9,18 +9,25 @@ class EmailAdapter extends CommunicationAdapter {
     async _getGmailClient(userId) {
         const user = await User.findById(userId);
         if (!user || !user.gmailRefreshToken) {
-            throw new Error("Gmail is not connected for this user.");
+            throw new Error("Gmail is not connected for this user. Please click 'Connect Gmail' in the Nurotra dashboard first.");
         }
+
+        // Redirect URI must match the one registered in Google Cloud Console
+        const backendUrl = process.env.NODE_ENV === "production"
+            ? "https://nurotra.online"
+            : "http://localhost:5000";
 
         const oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_CLIENT_ID,
             process.env.GOOGLE_CLIENT_SECRET,
-            process.env.CLIENT_URL // redirect URL
+            `${backendUrl}/api/integrations/gmail/callback`
         );
 
-        // Set credentials using the stored refresh token
+        // Set credentials using the stored refresh token for THIS specific user
         oauth2Client.setCredentials({
-            refresh_token: user.gmailRefreshToken
+            refresh_token: user.gmailRefreshToken,
+            // If we also have an access token, set it to avoid unnecessary refresh calls
+            ...(user.gmailAccessToken && { access_token: user.gmailAccessToken })
         });
 
         return google.gmail({ version: "v1", auth: oauth2Client });
