@@ -69,10 +69,10 @@ export default function NuroDashboard({ onClose }) {
         if (!fix) return;
 
         if (fix.actionType === 'redirect') {
-            onClose(); // Close the Nuro Dashboard
+            if (onClose) onClose(); // Close the Nuro Dashboard
             navigate(fix.target);
         } else if (fix.actionType === 'guide') {
-            onClose();
+            if (onClose) onClose();
             navigate(fix.target); // Navigate to where they need to go
             // Ideally trigger a toast or highlight: "Fix it here"
         } else {
@@ -138,7 +138,9 @@ export default function NuroDashboard({ onClose }) {
                                 <span>▶</span> Walkthrough
                             </button>
                         )}
-                        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+                        {onClose && (
+                            <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+                        )}
                     </div>
                 </div>
 

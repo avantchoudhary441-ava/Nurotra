@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAgentChat } from "../../hooks/useAgentChat";
+import UnifiedInbox from "./UnifiedInbox";
 import "../../styles/communication_agent.css";
 
 const DigestDashboard = ({ data }) => {
@@ -241,6 +242,17 @@ const CommunicationAgentPage = () => {
     setLiveExecutions(prev => prev.filter(e => e.id !== id));
   };
 
+  const handleImmediateAction = async (prompt) => {
+    if (loading) return;
+    const response = await send(prompt);
+    
+    // Auto-switch to overview if digest is requested
+    if (response?.intent === 'daily_digest' && response?.action?.digest) {
+      setDigestData(response.action.digest);
+      setActiveTab('overview');
+    }
+  };
+
   return (
     <div className={`comm-agent-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       {/* Sidebar - MONOCHROMATIC STYLE */}
@@ -325,7 +337,7 @@ const CommunicationAgentPage = () => {
                     <h4>{exec.title}</h4>
                     <p>{exec.description}</p>
                     <div className="card-actions">
-                      <button className="btn-approve" onClick={() => send(`Approve ${exec.type}: ${exec.title}`)}>
+                      <button className="btn-approve" onClick={() => send(`I want to execute the ${exec.type} task: ${exec.title}. If this requires sending any communications on my behalf, please consult with me first regarding the exact details, points, or tone I want to include before drafting.`)}>
                         {exec.type === 'RETRY' ? 'Retry All' : 'Approve'}
                       </button>
                       <button className="btn-dismiss" onClick={() => dismissExecution(exec.id)}>Dismiss</button>
@@ -383,17 +395,20 @@ const CommunicationAgentPage = () => {
 
              <div className="nurotra-briefing">
                 <h4><Zap size={18} /> NUROTRA BRIEFING</h4>
-                <div className="brief-content">
-                   <div className="brief-item">
-                      <p><strong>Urgent Focus:</strong> I found 3 high-priority emails from 'Venture Partners' regarding the new strategy. They are waiting for your approval.</p>
-                   </div>
-                   <div className="brief-item">
-                      <p><strong>Missed Follow-up:</strong> No reply from 'Marketing Team' for the last 48 hours on the Q3 brief. Suggested action: Send a nudge.</p>
-                   </div>
-                   <div className="brief-item">
-                      <p><strong>Pattern Spotted:</strong> Meeting requests are increasing on Fridays. Should I block the morning for deep work?</p>
-                   </div>
-                </div>
+                 <div className="brief-content">
+                    <div className="brief-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px'}}>
+                       <p style={{margin: 0}}><strong>Urgent Focus:</strong> I found 3 high-priority emails from 'Venture Partners' regarding the new strategy. They are waiting for your approval.</p>
+                       <button className="btn-reply-inline" style={{whiteSpace: 'nowrap'}} onClick={() => send("I need to handle the 3 high-priority emails from Venture Partners. Before you draft the replies, please ask me what specific points or decisions I want to communicate to them.")}>Review & Reply</button>
+                    </div>
+                    <div className="brief-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px'}}>
+                       <p style={{margin: 0}}><strong>Missed Follow-up:</strong> No reply from 'Marketing Team' for the last 48 hours on the Q3 brief. Suggested action: Send a nudge.</p>
+                       <button className="btn-reply-inline" style={{whiteSpace: 'nowrap'}} onClick={() => send("I want to send a nudge to the Marketing Team about the Q3 brief. However, before drafting the actual message, please ask me what exactly I want to highlight, ask, or request from them.")}>Send Nudge</button>
+                    </div>
+                    <div className="brief-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px'}}>
+                       <p style={{margin: 0}}><strong>Pattern Spotted:</strong> Meeting requests are increasing on Fridays. Should I block the morning for deep work?</p>
+                       <button className="btn-reply-inline" style={{whiteSpace: 'nowrap'}} onClick={() => send("Yes, let's block my calendar on Friday mornings for deep work. Before booking this time, ask me if I have any specific focus areas or exceptions.")}>Block Calendar</button>
+                    </div>
+                 </div>
              </div>
           </div>
         ) : activeTab === 'overview' ? (
@@ -408,19 +423,12 @@ const CommunicationAgentPage = () => {
             )}
           </div>
         ) : activeTab === 'inbox' ? (
-          <div className="comm-view-container">
-            <h3>Inbox Hub</h3>
-            <p className="subtitle">Contextual messaging from all integrated platforms.</p>
-            <div className="inbox-placeholder">
-              <Mail size={48} className="icon-muted" />
-              <p>Scanning accounts... No active threads.</p>
-            </div>
-          </div>
+          <UnifiedInbox onReply={handleImmediateAction} />
         ) : activeTab === 'contacts' ? (
           <div className="comm-view-container">
             <h3>User Directory</h3>
             <p className="subtitle">Manage stakeholders, teams, and bulk lists.</p>
-            <button className="btn-action-primary" onClick={() => send("Show me my contacts")} style={{ marginTop: '20px' }}>
+            <button className="btn-action-primary" onClick={() => send("Fetch my contact list, and ask me if I want to compose a message, setup a meeting, or check history with any of them.")} style={{ marginTop: '20px' }}>
               Fetch Contact List
             </button>
           </div>
