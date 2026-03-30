@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Mail, MessageSquare, Phone, RotateCw, Search, ArrowRightLeft, Clock, User, Reply, AlertCircle, RefreshCw } from "lucide-react";
+import { Mail, MessageSquare, Phone, RotateCw, Search, ArrowRightLeft, Clock, User, Reply, AlertCircle, RefreshCw, Instagram, Monitor } from "lucide-react";
 import "../../styles/communication_agent.css";
 
 const UnifiedInbox = ({ onReply }) => {
@@ -44,6 +44,8 @@ const UnifiedInbox = ({ onReply }) => {
     switch (platform?.toLowerCase()) {
       case 'slack': return <MessageSquare size={16} />;
       case 'whatsapp': return <Phone size={16} />;
+      case 'instagram': return <Instagram size={16} />;
+      case 'msteams': return <Monitor size={16} />;
       case 'email': default: return <Mail size={16} />;
     }
   };
@@ -52,6 +54,8 @@ const UnifiedInbox = ({ onReply }) => {
     switch (platform?.toLowerCase()) {
       case 'slack': return '#eab308'; // Yellow/Gold for slack here to fit theme
       case 'whatsapp': return '#22c55e'; // Green
+      case 'instagram': return '#ec4899'; // Pink
+      case 'msteams': return '#6366f1'; // Indigo
       case 'email': default: return '#ef4444'; // Red for Gmail
     }
   };
@@ -96,6 +100,8 @@ const UnifiedInbox = ({ onReply }) => {
              <option value="email">Email</option>
              <option value="slack">Slack</option>
              <option value="whatsapp">WhatsApp</option>
+             <option value="instagram">Instagram</option>
+             <option value="msteams">MS Teams</option>
            </select>
         </div>
       </div>

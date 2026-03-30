@@ -125,6 +125,8 @@ const CommunicationAgentPage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const chatScrollRef = useRef(null);
   
+  const userName = JSON.parse(localStorage.getItem('nurotra_user') || '{}')?.user?.name?.split(' ')[0] || "User";
+  
   // Real dynamic states for the 10 capabilities
   const [serviceStatus, setServiceStatus] = useState({
     email: 'connected',
@@ -376,38 +378,36 @@ const CommunicationAgentPage = () => {
         ) : activeTab === 'gmail' ? (
           <div className="comm-view-container sync-view">
              <div className="sync-header">
-                <h3>Gmail Sync Detail</h3>
+                <h3>{userName}'s Gmail Workspace</h3>
                 <div className="sync-status">ACTIVE</div>
              </div>
              
              <div className="sync-stats-grid">
                 <div className="sync-stat-card">
                    <span className="label">Mail Sent</span>
-                   <span className="value">142</span>
-                   <div className="trend">+12% vs yesterday</div>
+                   <span className="value">{digestData?.platforms?.email?.sent || 0}</span>
                 </div>
                 <div className="sync-stat-card">
                    <span className="label">Mail Received</span>
-                   <span className="value">284</span>
-                   <div className="trend">+5% vs yesterday</div>
+                   <span className="value">{digestData?.platforms?.email?.received || 0}</span>
                 </div>
              </div>
 
              <div className="nurotra-briefing">
                 <h4><Zap size={18} /> NUROTRA BRIEFING</h4>
                  <div className="brief-content">
-                    <div className="brief-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px'}}>
-                       <p style={{margin: 0}}><strong>Urgent Focus:</strong> I found 3 high-priority emails from 'Venture Partners' regarding the new strategy. They are waiting for your approval.</p>
-                       <button className="btn-reply-inline" style={{whiteSpace: 'nowrap'}} onClick={() => send("I need to handle the 3 high-priority emails from Venture Partners. Before you draft the replies, please ask me what specific points or decisions I want to communicate to them.")}>Review & Reply</button>
-                    </div>
-                    <div className="brief-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px'}}>
-                       <p style={{margin: 0}}><strong>Missed Follow-up:</strong> No reply from 'Marketing Team' for the last 48 hours on the Q3 brief. Suggested action: Send a nudge.</p>
-                       <button className="btn-reply-inline" style={{whiteSpace: 'nowrap'}} onClick={() => send("I want to send a nudge to the Marketing Team about the Q3 brief. However, before drafting the actual message, please ask me what exactly I want to highlight, ask, or request from them.")}>Send Nudge</button>
-                    </div>
-                    <div className="brief-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px'}}>
-                       <p style={{margin: 0}}><strong>Pattern Spotted:</strong> Meeting requests are increasing on Fridays. Should I block the morning for deep work?</p>
-                       <button className="btn-reply-inline" style={{whiteSpace: 'nowrap'}} onClick={() => send("Yes, let's block my calendar on Friday mornings for deep work. Before booking this time, ask me if I have any specific focus areas or exceptions.")}>Block Calendar</button>
-                    </div>
+                    {digestData?.flaggedItems && digestData.flaggedItems.length > 0 ? (
+                       digestData.flaggedItems.map((item, idx) => (
+                          <div key={idx} className="brief-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px'}}>
+                             <p style={{margin: 0}}><strong>{item.meta || 'Attention'}:</strong> {item.text}</p>
+                             <button className="btn-reply-inline" style={{whiteSpace: 'nowrap'}} onClick={() => send(`I need to handle this: "${item.text}". Please ask me what specific points or decisions I want to communicate before taking any action.`)}>Review & Act</button>
+                          </div>
+                       ))
+                    ) : (
+                       <div className="brief-item">
+                          <p style={{margin: 0, color: '#64748b'}}>No urgent briefings or flagged communications matching your workflow today.</p>
+                       </div>
+                    )}
                  </div>
              </div>
           </div>
