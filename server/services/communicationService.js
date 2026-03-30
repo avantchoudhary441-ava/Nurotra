@@ -119,14 +119,23 @@ async function executeSendMessage(userId, data) {
             }
 
             // Find or create contact
-            let contact = await Contact.findOne({ userId, email: recipient });
-            if (!contact) {
-                contact = await Contact.create({
-                    userId,
-                    name: recipient.split("@")[0],
-                    email: recipient,
-                    platform
-                });
+            let contact = null;
+            try {
+                contact = await Contact.findOne({ userId, email: recipient });
+                if (!contact) {
+                    // If platform is whatsapp, the recipient is a phone number. 
+                    // We'll store it in the 'email' field for now but also the 'phone' field for consistency.
+                    contact = await Contact.create({
+                        userId,
+                        name: recipient.includes("@") ? recipient.split("@")[0] : recipient,
+                        email: recipient, // String-based ID
+                        phone: !recipient.includes("@") ? recipient : "",
+                        platform
+                    });
+                }
+            } catch (dbErr) {
+                console.warn(`[CommService] Contact creation/lookup failed for ${recipient}:`, dbErr.message);
+                // Continue without a contactId if necessary, or assign a dummy
             }
 
             // Log message

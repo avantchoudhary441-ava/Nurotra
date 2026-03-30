@@ -42,7 +42,8 @@ import History from "./pages/History";
 import SafetyTrust from "./pages/SafetyTrust";
 import DocsAgentPage from "./pages/DocsAgent/DocsAgentPage";
 import TimeAgentPage from "./pages/TimeAgent/TimeAgentPage";
-import NuroDashboard from "./pages/NuroDashboard/NuroDashboard";
+import NuroDashboard from "./components/Nuro/NuroDashboard";
+import CommunicationAgentPage from "./pages/CommunicationAgent/CommunicationAgentPage";
 
 
 import { NuroCoreProvider } from "./context/NuroCoreContext";
@@ -128,6 +129,7 @@ export default function App() {
             <Route path="/docs-agent" element={<DocsAgentPage />} />
             <Route path="/time-agent" element={<TimeAgentPage />} />
             <Route path="/nuro-dashboard" element={<NuroDashboard />} />
+            <Route path="/communication-agent" element={<CommunicationAgentPage />} />
 
             {/* 404 Debug Catch-all */}
             <Route path="*" element={
