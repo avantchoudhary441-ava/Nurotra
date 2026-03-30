@@ -12,11 +12,11 @@ const SYSTEM_PROMPT = `You are the Communication Agent for Nurotra's AI Workforc
 You act as the user's intelligent communication layer — executing, managing, and optimizing all communication across platforms.
 
 Your core capabilities:
-1. SEND MESSAGES: Send emails on behalf of the user via Gmail.
+1. SEND MESSAGES: Send emails (Gmail) or WhatsApp messages on behalf of the user.
 2. AUTO FOLLOW-UPS: Configure automatic follow-ups if recipients don't reply.
-3. TASK BROADCASTS: Notify stakeholders when tasks are completed.
+3. TASK BROADCASTS: Notify stakeholders when tasks are completed via Email or WhatsApp.
 4. CONTEXT-AWARE DRAFTS: Generate intelligent, relevant messages using context from other agents.
-5. MULTI-PLATFORM ROUTING: Route messages to email or Slack.
+5. MULTI-PLATFORM ROUTING: Route messages to Email, WhatsApp, or Slack.
 6. COMMUNICATION MEMORY: Remember past conversations and patterns.
 7. FAILURE HANDLING: Retry failed messages and escalate failures.
 8. DAILY DIGEST: Generate summaries of all communication activity.
@@ -27,7 +27,7 @@ CRITICAL INSTRUCTIONS:
 - You MUST respond with valid JSON only. No markdown, no code fences, no explanations outside the JSON.
 - Classify the user's intent and extract structured data based on the entire conversation history.
 - MANDATORY INFORMATION GATHERING: Before executing an intent, you MUST ensure all required parameters are provided. If ANY required parameter is missing, you MUST set "needs_clarification": true and ask a natural, conversational question in "clarification_question" to get the missing info. DO NOT guess or hallucinate missing information.
-  * "send_message": REQUIRES "recipients", "body" (or detailed context to auto-generate the body), and "platform". If "platform" is missing, explicitly ask "Which platform should I use to send this (e.g., Email, Slack)?"
+  * "send_message": REQUIRES "recipients", "body" (or detailed context to auto-generate the body), and "platform". If "platform" is missing, explicitly ask "Which platform should I use to send this (e.g., Email, WhatsApp, Slack)?"
   * "draft_message": REQUIRES "context" (what to write), "recipients", and "platform".
   * "setup_followup": REQUIRES "recipients" and "timing".
   * "broadcast_completion" or "meeting_comm": REQUIRES "recipients" and "context".
@@ -44,7 +44,7 @@ Respond with this exact JSON structure:
     "recipients": ["email/name array"],
     "subject": "email subject if applicable",
     "body": "message body if applicable",
-    "platform": "email|slack",
+    "platform": "email|slack|whatsapp",
     "context": "project/task context",
     "timing": "follow-up timing if applicable",
     "group_name": "contact group name if applicable",
@@ -345,10 +345,8 @@ async function routeToPlatform(userId, data) {
     }
 
     if (platform === "whatsapp") {
-        return {
-            success: false,
-            message: "📱 WhatsApp integration requires account connection. This feature is coming soon! For now, I can send via email."
-        };
+        // Now fully supported!
+        return await executeSendMessage(userId, data);
     }
 
     // Default to email execution
