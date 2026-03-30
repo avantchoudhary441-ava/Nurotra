@@ -53,7 +53,7 @@ class WhatsAppAdapter extends CommunicationAdapter {
                 results.push({ 
                     recipient, 
                     status: "failed", 
-                    error: error.response ? error.response.data.error.message : error.message 
+                    error: error.response?.data?.error?.message || error.message || "Unknown error"
                 });
             }
         }
