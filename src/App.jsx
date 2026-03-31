@@ -42,6 +42,8 @@ import History from "./pages/History";
 import SafetyTrust from "./pages/SafetyTrust";
 import DocsAgentPage from "./pages/DocsAgent/DocsAgentPage";
 import TimeAgentPage from "./pages/TimeAgent/TimeAgentPage";
+import CommunicationAgentPage from "./pages/CommunicationAgent/CommunicationAgentPage";
+import NuroDashboard from "./components/Nuro/NuroDashboard";
 import NuroDashboard from "./components/Nuro/NuroDashboard";
 import CommunicationAgentPage from "./pages/CommunicationAgent/CommunicationAgentPage";
 import OrchestratorLayout from "./components/Orchestrator/OrchestratorLayout";
@@ -131,6 +133,7 @@ export default function App() {
             <Route path="/nuro-lab" element={<NuroLab />} />
             <Route path="/docs-agent" element={<DocsAgentPage />} />
             <Route path="/time-agent" element={<TimeAgentPage />} />
+            <Route path="/communication-agent" element={<CommunicationAgentPage />} />
             <Route path="/nuro-dashboard" element={<NuroDashboard />} />
             <Route path="/communication-agent" element={<CommunicationAgentPage />} />
 
