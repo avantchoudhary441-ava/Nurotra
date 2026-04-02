@@ -909,7 +909,34 @@ async function processMessage(userId, prompt, history = []) {
     const classification = await classifyIntent(prompt, history);
     console.log(`[CommService] Intent: ${classification.intent}`);
 
-    // Step 2: If clarification needed, return question
+    // Step 2: Auto-Grounding (Resource Engine)
+    const resourceEngineService = require("./resourceEngineService");
+    const groundedResources = await resourceEngineService.autoGround(userId, prompt);
+    
+    const data = classification.extracted_data || {};
+    
+    // Inject grounded data into extracted_data if missing
+    if (groundedResources.length > 0) {
+        data.groundedContext = "";
+        for (const res of groundedResources) {
+            // resolve recipients from contact resources
+            if (res.type === 'contact' && res.data?.email) {
+                if (!data.recipients) data.recipients = [];
+                if (!data.recipients.includes(res.data.email)) {
+                    data.recipients.push(res.data.email);
+                    console.log(`[CommService] Resolved recipient from Resource: ${res.data.email}`);
+                }
+            }
+            // resolve context from file resources
+            if (res.type === 'file') {
+                const Document = require("../models/Document");
+                const doc = await Document.findById(res.refId);
+                if (doc) data.groundedContext += `[CONTEXT FROM ${res.title}]:\n${doc.content}\n\n`;
+            }
+        }
+    }
+
+    // Step 3: If clarification needed, return question
     if (classification.needs_clarification) {
         return {
             intent: classification.intent,
@@ -919,7 +946,6 @@ async function processMessage(userId, prompt, history = []) {
     }
 
     // Step 3: Route to handler
-    const data = classification.extracted_data || {};
     let actionResult = null;
 
     switch (classification.intent) {
@@ -933,6 +959,9 @@ async function processMessage(userId, prompt, history = []) {
             actionResult = await broadcastUpdate(userId, data);
             break;
         case "draft_message":
+            if (data.groundedContext) {
+                data.context = (data.groundedContext || "") + (data.context || "");
+            }
             actionResult = await draftContextual(userId, data, history);
             break;
         case "platform_route":
