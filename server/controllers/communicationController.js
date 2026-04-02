@@ -1,5 +1,7 @@
 const communicationService = require("../services/communicationService");
 const CommunicationFactory = require("../services/communication/CommunicationFactory");
+const Meeting = require("../models/Meeting");
+const BulkCampaign = require("../models/BulkCampaign");
 const Contact = require("../models/Contact");
 const CommMessage = require("../models/CommMessage");
 const CommRule = require("../models/CommRule");
@@ -204,6 +206,69 @@ const getPlatformMessages = async (req, res) => {
     } catch (error) {
         console.error(`[CommController] getPlatformMessages error:`, error);
         res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * List Meetings
+ * GET /api/communication/meetings
+ */
+const getMeetings = async (req, res) => {
+    try {
+        const meetings = await Meeting.find({ userId: req.user._id })
+            .sort({ startTime: 1 });
+        res.json({ success: true, meetings });
+    } catch (error) {
+        console.error("[CommController] Meetings error:", error);
+        res.status(500).json({ message: "Failed to fetch meetings." });
+    }
+};
+
+/**
+ * Trigger Lifecycle Sync
+ * POST /api/communication/meetings/sync
+ */
+const syncMeetings = async (req, res) => {
+    try {
+        const result = await communicationService.syncMeetingLifecycle(req.user._id);
+        res.json({ success: true, ...result });
+    } catch (error) {
+        console.error("[CommController] Sync error:", error);
+        res.status(500).json({ message: "Failed to sync meetings." });
+    }
+};
+
+/**
+ * List Bulk Campaigns
+ * GET /api/communication/campaigns
+ */
+const getCampaigns = async (req, res) => {
+    try {
+        const campaigns = await BulkCampaign.find({ userId: req.user._id })
+            .sort({ createdAt: -1 });
+        res.json({ success: true, campaigns });
+    } catch (error) {
+        console.error("[CommController] Campaigns error:", error);
+        res.status(500).json({ message: "Failed to fetch campaigns." });
+    }
+};
+
+/**
+ * Get Campaign Detail with individual messages
+ * GET /api/communication/campaigns/:id
+ */
+const getCampaignDetail = async (req, res) => {
+    try {
+        const campaign = await BulkCampaign.findOne({ _id: req.params.id, userId: req.user._id });
+        if (!campaign) return res.status(404).json({ message: "Campaign not found." });
+
+        const messages = await CommMessage.find({ campaignId: campaign._id })
+            .populate("contactId", "name email");
+
+        res.json({ success: true, campaign, messages });
+    } catch (error) {
+        console.error("[CommController] Campaign detail error:", error);
+        res.status(500).json({ message: "Failed to fetch campaign details." });
     }
 };
 
