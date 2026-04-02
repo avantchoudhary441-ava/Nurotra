@@ -951,232 +951,298 @@
 .card-unread { --card-color: var(--neon-orange); --card-rgb: 245, 158, 11; }
 .card-reply { --card-color: var(--neon-pink); --card-rgb: 236, 72, 153; }
 
-/* === UNIFIED INBOX === */
-.unified-inbox-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+/* Meetings View & Lifecycle Tracker */
+.meetings-view {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
 }
 
-.inbox-header-area {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+.view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding-bottom: 20px;
 }
 
-.inbox-title-wrap h3 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 6px;
+.btn-sync {
+    background: rgba(0, 163, 255, 0.1);
+    border: 1px solid rgba(0, 163, 255, 0.2);
+    color: #00a3ff;
+    padding: 8px 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
-.inbox-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.btn-sync.loading {
+    opacity: 0.7;
+    cursor: not-allowed;
 }
 
-.btn-refresh {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
+.meetings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
 }
 
-.btn-refresh:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+.meeting-card {
+    position: relative;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow: hidden;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
 }
 
-.inbox-filter {
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e2e8f0;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 13px;
-  outline: none;
-  cursor: pointer;
+.meeting-tag {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-bottom-left-radius: 12px;
+    letter-spacing: 0.05em;
 }
 
-.inbox-filter option {
-  background: #0f172a;
-  color: #fff;
+.meeting-tag[data-phase="pre-event"] { background: rgba(0, 163, 255, 0.2); color: #00a3ff; }
+.meeting-tag[data-phase="during-event"] { background: rgba(255, 171, 0, 0.2); color: #ffab00; }
+.meeting-tag[data-phase="post-event"] { background: rgba(54, 179, 126, 0.2); color: #36b37e; }
+
+.meeting-name {
+    font-size: 1.1rem;
+    color: #fff;
+    margin: 0;
 }
 
-.inbox-message-list {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
-  padding-bottom: 40px;
+.meeting-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.5);
 }
 
-.inbox-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 300px;
-  color: #64748b;
-  gap: 16px;
+.meeting-meta span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-.inbox-empty-state .icon-muted {
-  opacity: 0.5;
+.participant-tracker {
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid rgba(255,255,255,0.03);
 }
 
-.inbox-card {
-  display: flex;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  border-radius: 16px;
-  padding: 20px;
-  gap: 20px;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
+.tracker-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 12px;
+    letter-spacing: 0.05em;
 }
 
-.inbox-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: transparent;
+.participant-mini-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-.inbox-card.received-card::before {
-  background: var(--neon-purple);
+.p-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
 }
 
-.inbox-card.sent-card::before {
-  background: var(--neon-blue);
+.p-email {
+    color: rgba(255,255,255,0.8);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.inbox-card:hover {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+.p-badge {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: capitalize;
 }
 
-.platform-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.p-badge.confirmed { color: #36b37e; background: rgba(54, 179, 126, 0.1); }
+.p-badge.invited { color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.05); }
+.p-badge.declined { color: #ff5630; background: rgba(255, 86, 48, 0.1); }
+
+.meeting-agenda-box {
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.5;
+    padding: 10px;
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
 }
 
-.inbox-card-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+.meeting-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
 }
 
-.inbox-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
+.btn-tiny {
+    flex: 1;
+    padding: 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
 }
 
-.inbox-contact {
-  font-size: 13px;
-  color: #94a3b8;
+.btn-tiny.primary { background: #fff; color: #000; }
+.btn-tiny.secondary { background: rgba(255,255,255,0.05); color: #fff; border-color: rgba(255,255,255,0.1); }
+
+/* Bulk Outreach / Campaigns View */
+.campaigns-view {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
 }
 
-.contact-name {
-  font-weight: 600;
-  color: #f8fafc;
-  font-size: 15px;
-  margin-left: 4px;
+.campaign-stats-overview {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
 }
 
-.inbox-time {
-  font-size: 12px;
-  color: #64748b;
+.mini-stat {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
 }
 
-.inbox-subject {
-  font-weight: 600;
-  color: #e2e8f0;
-  font-size: 14px;
-  margin-bottom: 8px;
+.mini-stat .val {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #fff;
 }
 
-.inbox-body-preview {
-  color: #94a3b8;
-  font-size: 13px;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin-bottom: 16px;
+.mini-stat .lab {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255,255,255,0.3);
 }
 
-.inbox-card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: auto;
+.campaign-card {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    transition: transform 0.3s ease;
 }
 
-.status-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #64748b;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 4px 10px;
-  border-radius: 20px;
+.campaign-card:hover {
+    transform: translateY(-4px);
 }
 
-.status-dot.delivered, .status-dot.sent { background: #10b981; }
-.status-dot.failed { background: #ef4444; }
-.status-dot.draft { background: #f59e0b; }
-.status-dot.pending_retry { background: #eab308; animation: pulse-status 2s infinite; }
-
-.btn-reply-inline {
-  background: rgba(168, 85, 247, 0.1);
-  border: 1px solid rgba(168, 85, 247, 0.2);
-  color: #a855f7;
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s;
+.campaign-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
 }
 
-.btn-reply-inline:hover {
-  background: rgba(168, 85, 247, 0.2);
-  border-color: rgba(168, 85, 247, 0.4);
-  color: #fff;
-  transform: translateY(-1px);
+.campaign-status-pill {
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
+
+.campaign-status-pill.active { background: rgba(0, 163, 255, 0.2); color: #00a3ff; }
+.campaign-status-pill.completed { background: rgba(54, 179, 126, 0.2); color: #36b37e; }
+.campaign-status-pill.sending { background: rgba(255, 171, 0, 0.2); color: #ffab00; }
+
+.campaign-subject {
+    font-size: 0.9rem;
+    color: rgba(255,255,255,0.4);
+    font-style: italic;
+    border-left: 2px solid rgba(255,255,255,0.05);
+    padding-left: 12px;
+}
+
+.campaign-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.6);
+}
+
+.progress-bar {
+    height: 6px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00a3ff, #0056b3);
+    border-radius: 10px;
+}
+
+.campaign-mini-stats {
+    display: flex;
+    justify-content: space-between;
+    padding: 16px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+}
+
+.c-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.c-val {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.c-lab {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.3);
+}
+
+.text-blue { color: #00a3ff; }
+.text-green { color: #36b37e; }
+.text-purple { color: #9747ff; }
+.text-red { color: #ff5630; }
