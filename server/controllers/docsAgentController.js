@@ -169,6 +169,17 @@ const createDocument = async (req, res) => {
             userId: req.user._id
         });
         await document.save();
+
+        // AUTO-INGEST into Resource Engine
+        const resourceEngineService = require("../services/resourceEngineService");
+        await resourceEngineService.autoIngest(
+            req.user._id,
+            "file",
+            { docType: document.type, projectId: document.projectId },
+            document.name,
+            document._id
+        );
+
         res.status(201).json({ ...document._doc, id: document._id });
     } catch (error) {
         console.error("Create Document Error:", error);
@@ -216,6 +227,17 @@ const updateDocument = async (req, res) => {
         document.updatedAt = new Date();
 
         await document.save();
+
+        // AUTO-INGEST into Resource Engine
+        const resourceEngineService = require("../services/resourceEngineService");
+        await resourceEngineService.autoIngest(
+            req.user._id,
+            "file",
+            { docType: document.type, projectId: document.projectId },
+            document.name,
+            document._id
+        );
+
         res.json({ ...document._doc, id: document._id });
     } catch (error) {
         console.error("Update Document Error:", error);

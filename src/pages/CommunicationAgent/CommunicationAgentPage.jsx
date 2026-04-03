@@ -17,11 +17,17 @@ import {
   AlertTriangle,
   Flame,
   Globe,
-  ChevronLeft
+  ChevronLeft,
+  Calendar,
+  Clock,
+  FileText,
+  UserCheck,
+  Megaphone,
+  BarChart3,
+  Target
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAgentChat } from "../../hooks/useAgentChat";
-import UnifiedInbox from "./UnifiedInbox";
 import "../../styles/communication_agent.css";
 
 const DigestDashboard = ({ data }) => {
@@ -125,8 +131,6 @@ const CommunicationAgentPage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const chatScrollRef = useRef(null);
   
-  const userName = JSON.parse(localStorage.getItem('nurotra_user') || '{}')?.user?.name?.split(' ')[0] || "User";
-  
   // Real dynamic states for the 10 capabilities
   const [serviceStatus, setServiceStatus] = useState({
     email: 'connected',
@@ -154,6 +158,9 @@ const CommunicationAgentPage = () => {
   const [executionHistory, setExecutionHistory] = useState([]);
 
   const [digestData, setDigestData] = useState(null);
+  const [meetings, setMeetings] = useState([]);
+  const [meetingSyncing, setMeetingSyncing] = useState(false);
+  const [campaigns, setCampaigns] = useState([]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -222,6 +229,28 @@ const CommunicationAgentPage = () => {
           }
         }
 
+        // 4. Fetch Meetings Loop
+        const meetingsRes = await fetch('http://localhost:5000/api/communication/meetings', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (meetingsRes.ok) {
+          const mData = await meetingsRes.json();
+          if (mData.success) {
+             setMeetings(mData.meetings);
+          }
+        }
+
+        // 5. Fetch Bulk Campaigns
+        const campaignsRes = await fetch('http://localhost:5000/api/communication/campaigns', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (campaignsRes.ok) {
+          const cData = await campaignsRes.json();
+          if (cData.success) {
+            setCampaigns(cData.campaigns);
+          }
+        }
+
       } catch (err) {
         console.error("Dashboard data fetch failed:", err);
       }
@@ -249,16 +278,188 @@ const CommunicationAgentPage = () => {
     setLiveExecutions(prev => prev.filter(e => e.id !== id));
   };
 
-  const handleImmediateAction = async (prompt) => {
-    if (loading) return;
-    const response = await send(prompt);
-    
-    // Auto-switch to overview if digest is requested
-    if (response?.intent === 'daily_digest' && response?.action?.digest) {
-      setDigestData(response.action.digest);
-      setActiveTab('overview');
-    }
-  };
+  // ─── MEETINGS VIEW ────────────────────────────────────────────────────────
+  const renderMeetings = () => (
+    <div className="comm-view-container meetings-view anim-fade-in">
+      <div className="view-header">
+        <div>
+          <h3>Meeting Lifecycle Loop</h3>
+          <p className="subtitle">Tracking Pre-Event, Execution, and Post-Event follow-ups.</p>
+        </div>
+        <button 
+          className={`btn-sync ${meetingSyncing ? 'loading' : ''}`}
+          onClick={async () => {
+            setMeetingSyncing(true);
+            const token = localStorage.getItem('token');
+            await fetch('http://localhost:5000/api/communication/meetings/sync', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            // Re-fetch
+            const res = await fetch('http://localhost:5000/api/communication/meetings', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success) setMeetings(data.meetings);
+            }
+            setMeetingSyncing(false);
+          }}
+        >
+          <RotateCw size={16} className={meetingSyncing ? 'spin' : ''} />
+          {meetingSyncing ? 'Syncing...' : 'Sync Loop'}
+        </button>
+      </div>
+
+      <div className="meetings-grid">
+        {meetings.length === 0 ? (
+          <div className="empty-state">
+            <Calendar size={48} className="icon-muted" />
+            <p>No active meeting loops found.</p>
+            <span>Ask me to "Schedule a meeting" to start a cycle.</span>
+          </div>
+        ) : (
+          meetings.map(meeting => (
+            <div key={meeting._id} className="meeting-card glass-panel">
+              <div className="meeting-tag" data-phase={meeting.phase}>
+                {meeting.phase.toUpperCase()}
+              </div>
+              <h4 className="meeting-name">{meeting.title}</h4>
+              <div className="meeting-meta">
+                <span><Clock size={14} /> {new Date(meeting.startTime).toLocaleString()}</span>
+                <span><Users size={14} /> {meeting.participants.length} Participants</span>
+              </div>
+              
+              <div className="participant-tracker">
+                <div className="tracker-header">
+                  <span>RSVP TRACKING</span>
+                  <span className="count">{meeting.participants.filter(p => p.status === 'confirmed').length}/{meeting.participants.length}</span>
+                </div>
+                <div className="participant-mini-list">
+                  {meeting.participants.map((p, idx) => (
+                    <div key={idx} className="p-item">
+                      <span className="p-email">{p.email}</span>
+                      <span className={`p-badge ${p.status}`}>
+                        {p.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {meeting.agenda && (
+                <div className="meeting-agenda-box">
+                  <p><strong><FileText size={14} /> Agenda:</strong> {meeting.agenda}</p>
+                </div>
+              )}
+
+              <div className="meeting-actions">
+                <button className="btn-tiny primary">Nudge All</button>
+                <button className="btn-tiny secondary">Details</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
+  // ─── CAMPAIGNS VIEW ───────────────────────────────────────────────────────
+  const renderCampaigns = () => (
+    <div className="comm-view-container campaigns-view anim-fade-in">
+      <div className="view-header">
+        <div>
+          <h3>Bulk Outreach Campaigns</h3>
+          <p className="subtitle">Individualized messaging loops with atomic tracking.</p>
+        </div>
+        <button 
+          className="btn-sync"
+          onClick={async () => {
+            const token = localStorage.getItem('token');
+            const res = await fetch('http://localhost:5000/api/communication/campaigns', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success) setCampaigns(data.campaigns);
+            }
+          }}
+        >
+          <RotateCw size={16} />
+          Refresh
+        </button>
+      </div>
+
+      <div className="campaign-stats-overview">
+         <div className="mini-stat glass-panel">
+            <Target size={20} className="text-blue" />
+            <div className="val">{campaigns.length}</div>
+            <div className="lab">Active Campaigns</div>
+         </div>
+         <div className="mini-stat glass-panel">
+            <UserCheck size={20} className="text-green" />
+            <div className="val">{campaigns.reduce((acc, c) => acc + (c.stats?.sent || 0), 0)}</div>
+            <div className="lab">Total Personalized Sends</div>
+         </div>
+         <div className="mini-stat glass-panel">
+            <BarChart3 size={20} className="text-purple" />
+            <div className="val">{campaigns.reduce((acc, c) => acc + (c.stats?.replied || 0), 0)}</div>
+            <div className="lab">Total Replies</div>
+         </div>
+      </div>
+
+      <div className="campaigns-grid">
+        {campaigns.length === 0 ? (
+          <div className="empty-state">
+            <Megaphone size={48} className="icon-muted" />
+            <p>No outreach campaigns found.</p>
+            <span>Try: "Send a pitch to my investor group"</span>
+          </div>
+        ) : (
+          campaigns.map(campaign => (
+            <div key={campaign._id} className="campaign-card glass-panel">
+              <div className="campaign-header">
+                 <h4 className="campaign-title">{campaign.title}</h4>
+                 <div className={`campaign-status-pill ${campaign.status}`}>{campaign.status}</div>
+              </div>
+              
+              <div className="campaign-subject">"{campaign.subject}"</div>
+
+              <div className="campaign-progress">
+                 <div className="progress-label">
+                    <span>Performance</span>
+                    <span>{Math.round(((campaign.stats?.sent || 0) / campaign.totalRecipients) * 100)}% Execution</span>
+                 </div>
+                 <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${((campaign.stats?.sent || 0) / campaign.totalRecipients) * 100}%` }}></div>
+                 </div>
+              </div>
+
+              <div className="campaign-mini-stats">
+                 <div className="c-stat">
+                    <span className="c-val">{campaign.stats?.sent}</span>
+                    <span className="c-lab">Sent</span>
+                 </div>
+                 <div className="c-stat">
+                    <span className="c-val text-green">{campaign.stats?.replied}</span>
+                    <span className="c-lab">Replies</span>
+                 </div>
+                 <div className="c-stat">
+                    <span className="c-val text-red">{campaign.stats?.failed}</span>
+                    <span className="c-lab">Failed</span>
+                 </div>
+              </div>
+
+              <div className="campaign-actions">
+                 <button className="btn-tiny primary">View Recipients</button>
+                 <button className="btn-tiny secondary">Draft Nudges</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className={`comm-agent-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -284,6 +485,14 @@ const CommunicationAgentPage = () => {
             <button className={`nav-item ${activeTab === 'contacts' ? 'active' : ''}`} onClick={() => setActiveTab('contacts')}>
               <span className="nav-icon"><Users size={18} /></span>
               <span className="nav-text">Directory</span>
+            </button>
+            <button className={`nav-item ${activeTab === 'meetings' ? 'active' : ''}`} onClick={() => setActiveTab('meetings')}>
+              <span className="nav-icon"><Calendar size={18} /></span>
+              <span className="nav-text">Meetings Loop</span>
+            </button>
+            <button className={`nav-item ${activeTab === 'campaigns' ? 'active' : ''}`} onClick={() => setActiveTab('campaigns')}>
+              <span className="nav-icon"><Megaphone size={18} /></span>
+              <span className="nav-text">Bulk Outreach</span>
             </button>
           </div>
 
@@ -344,7 +553,7 @@ const CommunicationAgentPage = () => {
                     <h4>{exec.title}</h4>
                     <p>{exec.description}</p>
                     <div className="card-actions">
-                      <button className="btn-approve" onClick={() => send(`I want to execute the ${exec.type} task: ${exec.title}. If this requires sending any communications on my behalf, please consult with me first regarding the exact details, points, or tone I want to include before drafting.`)}>
+                      <button className="btn-approve" onClick={() => send(`Approve ${exec.type}: ${exec.title}`)}>
                         {exec.type === 'RETRY' ? 'Retry All' : 'Approve'}
                       </button>
                       <button className="btn-dismiss" onClick={() => dismissExecution(exec.id)}>Dismiss</button>
@@ -383,37 +592,36 @@ const CommunicationAgentPage = () => {
         ) : activeTab === 'gmail' ? (
           <div className="comm-view-container sync-view">
              <div className="sync-header">
-                <h3>{userName}'s Gmail Workspace</h3>
+                <h3>Gmail Sync Detail</h3>
                 <div className="sync-status">ACTIVE</div>
              </div>
              
              <div className="sync-stats-grid">
                 <div className="sync-stat-card">
                    <span className="label">Mail Sent</span>
-                   <span className="value">{digestData?.platforms?.email?.sent || 0}</span>
+                   <span className="value">142</span>
+                   <div className="trend">+12% vs yesterday</div>
                 </div>
                 <div className="sync-stat-card">
                    <span className="label">Mail Received</span>
-                   <span className="value">{digestData?.platforms?.email?.received || 0}</span>
+                   <span className="value">284</span>
+                   <div className="trend">+5% vs yesterday</div>
                 </div>
              </div>
 
              <div className="nurotra-briefing">
                 <h4><Zap size={18} /> NUROTRA BRIEFING</h4>
-                 <div className="brief-content">
-                    {digestData?.flaggedItems && digestData.flaggedItems.length > 0 ? (
-                       digestData.flaggedItems.map((item, idx) => (
-                          <div key={idx} className="brief-item" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px'}}>
-                             <p style={{margin: 0}}><strong>{item.meta || 'Attention'}:</strong> {item.text}</p>
-                             <button className="btn-reply-inline" style={{whiteSpace: 'nowrap'}} onClick={() => send(`I need to handle this: "${item.text}". Please ask me what specific points or decisions I want to communicate before taking any action.`)}>Review & Act</button>
-                          </div>
-                       ))
-                    ) : (
-                       <div className="brief-item">
-                          <p style={{margin: 0, color: '#64748b'}}>No urgent briefings or flagged communications matching your workflow today.</p>
-                       </div>
-                    )}
-                 </div>
+                <div className="brief-content">
+                   <div className="brief-item">
+                      <p><strong>Urgent Focus:</strong> I found 3 high-priority emails from 'Venture Partners' regarding the new strategy. They are waiting for your approval.</p>
+                   </div>
+                   <div className="brief-item">
+                      <p><strong>Missed Follow-up:</strong> No reply from 'Marketing Team' for the last 48 hours on the Q3 brief. Suggested action: Send a nudge.</p>
+                   </div>
+                   <div className="brief-item">
+                      <p><strong>Pattern Spotted:</strong> Meeting requests are increasing on Fridays. Should I block the morning for deep work?</p>
+                   </div>
+                </div>
              </div>
           </div>
         ) : activeTab === 'overview' ? (
@@ -428,15 +636,26 @@ const CommunicationAgentPage = () => {
             )}
           </div>
         ) : activeTab === 'inbox' ? (
-          <UnifiedInbox onReply={handleImmediateAction} />
+          <div className="comm-view-container">
+            <h3>Inbox Hub</h3>
+            <p className="subtitle">Contextual messaging from all integrated platforms.</p>
+            <div className="inbox-placeholder">
+              <Mail size={48} className="icon-muted" />
+              <p>Scanning accounts... No active threads.</p>
+            </div>
+          </div>
         ) : activeTab === 'contacts' ? (
           <div className="comm-view-container">
             <h3>User Directory</h3>
             <p className="subtitle">Manage stakeholders, teams, and bulk lists.</p>
-            <button className="btn-action-primary" onClick={() => send("Fetch my contact list, and ask me if I want to compose a message, setup a meeting, or check history with any of them.")} style={{ marginTop: '20px' }}>
+            <button className="btn-action-primary" onClick={() => send("Show me my contacts")} style={{ marginTop: '20px' }}>
               Fetch Contact List
             </button>
           </div>
+        ) : activeTab === 'meetings' ? (
+           renderMeetings()
+        ) : activeTab === 'campaigns' ? (
+           renderCampaigns()
         ) : null}
       </main>
 

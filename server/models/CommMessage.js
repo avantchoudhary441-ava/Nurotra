@@ -11,6 +11,16 @@ const commMessageSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "Contact"
     },
+    meetingId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Meeting",
+        index: true
+    },
+    campaignId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "BulkCampaign",
+        index: true
+    },
     direction: {
         type: String,
         enum: ["sent", "received"],

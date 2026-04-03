@@ -21,6 +21,14 @@ router.get("/digest", protect, commController.getDigest);
 // Message history
 router.get("/history", protect, commController.getHistory);
 
+// Meetings Lifecycle
+router.get("/meetings", protect, commController.getMeetings);
+router.post("/meetings/sync", protect, commController.syncMeetings);
+
+// Bulk Campaigns
+router.get("/campaigns", protect, commController.getCampaigns);
+router.get("/campaigns/:id", protect, commController.getCampaignDetail);
+
 // Automation rules
 router.get("/rules", protect, commController.getRules);
 router.post("/rules", protect, commController.createRule);

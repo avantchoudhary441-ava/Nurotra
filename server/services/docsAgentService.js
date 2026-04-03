@@ -27,10 +27,25 @@ const docsAgentService = {
         const { prompt, docIds = [], links = [], uploadedFiles = [], history = [], currentDoc = null } = options;
 
         try {
-            console.log(`[DocsAgentService] Starting Pipeline for: "${prompt.substring(0, 50)}..."`);
+            // 0. Auto-Grounding (Resource Engine)
+            const resourceEngineService = require("./resourceEngineService");
+            const groundedResources = await resourceEngineService.autoGround(user._id, prompt);
+            
+            let resourceContext = "";
+            if (groundedResources.length > 0) {
+                resourceContext = "\n### AUTO-GROUNDED RESOURCES (FROM MEMORY):\n";
+                for (const res of groundedResources) {
+                    if (res.type === 'file' && res.refId) {
+                        const doc = await Document.findById(res.refId);
+                        if (doc) resourceContext += `[RESOURCE: ${res.title}]\n${doc.content}\n\n`;
+                    } else {
+                        resourceContext += `[RESOURCE: ${res.title}] (${res.type})\n${JSON.stringify(res.data)}\n\n`;
+                    }
+                }
+            }
 
             // 1. Ingest Sources
-            let sourceContent = "";
+            let sourceContent = resourceContext;
             if (docIds.length > 0) {
                 const docs = await Document.find({ _id: { $in: docIds } });
                 sourceContent += docs.map(d => `SOURCE [DOC: ${d.name}]:\n${d.content}`).join("\n\n");

@@ -3,7 +3,8 @@ const CommunicationFactory = require("./communication/CommunicationFactory");
 const Contact = require("../models/Contact");
 const CommMessage = require("../models/CommMessage");
 const CommRule = require("../models/CommRule");
-const NuroMemory = require("../models/NuroMemory");
+const Meeting = require("../models/Meeting");
+const BulkCampaign = require("../models/BulkCampaign");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -12,11 +13,11 @@ const SYSTEM_PROMPT = `You are the Communication Agent for Nurotra's AI Workforc
 You act as the user's intelligent communication layer — executing, managing, and optimizing all communication across platforms.
 
 Your core capabilities:
-1. SEND MESSAGES: Send emails (Gmail) or WhatsApp messages on behalf of the user.
+1. SEND MESSAGES: Send emails on behalf of the user via Gmail.
 2. AUTO FOLLOW-UPS: Configure automatic follow-ups if recipients don't reply.
-3. TASK BROADCASTS: Notify stakeholders when tasks are completed via Email or WhatsApp.
+3. TASK BROADCASTS: Notify stakeholders when tasks are completed.
 4. CONTEXT-AWARE DRAFTS: Generate intelligent, relevant messages using context from other agents.
-5. MULTI-PLATFORM ROUTING: Route messages to Email, WhatsApp, or Slack.
+5. MULTI-PLATFORM ROUTING: Route messages to email or Slack.
 6. COMMUNICATION MEMORY: Remember past conversations and patterns.
 7. FAILURE HANDLING: Retry failed messages and escalate failures.
 8. DAILY DIGEST: Generate summaries of all communication activity.
@@ -27,28 +28,37 @@ CRITICAL INSTRUCTIONS:
 - You MUST respond with valid JSON only. No markdown, no code fences, no explanations outside the JSON.
 - Classify the user's intent and extract structured data based on the entire conversation history.
 - MANDATORY INFORMATION GATHERING: Before executing an intent, you MUST ensure all required parameters are provided. If ANY required parameter is missing, you MUST set "needs_clarification": true and ask a natural, conversational question in "clarification_question" to get the missing info. DO NOT guess or hallucinate missing information.
-  * "send_message": REQUIRES "recipients", "body" (or detailed context to auto-generate the body), and "platform". If "platform" is missing, explicitly ask "Which platform should I use to send this (e.g., Email, WhatsApp, Slack)?"
+  * "send_message": REQUIRES "recipients", "body" (or detailed context to auto-generate the body), and "platform". If "platform" is missing, explicitly ask "Which platform should I use to send this (e.g., Email, Slack)?"
   * "draft_message": REQUIRES "context" (what to write), "recipients", and "platform".
   * "setup_followup": REQUIRES "recipients" and "timing".
   * "broadcast_completion" or "meeting_comm": REQUIRES "recipients" and "context".
   * "bulk_send": REQUIRES "recipients" and "body" or "context".
 - HIGH-QUALITY DRAFTS: If the user asks you to draft a message, but their context is a vague single word or short phrase (e.g., "life", "update"), you MUST set "needs_clarification": true and ask specific questions (e.g., "What is the goal of the email?", "What tone should I use?", "Any key points to mention?") before creating the draft.
+- MEETING LIFECYCLE: When a meeting is mentioned:
+  1. PRE-EVENT: Gather "recipients", "startTime" (ask Time Agent or user), and "agenda". Ask if "relatedDocs" (Docs Agent) should be attached.
+  2. EXECUTION: Set intent as "meeting_lifecycle". 
+  3. POST-EVENT: If a meeting just finished, suggest "meeting_summary" or "task_distribution".
+- BULK & PERSONALIZED: When a user wants to send a message to multiple people (e.g., "all investors", "marketing team"):
+  1. Determine the RECIPIENTS (lookup groups or contacts).
+  2. Identify placeholders for personalization (e.g., "name").
+  3. Set intent as "bulk_personalized".
+  4. NEVER send BCC; use this intent to trigger individual sends.
 - ITERATIVE DRAFTING & VERIFICATION: NEVER auto-send a drafted message unless the user explicitly says "send it" AFTER reviewing the draft. If the user asks for changes (e.g. "make it more formal", "add missing details"), classify the intent as "draft_message" so it can be regenerated based on their feedback. Provide context notes containing their requested changes to the draft logic.
 
 Respond with this exact JSON structure:
 {
-  "intent": "send_message|setup_followup|broadcast_completion|draft_message|platform_route|recall_history|retry_failed|daily_digest|meeting_comm|bulk_send|manage_contacts|general_chat",
+  "intent": "send_message|setup_followup|broadcast_completion|draft_message|platform_route|recall_history|retry_failed|daily_digest|meeting_comm|bulk_send|manage_contacts|meeting_lifecycle|bulk_personalized|general_chat",
   "needs_clarification": true/false,
   "clarification_question": "question if needs_clarification is true",
   "extracted_data": {
     "recipients": ["email/name array"],
-    "subject": "email subject if applicable",
-    "body": "message body if applicable",
-    "platform": "email|slack|whatsapp",
+    "group_name": "group name if applicable",
+    "subject": "subject",
+    "body": "base message body",
+    "placeholders": ["name", "company"],
     "context": "project/task context",
-    "timing": "follow-up timing if applicable",
-    "group_name": "contact group name if applicable",
-    "contacts": [{"name": "...", "email": "..."}]
+    "campaign_title": "title for the campaign",
+    "personalize": true
   },
   "response_text": "Your natural language response to the user if needs_clarification is false"
 }`;
@@ -120,23 +130,14 @@ async function executeSendMessage(userId, data) {
             }
 
             // Find or create contact
-            let contact = null;
-            try {
-                contact = await Contact.findOne({ userId, email: recipient });
-                if (!contact) {
-                    // If platform is whatsapp, the recipient is a phone number. 
-                    // We'll store it in the 'email' field for now but also the 'phone' field for consistency.
-                    contact = await Contact.create({
-                        userId,
-                        name: recipient.includes("@") ? recipient.split("@")[0] : recipient,
-                        email: recipient, // String-based ID
-                        phone: !recipient.includes("@") ? recipient : "",
-                        platform
-                    });
-                }
-            } catch (dbErr) {
-                console.warn(`[CommService] Contact creation/lookup failed for ${recipient}:`, dbErr.message);
-                // Continue without a contactId if necessary, or assign a dummy
+            let contact = await Contact.findOne({ userId, email: recipient });
+            if (!contact) {
+                contact = await Contact.create({
+                    userId,
+                    name: recipient.split("@")[0],
+                    email: recipient,
+                    platform
+                });
             }
 
             // Log message
@@ -297,21 +298,7 @@ async function draftContextual(userId, data, history = []) {
             ? history.slice(-5).map(m => `${m.role}: ${m.content}`).join('\\n') 
             : "";
 
-        // Check for Recipient Roles (Boss, Professor, etc)
-        let roleContext = "";
-        if (recipients.length > 0) {
-            const contacts = await Contact.find({ userId, email: { $in: recipients } }).lean();
-            const highStakes = contacts.filter(c => 
-                ["boss", "professor", "teacher", "client", "ceo", "manager"].includes(c.metadata?.relationshipRole?.toLowerCase())
-            );
-            
-            if (highStakes.length > 0) {
-                roleContext = `\nCRITICAL: One or more recipients have HIGH-STAKES ROLES: ${highStakes.map(c => `${c.name} (${c.metadata.relationshipRole})`).join(", ")}. 
-                ENFORCE AN ELITE, POLISHED, AND HIGHLY PROFESSIONAL TONE. Avoid slang, be concise, and ensure perfect etiquette.`;
-            }
-        }
-
-        const draftPrompt = `Draft a professional but warm email leveraging the details discussed below. Make sure to apply any specific tone, instructions, or changes the user requested recently.${roleContext}
+        const draftPrompt = `Draft a professional but warm email leveraging the details discussed below. Make sure to apply any specific tone, instructions, or changes the user requested recently.
 
 Current Context/Topic: ${context}
 ${body ? `User specific instructions: ${body}` : ""}
@@ -355,8 +342,10 @@ async function routeToPlatform(userId, data) {
     }
 
     if (platform === "whatsapp") {
-        // Now fully supported!
-        return await executeSendMessage(userId, data);
+        return {
+            success: false,
+            message: "📱 WhatsApp integration requires account connection. This feature is coming soon! For now, I can send via email."
+        };
     }
 
     // Default to email execution
@@ -679,26 +668,293 @@ async function manageContacts(userId, data) {
     };
 }
 
+// ─── MEETING LIFECYCLE ───────────────────────────────────────────────────
+async function handleMeetingLifecycle(userId, data) {
+    const { 
+        meeting_id, 
+        recipients = [], 
+        start_time, 
+        agenda = "", 
+        context = "" 
+    } = data;
+
+    // 1. If existing meeting requested
+    if (meeting_id) {
+        const meeting = await Meeting.findOne({ _id: meeting_id, userId });
+        if (!meeting) return { success: false, message: "Meeting not found." };
+        
+        // Handle phase transitions or updates here
+        return {
+            success: true,
+            meeting,
+            message: `Found meeting: ${meeting.title}. Status: ${meeting.status}.`
+        };
+    }
+
+    // 2. Create New Meeting (Pre-Event)
+    if (recipients.length && start_time) {
+        const meeting = await Meeting.create({
+            userId,
+            title: context || "New Meeting",
+            startTime: new Date(start_time),
+            participants: recipients.map(r => ({ email: r, status: "invited" })),
+            agenda,
+            phase: "pre-event",
+            status: "scheduled",
+            context: { originalPrompt: context }
+        });
+
+        // Send Invitations
+        const inviteResult = await executeSendMessage(userId, {
+            recipients,
+            subject: `Invitation: ${meeting.title}`,
+            body: `You are invited to ${meeting.title}.\nTime: ${meeting.startTime.toLocaleString()}\nAgenda: ${agenda || "No agenda provided."}\n\nPlease confirm your attendance.`
+        });
+
+        // Assign meetingId to these messages
+        if (inviteResult.results) {
+            const messageIds = inviteResult.results.map(r => r.messageId).filter(Boolean);
+            await CommMessage.updateMany({ _id: { $in: messageIds } }, { $set: { meetingId: meeting._id } });
+        }
+
+        return {
+            success: true,
+            meeting,
+            message: `📅 Meeting scheduled and invitations sent to ${recipients.length} participants. I am now tracking confirmations.`
+        };
+    }
+
+    return {
+        success: false,
+        message: "To schedule a meeting, I need to know who to invite and what time works best."
+    };
+}
+
+// ─── CONFIRMATION TRACKING ────────────────────────────────────────────────
+async function syncMeetingConfirmations(userId) {
+    const activeMeetings = await Meeting.find({ userId, status: "scheduled", phase: "pre-event" });
+    if (!activeMeetings.length) return { success: true, message: "No active meetings to sync." };
+
+    const emailAdapter = CommunicationFactory.getService("email");
+    const incomingMessages = await emailAdapter.readMessages(userId, { maxResults: 20 });
+
+    let updates = 0;
+    for (const meeting of activeMeetings) {
+        for (const msg of incomingMessages) {
+            // Very basic matching: if sender is a participant and mentions meeting title or "confirm/yes"
+            const participant = meeting.participants.find(p => msg.sender.includes(p.email));
+            if (participant && participant.status === "invited") {
+                const text = (msg.subject + " " + msg.message).toLowerCase();
+                if (text.includes("confirm") || text.includes("yes") || text.includes("coming") || text.includes("accept")) {
+                    participant.status = "confirmed";
+                    updates++;
+                } else if (text.includes("decline") || text.includes("sorry") || text.includes("cannot")) {
+                    participant.status = "declined";
+                    updates++;
+                }
+            }
+        }
+        if (updates > 0) await meeting.save();
+    }
+
+    return { success: true, message: `Synced ${updates} new confirmation(s).` };
+}
+
+// ─── PRE-MEETING REMINDERS ────────────────────────────────────────────────
+async function sendMeetingReminders(userId) {
+    const now = new Date();
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+
+    const meetingsToRemind = await Meeting.find({
+        userId,
+        status: "scheduled",
+        startTime: { $gte: now, $lte: oneHourFromNow },
+        "automation.reminderSent": false
+    });
+
+    let sent = 0;
+    for (const meeting of meetingsToRemind) {
+        const confirmedEmails = meeting.participants
+            .filter(p => p.status === "confirmed")
+            .map(p => p.email);
+        
+        if (confirmedEmails.length > 0) {
+            await executeSendMessage(userId, {
+                recipients: confirmedEmails,
+                subject: `Reminder: ${meeting.title} starting soon`,
+                body: `Just a reminder that "${meeting.title}" starts at ${meeting.startTime.toLocaleTimeString()}.\n\nAgenda:\n${meeting.agenda || "No agenda provided."}\n\nSee you there!`
+            });
+            meeting.automation.reminderSent = true;
+            await meeting.save();
+            sent++;
+        }
+    }
+
+    return { success: true, message: `Sent ${sent} pre-meeting reminder(s).` };
+}
+
+// ─── LIFECYCLE SYNC ORCHESTRATOR ──────────────────────────────────────────
+async function syncMeetingLifecycle(userId) {
+    // 1. Sync Confirmations from Inbox
+    await syncMeetingConfirmations(userId);
+    
+    // 2. Check and Send Reminders
+    const reminderResult = await sendMeetingReminders(userId);
+    
+    return reminderResult;
+}
+
+// ─── POST-EVENT FOLLOW-UP ────────────────────────────────────────────────
+async function postEventFollowUp(userId, meetingId, summary, tasks = []) {
+    const meeting = await Meeting.findOne({ _id: meetingId, userId });
+    if (!meeting) return { success: false, message: "Meeting not found." };
+
+    const confirmedParticipants = meeting.participants
+        .filter(p => p.status === "confirmed")
+        .map(p => p.email);
+
+    if (confirmedParticipants.length > 0) {
+        // Send Summary
+        await executeSendMessage(userId, {
+            recipients: confirmedParticipants,
+            subject: `Post-Meeting: ${meeting.title} Summary`,
+            body: `Thank you for attending "${meeting.title}".\n\nMinutes of Meeting:\n${summary}\n\nTasks Assigned:\n${tasks.map(t => `- [${t.assignee}] ${t.task} (By: ${t.deadline})`).join("\n") || "No immediate tasks assigned."}`
+        });
+
+        meeting.phase = "post-event";
+        meeting.status = "finished";
+        meeting.automation.summarySent = true;
+        await meeting.save();
+    }
+
+    return { success: true, message: `Post-event summary and tasks sent to ${confirmedParticipants.length} participants.` };
+}
+
+// ─── BULK & PERSONALized COMMUNICATION ─────────────────────────────────────
+async function handleBulkPersonalized(userId, data) {
+    const { 
+        recipients = [], 
+        group_name, 
+        subject, 
+        body, 
+        campaign_title = "Atomic Outreach",
+        personalize = true
+    } = data;
+
+    let targetContacts = [];
+
+    // 1. Resolve Contacts
+    if (group_name) {
+        targetContacts = await Contact.find({ userId, groups: group_name });
+    } else if (recipients.length) {
+        targetContacts = await Contact.find({ userId, email: { $in: recipients } });
+        // If not in contacts, create minimal objects
+        const foundEmails = targetContacts.map(c => c.email);
+        recipients.forEach(email => {
+            if (!foundEmails.includes(email)) {
+                targetContacts.push({ email, name: email.split("@")[0] });
+            }
+        });
+    }
+
+    if (!targetContacts.length) {
+        return { success: false, message: "No recipients found for this bulk action." };
+    }
+
+    // 2. Create Campaign
+    const campaign = await BulkCampaign.create({
+        userId,
+        title: campaign_title,
+        baseMessage: body,
+        subject,
+        totalRecipients: targetContacts.length,
+        status: "sending"
+    });
+
+    // 3. Execution Loop (Individual & Personalized)
+    let successCount = 0;
+    const results = [];
+
+    for (const contact of targetContacts) {
+        const personalizedBody = personalize 
+            ? body.replace(/{name}/gi, contact.name || "there")
+                  .replace(/{company}/gi, contact.metadata?.notes?.substring(0, 20) || "your team")
+            : body;
+
+        const sendRes = await executeSendMessage(userId, {
+            recipients: [contact.email],
+            subject: subject || "Update from Nurotra",
+            body: personalizedBody
+        });
+
+        if (sendRes.success) {
+            successCount++;
+            const messageId = sendRes.results[0].messageId;
+            // Link to campaign
+            await CommMessage.updateOne({ _id: messageId }, { $set: { campaignId: campaign._id } });
+            results.push({ email: contact.email, status: "sent", messageId });
+        } else {
+            results.push({ email: contact.email, status: "failed", error: sendRes.message });
+        }
+    }
+
+    campaign.status = "active";
+    campaign.stats.sent = successCount;
+    campaign.stats.failed = targetContacts.length - successCount;
+    await campaign.save();
+
+    return {
+        success: true,
+        campaign,
+        message: `🚀 Individualized campaign "${campaign_title}" executed. Sent ${successCount}/${targetContacts.length} personalized messages.`
+    };
+}
+
 // ─── MAIN ENTRY POINT ──────────────────────────────────────────────────────
 async function processMessage(userId, prompt, history = []) {
     console.log(`[CommService] Processing: "${prompt.substring(0, 80)}..."`);
 
-    // Step 1: Classify intent (pass userId for memory)
+    // Step 1: Classify intent
     const classification = await classifyIntent(userId, prompt, history);
     console.log(`[CommService] Intent: ${classification.intent}`);
 
-    // Step 2: If clarification needed, return question
+    // Step 2: Auto-Grounding (Resource Engine)
+    const resourceEngineService = require("./resourceEngineService");
+    const groundedResources = await resourceEngineService.autoGround(userId, prompt);
+    
+    const data = classification.extracted_data || {};
+    
+    // Inject grounded data into extracted_data if missing
+    if (groundedResources.length > 0) {
+        data.groundedContext = "";
+        for (const res of groundedResources) {
+            // resolve recipients from contact resources
+            if (res.type === 'contact' && res.data?.email) {
+                if (!data.recipients) data.recipients = [];
+                if (!data.recipients.includes(res.data.email)) {
+                    data.recipients.push(res.data.email);
+                    console.log(`[CommService] Resolved recipient from Resource: ${res.data.email}`);
+                }
+            }
+            // resolve context from file resources
+            if (res.type === 'file') {
+                const Document = require("../models/Document");
+                const doc = await Document.findById(res.refId);
+                if (doc) data.groundedContext += `[CONTEXT FROM ${res.title}]:\n${doc.content}\n\n`;
+            }
+        }
+    }
+
+    // Step 3: If clarification needed, return question
     if (classification.needs_clarification) {
         return {
             intent: classification.intent,
             message: classification.clarification_question || classification.response_text,
-            action: null,
-            needs_clarification: true
+            action: null
         };
     }
 
     // Step 3: Route to handler
-    const data = classification.extracted_data || {};
     let actionResult = null;
 
     switch (classification.intent) {
@@ -712,6 +968,9 @@ async function processMessage(userId, prompt, history = []) {
             actionResult = await broadcastUpdate(userId, data);
             break;
         case "draft_message":
+            if (data.groundedContext) {
+                data.context = (data.groundedContext || "") + (data.context || "");
+            }
             actionResult = await draftContextual(userId, data, history);
             break;
         case "platform_route":
@@ -735,6 +994,12 @@ async function processMessage(userId, prompt, history = []) {
         case "manage_contacts":
             actionResult = await manageContacts(userId, data);
             break;
+        case "meeting_lifecycle":
+            actionResult = await handleMeetingLifecycle(userId, data);
+            break;
+        case "bulk_personalized":
+            actionResult = await handleBulkPersonalized(userId, data);
+            break;
         default:
             // General conversation — return the LLM's response directly
             return {
@@ -755,5 +1020,7 @@ module.exports = {
     processMessage,
     generateDigest,
     executeSendMessage,
-    manageContacts
+    manageContacts,
+    syncMeetingLifecycle,
+    postEventFollowUp
 };
