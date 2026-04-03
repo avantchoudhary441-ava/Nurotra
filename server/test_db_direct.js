@@ -1,31 +1,22 @@
 const { MongoClient } = require('mongodb');
 require('dotenv').config();
 
-async function testConnection() {
-    const uri = process.env.MONGO_URI;
-    console.log("Attempting direct MongoDB driver connection to:", uri.replace(/:([^@]+)@/, ':****@'));
-    
-    const client = new MongoClient(uri, {
-        serverSelectionTimeoutMS: 10000,
-        connectTimeoutMS: 10000,
-    });
+const uri = process.env.MONGO_URI;
+const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
 
-    try {
-        console.log("Connecting...");
-        await client.connect();
-        console.log("✅ Successfully connected via standard driver!");
-        
-        const db = client.db();
-        const collections = await db.listCollections().toArray();
-        console.log("Collections in DB:", collections.map(c => c.name));
-        
-    } catch (err) {
-        console.error("❌ Connection failed:", err.message);
-        if (err.stack) console.error(err.stack);
-    } finally {
-        await client.close();
-        process.exit();
-    }
+async function run() {
+  try {
+    console.log("Attempting to connect to MongoDB...");
+    await client.connect();
+    console.log("Connected successfully to server");
+    const databasesList = await client.db().admin().listDatabases();
+    console.log("Databases:");
+    databasesList.databases.forEach(db => console.log(` - ${db.name}`));
+  } catch (e) {
+    console.error("Connection failed:", e.message);
+  } finally {
+    await client.close();
+  }
 }
 
-testConnection();
+run().catch(console.dir);
