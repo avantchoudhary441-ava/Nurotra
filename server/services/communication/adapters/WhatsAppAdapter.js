@@ -22,7 +22,13 @@ class WhatsAppAdapter extends CommunicationAdapter {
         for (const recipient of recipients) {
             try {
                 // Ensure number is in correct format (remove +, spaces, etc.)
-                const cleanNumber = recipient.replace(/\D/g, "");
+                let cleanNumber = recipient.replace(/\D/g, "");
+                
+                // If the user inputs a 10-digit number, assume it's an Indian number (+91)
+                // In production, you'd want a country code dropdown or library like libphonenumber-js
+                if (cleanNumber.length === 10) {
+                    cleanNumber = "91" + cleanNumber; 
+                }
 
                 const response = await axios.post(
                     `${this.baseUrl}/messages`,
@@ -47,13 +53,20 @@ class WhatsAppAdapter extends CommunicationAdapter {
                 });
                 successCount++;
             } catch (error) {
-                console.error(`[WhatsAppAdapter] Failed to send to ${recipient}:`, 
-                    error.response ? error.response.data : error.message
-                );
+                const apiError = error.response?.data?.error;
+                let errorMsg = apiError?.message || error.message || "Unknown error";
+                
+                // Add helpful context for common Meta API errors
+                if (apiError?.code === 131047 || errorMsg.toLowerCase().includes("template")) {
+                    errorMsg += " (Meta blocks free-form text unless the user replied within 24 hours. You must use an approved template instead).";
+                }
+                
+                console.error(`[WhatsAppAdapter] Failed to send to ${recipient}:`, apiError || error.message);
+                
                 results.push({ 
                     recipient, 
                     status: "failed", 
-                    error: error.response?.data?.error?.message || error.message || "Unknown error"
+                    error: errorMsg
                 });
             }
         }

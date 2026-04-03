@@ -59,7 +59,7 @@ async function classifyIntent(userId, prompt, history = []) {
         // Fetch Memory Context
         const memory = await NuroMemory.findOne({ userId }).lean();
         const memoryContext = memory ? `
-USER PATTERNS: ${memory.behavioralPatterns?.map(p => p.trait).join(", ") || "None yet"}
+USER PATTERNS: ${memory.behavioralPatterns?.map(p => p.trait)?.join(", ") || "None yet"}
 LONG-TERM PLAN: ${memory.longTermPlan?.mission || "None defined"}
 ACTIVE GOALS: ${memory.longTermPlan?.activeGoals?.join(", ") || "None"}
 ` : "";
@@ -114,7 +114,8 @@ async function executeSendMessage(userId, data) {
                 });
 
                 if (!adapterResult.success) {
-                    throw new Error("Adapter failed to send message.");
+                    const specificError = adapterResult.results?.[0]?.error || "Adapter failed to send message.";
+                    throw new Error(specificError);
                 }
             }
 

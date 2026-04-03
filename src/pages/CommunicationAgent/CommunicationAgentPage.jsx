@@ -210,10 +210,15 @@ const CommunicationAgentPage = () => {
           const chatData = await chatRes.json();
           if (chatData.action?.messages?.length > 0) {
             const count = chatData.action.messages.length;
-            setLiveExecutions(prev => [
-              { id: 'retry-fail', type: 'RETRY', title: 'Transmission Failure', description: `I found ${count} failed messages. Should I retry?`, status: 'warning' },
-              ...prev
-            ]);
+            setLiveExecutions(prev => {
+              // Ensure we don't add duplicate retry-fail cards
+              if (prev.some(e => e.id === 'retry-fail')) return prev;
+              
+              return [
+                { id: 'retry-fail', type: 'RETRY', title: 'Transmission Failure', description: `I found ${count} failed messages. Should I retry?`, status: 'warning' },
+                ...prev
+              ];
+            });
           }
         }
 

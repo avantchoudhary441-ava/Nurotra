@@ -41,7 +41,7 @@ const chat = async (req, res) => {
             content: [{ type: "text", text: result.message }]
         });
     } catch (error) {
-        console.error("[CommController] Chat error:", error);
+        console.error("[CommController] Chat error:", error.stack || error);
         res.status(500).json({
             message: "Communication Agent encountered an error.",
             error: error.message
