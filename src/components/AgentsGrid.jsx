@@ -47,6 +47,15 @@ export default function AgentsGrid() {
       status: "online",
       route: "/communication-agent",
     },
+    {
+      id: 5,
+      name: "Action Agent",
+      role: "Cross-Platform Action Execution",
+      icon: "⚡",
+      skills: "API Triggering • Workflow Execution",
+      status: "online",
+      route: "/action-agent",
+    },
   ];
 
   return (
