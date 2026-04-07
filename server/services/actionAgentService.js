@@ -62,6 +62,7 @@ Format B (For WORKFLOW_EXECUTION):
   "isEventDriven": true/false,
   "workflow": {
     "title": "Short Descriptive Title",
+    "deadline": "ISO Date String if specified, e.g., 'by 5 PM today'",
     "trigger": {
       "type": "message_received" | "manual" | "scheduled" | "webhook" | "system_state",
       "source": "Description of trigger source"
@@ -81,25 +82,29 @@ Format B (For WORKFLOW_EXECUTION):
         "id": 1,
         "label": "Generate Invoice",
         "icon": "file",
+        "isReversible": true/false,
         "delayMs": 2000,
         "microLogs": ["Preparing template...", "Assigning amount...", "Generated."],
-        "retryConfig": {
-          "maxRetries": 1,
-          "retryDelayMs": 2000
-        }
+        "retryConfig": { "maxRetries": 1, "retryDelayMs": 2000 },
+        "missingData": [
+          { 
+            "field": "recipient_id", 
+            "criticality": "critical" | "minor",
+            "inferredValue": "Suggested value or null"
+          }
+        ]
       }
     ]
   }
 }
 
 RULES:
+- "isReversible": Set to FALSE if the action sends an external message (email/slack), deletes data, or commits a non-undoable transaction. TRUE for data fetching, generation, or internal logs.
+- "deadline": Look for "by [time]", "within [duration]", "deadline is [time]".
+- "missingData": Identify any required parameters not found in the prompt. Identify if ID, names or specific values are missing.
 - "icon" must be one of: drive, mail, file, spreadsheet, database, clock, default
-- If the user says "wait X minutes" or "after X minutes", set delayMs on that action (1 minute = 60000ms)
-- If the command implies repeatable automation (e.g. "whenever", "every time", "if X happens"), set isEventDriven: true
-- If the command is a one-shot task (e.g. "upload this", "send email now"), set isEventDriven: false and trigger.type: "manual"
-- Always include at least one condition object even if trivial (use operator: "exists" with field: "trigger" for unconditional)
-- For retryConfig, default maxRetries to 1 for critical actions (email, API calls) and 0 for simple tasks
-- Generate 2-4 realistic microLogs per action
+- If the command implies repeatable automation (e.g. "whenever", "every time"), set isEventDriven: true
+- Always include at least one condition object (use operator: "exists" for unconditional)
 - Provide 2-5 actions that meaningfully decompose the user's request
 `;
 

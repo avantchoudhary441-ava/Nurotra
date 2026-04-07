@@ -97,12 +97,18 @@ const stepExecutors = {
     // ----- DATA FETCHING -----
     "fetch_data": async (step, context) => {
         // Use AI to synthesize data based on the request
-        const prompt = `The user asked to fetch: "${step.params?.query || step.label}". Synthesize realistic sample data for this request. Return as JSON array with 5-10 items.`;
+        const query = step.params?.query || step.label;
+        const prompt = `The user asked to fetch: "${query}". Synthesize realistic sample data for this request. Return as JSON array with 5-10 items.`;
         let result = await generateWithFallback(prompt, "You are a data retrieval engine. Return realistic JSON data.");
         try {
             result = JSON.parse(result.replace(/```json|```/g, '').trim());
         } catch (e) { /* keep as string */ }
-        return { success: true, message: "Data fetched", data: result };
+        return { 
+            success: true, 
+            message: `Successfully retrieved data for: ${query}`, 
+            data: result,
+            metadata: { source: "AI Simulation Engine" }
+        };
     },
 
     // ----- APPROVAL PROCESSING -----
@@ -194,12 +200,45 @@ const mapStepToExecutor = (step) => {
 };
 
 // ============================================================
+// DECISION ENGINE: Validate if step can proceed
+// ============================================================
+const validateStep = (step) => {
+    if (!step.missingData || step.missingData.length === 0) {
+        return { isBlocked: false, criticalField: null };
+    }
+
+    // A step is blocked ONLY if it has a critical missing field with no inference
+    const criticalBlock = step.missingData.find(m => m.criticality === 'critical' && !m.inferredValue);
+    
+    if (criticalBlock) {
+        return { 
+            isBlocked: true, 
+            criticalField: criticalBlock.field,
+            context: `Critical data missing: ${criticalBlock.field}. Action Agent cannot proceed without this.` 
+        };
+    }
+
+    return { isBlocked: false, criticalField: null };
+};
+
+// ============================================================
 // MAIN: Execute a single step
 // ============================================================
 const executeStep = async (step, context = {}) => {
     const executorKey = mapStepToExecutor(step);
     const executor = stepExecutors[executorKey] || stepExecutors['default'];
     
+    // Decision Engine: Merge inferred values into params if they exist
+    if (step.missingData) {
+        step.params = step.params || {};
+        step.missingData.forEach(m => {
+            if (m.inferredValue && !step.params[m.field]) {
+                step.params[m.field] = m.inferredValue;
+                console.log(`[ActionExec] Decision Engine: Inferred "${m.field}" = "${m.inferredValue}" for ${step.label}`);
+            }
+        });
+    }
+
     console.log(`[ActionExec] Executing step "${step.label}" via [${executorKey}]`);
     
     try {
@@ -214,5 +253,6 @@ const executeStep = async (step, context = {}) => {
 module.exports = {
     executeStep,
     mapStepToExecutor,
-    stepExecutors
+    stepExecutors,
+    validateStep
 };

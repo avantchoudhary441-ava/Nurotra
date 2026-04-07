@@ -6,7 +6,8 @@ import {
     Send, Terminal, Loader2, Sparkles, Settings2, HardDrive, 
     Mail, FileSpreadsheet, Activity, Bell, FileText, Database, ShieldAlert,
     Zap, ChevronRight, RotateCcw, Timer, ScrollText, Trash2, 
-    ToggleLeft, ToggleRight, Radio, ArrowRight, RefreshCw, Workflow
+    ToggleLeft, ToggleRight, Radio, ArrowRight, RefreshCw, Workflow,
+    ChevronDown, ChevronUp
 } from 'lucide-react';
 import './ActionAgent.css';
 
@@ -45,6 +46,7 @@ const ActionAgentPage = () => {
 
     // Execution log visibility per task
     const [expandedLogs, setExpandedLogs] = useState({});
+    const [expandedHistory, setExpandedHistory] = useState({});
 
     // Internal fast frontend simulator for DB OFFLINE mode
     const runMockOfflineSimulation = (mockWf) => {
@@ -79,12 +81,6 @@ const ActionAgentPage = () => {
                     wf.status = 'completed';
                     wf.activeMicroLog = "All tasks finished successfully!";
                     clearInterval(simInterval);
-                    
-                    // Keep completed card visible for 5 seconds before moving to history
-                    setTimeout(() => {
-                        setActiveTasks(curr => curr.filter(t => t._id !== wf._id));
-                        setTaskHistory(curr => [wf, ...curr]);
-                    }, 5000);
                 }
                 newTasks[wfIndex] = wf;
                 return newTasks;
@@ -406,13 +402,55 @@ const ActionAgentPage = () => {
         console.log("Force Override for ID", taskId);
     };
 
-    const resolveIntervention = (taskId, stepIndex) => {
+    const confirmAction = async (taskId) => {
+        try {
+            await fetch(`http://localhost:5000/api/action-agent/confirm/${taskId}`, { method: 'POST' });
+            fetchTasks();
+        } catch (e) { console.error(e); }
+    };
+
+    const resolveIntervention = async (taskId, field) => {
         if (!interventionInput.trim()) return;
-        setInterventionInput('');
+        try {
+            await fetch(`http://localhost:5000/api/action-agent/intervention/${taskId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field, value: interventionInput })
+            });
+            setInterventionInput('');
+            fetchTasks();
+        } catch (e) { console.error(e); }
     };
 
     const toggleLogView = (taskId) => {
         setExpandedLogs(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+    };
+
+    const toggleHistoryView = (taskId) => {
+        setExpandedHistory(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+    };
+
+    const dismissWorkflow = async (workflowId) => {
+        // Handle local mock tasks (if ID starts with 'mock_')
+        if (typeof workflowId === 'string' && workflowId.startsWith('mock_')) {
+            setActiveTasks(prev => prev.filter(t => t._id !== workflowId));
+            return;
+        }
+
+        try {
+            const res = await fetch(`http://localhost:5000/api/action-agent/acknowledge/${workflowId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (data.success) {
+                fetchTasks();
+            }
+        } catch (error) {
+            console.error("Failed to dismiss workflow:", error);
+            // Fallback: remove locally if API fails
+            setActiveTasks(prev => prev.filter(t => t._id !== workflowId));
+        }
     };
 
     // --- Resizing ---
@@ -590,14 +628,39 @@ const ActionAgentPage = () => {
                                                         {task.status === 'failed' && <AlertTriangle size={12} />}
                                                         {task.status.toUpperCase()}
                                                     </div>
+                                                    {task.executionMode === 'background' && task.status !== 'completed' && (
+                                                        <span className="background-badge">
+                                                            <ShieldAlert size={10} /> Autonomous
+                                                        </span>
+                                                    )}
                                                 </div>
-                                                <div className="exec-timer">
+                                                <div className="exec-timer-block">
+                                                    {task.deadline && (
+                                                        <div className="deadline-timer">
+                                                            <Clock size={12} />
+                                                            Due: {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </div>
+                                                    )}
                                                     <Clock size={14} />
                                                     {task.type === 'scheduled' && task.status === 'waiting' 
                                                         ? <span>Expected: {task.scheduledTime}</span>
                                                         : <span>{formatTime(task.elapsed)}</span>
                                                     }
                                                 </div>
+                                                {task.status === 'waiting' && task.autoAcceptAt && (
+                                                    <div className="auto-accept-countdown">
+                                                        <Timer size={14} className="pulse-timer" />
+                                                        <div className="countdown-info">
+                                                            <span className="countdown-label">Auto-accepting in:</span>
+                                                            <span className="countdown-value">
+                                                                {formatTime(Math.max(0, Math.floor((new Date(task.autoAcceptAt).getTime() - Date.now()) / 1000)))}
+                                                            </span>
+                                                        </div>
+                                                        <button className="confirm-now-btn" onClick={() => confirmAction(task._id)}>
+                                                            Confirm Now
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {/* Pipeline Flow Visualization */}
@@ -673,12 +736,51 @@ const ActionAgentPage = () => {
                                                                 )}
                                                                 
                                                                 <AnimatePresence>
-                                                                    {isRunning && !step.isBulk && (
+                                                                    {(isRunning || isCompleted) && !step.isBulk && (
                                                                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="micro-log-terminal">
-                                                                            <code>&gt; {task.activeMicroLog || step.microLogs?.[0] || '...'}</code>
+                                                                            <code>&gt; {isRunning ? (task.activeMicroLog || step.microLogs?.[0] || '...') : (step.resultData ? 'Process completed. Viewing data below:' : 'Action completed successfully.')}</code>
+                                                                                                                                                        {isCompleted && step.resultData && (
+                                                                                <div className="step-result-display">
+                                                                                    {step.metadata?.source && (
+                                                                                        <div className="data-source-tag">
+                                                                                            <Database size={10} />
+                                                                                            Source: {step.metadata.source}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {typeof step.resultData === 'string' ? (
+                                                                                        <p>{step.resultData}</p>
+                                                                                    ) : Array.isArray(step.resultData) ? (
+                                                                                        <div className="result-data-grid">
+                                                                                            {step.resultData.map((item, i) => (
+                                                                                                <div key={i} className="result-data-item">
+                                                                                                    {Object.entries(item).map(([k, v]) => (
+                                                                                                        <div key={k} className="result-field">
+                                                                                                            <span className="field-key">{k}:</span>
+                                                                                                            <span className="field-val">{String(v)}</span>
+                                                                                                        </div>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <pre className="result-json-pre">
+                                                                                            {JSON.stringify(step.resultData, null, 2)}
+                                                                                        </pre>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
                                                                         </motion.div>
                                                                     )}
                                                                 </AnimatePresence>
+                                                                
+                                                                {isCompleted && !task.isAcknowledged && (
+                                                                    <div className="dismiss-action-row">
+                                                                        <button className="dismiss-active-btn" onClick={() => dismissWorkflow(task._id)}>
+                                                                            <CheckCircle2 size={12} />
+                                                                            Dismiss & Archive to History
+                                                                        </button>
+                                                                    </div>
+                                                                )}
 
                                                                 {step.isBulk && (isRunning || isCompleted) && (
                                                                     <div className="bulk-progress-container">
@@ -692,15 +794,20 @@ const ActionAgentPage = () => {
                                                                 <AnimatePresence>
                                                                     {isIntervention && (
                                                                         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="intervention-box">
-                                                                            <p className="intervention-msg">{step.interventionMsg}</p>
-                                                                            <div className="intervention-input-row">
-                                                                                <input 
-                                                                                    type="text" 
-                                                                                    placeholder="Paste URL or ID here..." 
-                                                                                    value={interventionInput}
-                                                                                    onChange={(e) => setInterventionInput(e.target.value)}
-                                                                                />
-                                                                                <button onClick={() => resolveIntervention(task.id, idx)}>Resolve</button>
+                                                                            <ShieldAlert size={18} className="intervention-icon" />
+                                                                            <div className="intervention-content">
+                                                                                <p className="intervention-msg">{step.interventionMsg}</p>
+                                                                                <div className="intervention-input-row">
+                                                                                    <input 
+                                                                                        type="text" 
+                                                                                        placeholder={`Enter ${step.missingData?.find(m => m.criticality === 'critical')?.field || 'value'}...`}
+                                                                                        value={interventionInput}
+                                                                                        onChange={(e) => setInterventionInput(e.target.value)}
+                                                                                    />
+                                                                                    <button onClick={() => resolveIntervention(task._id, step.missingData?.find(m => m.criticality === 'critical')?.field)}>
+                                                                                        Submit & Resume
+                                                                                    </button>
+                                                                                </div>
                                                                             </div>
                                                                         </motion.div>
                                                                     )}
@@ -776,20 +883,81 @@ const ActionAgentPage = () => {
                                 <h3>Execution History</h3>
                                 <div className="history-list">
                                     {taskHistory.length === 0 ? <p className="no-history">No tasks completed yet.</p> : (
-                                        taskHistory.map(task => (
-                                            <div key={task._id} className="history-card">
-                                                <div className="hist-header">
-                                                    <span className="hist-title">{task.title}</span>
-                                                    {task.status === 'completed' ? 
-                                                        <CheckCircle2 size={14} className="hist-icon" /> :
-                                                        <AlertTriangle size={14} style={{color:'#ff4757'}} />
-                                                    }
+                                        taskHistory.map(task => {
+                                            const isExpanded = expandedHistory[task._id];
+                                            return (
+                                                <div key={task._id} className={`history-card ${isExpanded ? 'expanded' : ''}`}>
+                                                    <div className="hist-header" onClick={() => toggleHistoryView(task._id)}>
+                                                        <span className="hist-title">{task.title}</span>
+                                                        <div className="hist-status-group">
+                                                            {task.status === 'completed' ? 
+                                                                <CheckCircle2 size={14} className="hist-icon success" /> :
+                                                                <AlertTriangle size={14} className="hist-icon error" />
+                                                            }
+                                                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                        </div>
+                                                    </div>
+                                                    <span className="hist-time">
+                                                        {task.status === 'completed' ? 'Completed' : 'Failed'} in {task.endTime && task.startTime ? formatTime(Math.floor((new Date(task.endTime).getTime() - new Date(task.startTime).getTime()) / 1000)) : '0:00'}
+                                                    </span>
+
+                                                    <AnimatePresence>
+                                                        {isExpanded && (
+                                                            <motion.div 
+                                                                className="hist-expanded-detail"
+                                                                initial={{ opacity: 0, height: 0 }}
+                                                                animate={{ opacity: 1, height: 'auto' }}
+                                                                exit={{ opacity: 0, height: 0 }}
+                                                            >
+                                                                <div className="hist-timeline-mini">
+                                                                    {task.steps.map((step, sidx) => (
+                                                                        <div key={step._id || sidx} className={`hist-step-row ${step.status}`}>
+                                                                            <div className="hist-step-head">
+                                                                                <div className="hist-step-dot" />
+                                                                                <span className="hist-step-label">{step.label}</span>
+                                                                                <IconHOC type={step.icon} size={12} />
+                                                                                {step.resultData && <span className="res-available-badge">Results Received</span>}
+                                                                            </div>
+                                                                            
+                                                                            {step.resultData && (
+                                                                                <div className="hist-step-result animate-in">
+                                                                                    {typeof step.resultData === 'string' ? (
+                                                                                        <p className="res-str">{step.resultData}</p>
+                                                                                    ) : (Array.isArray(step.resultData) && step.resultData.length > 0) ? (
+                                                                                        <div className="hist-result-grid">
+                                                                                            {step.resultData.map((item, ii) => (
+                                                                                                <div key={ii} className="hist-result-item">
+                                                                                                    {Object.entries(item).map(([k, v]) => (
+                                                                                                        <div key={k} className="hist-result-field">
+                                                                                                            <span className="f-k">{k}:</span>
+                                                                                                            <span className="f-v">{String(v)}</span>
+                                                                                                        </div>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <pre className="hist-result-pre">
+                                                                                            {JSON.stringify(step.resultData, null, 2)}
+                                                                                        </pre>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                
+                                                                {task.executionLogs && task.executionLogs.length > 0 && (
+                                                                    <div className="hist-log-brief">
+                                                                        <span className="log-count">+{task.executionLogs.length} execution logs</span>
+                                                                    </div>
+                                                                )}
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
                                                 </div>
-                                                <span className="hist-time">
-                                                    {task.status === 'completed' ? 'Completed' : 'Failed'} in {task.endTime && task.startTime ? formatTime(Math.floor((new Date(task.endTime).getTime() - new Date(task.startTime).getTime()) / 1000)) : '0:00'}
-                                                </span>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
                             </div>

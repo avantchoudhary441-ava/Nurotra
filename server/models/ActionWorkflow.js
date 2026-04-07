@@ -23,7 +23,15 @@ const ActionStepSchema = new mongoose.Schema({
         maxRetries: { type: Number, default: 0 },
         retryCount: { type: Number, default: 0 },
         retryDelayMs: { type: Number, default: 2000 }
-    }
+    },
+    // --- NEW: Autonomous Execution ---
+    isReversible: { type: Boolean, default: true },
+    missingData: [{
+        field: String,
+        criticality: { type: String, enum: ["critical", "minor"], default: "minor" },
+        inferredValue: mongoose.Schema.Types.Mixed
+    }],
+    resultData: { type: mongoose.Schema.Types.Mixed }
 });
 
 const ExecutionLogSchema = new mongoose.Schema({
@@ -62,6 +70,15 @@ const ActionWorkflowSchema = new mongoose.Schema({
         source: { type: String }
     }],
     steps: [ActionStepSchema],
+    // --- NEW: Dynamic Execution Logic ---
+    executionMode: { type: String, enum: ["background", "intervention"], default: "background" },
+    deadline: { type: Date },
+    autoAcceptAt: { type: Date },
+    confirmationStatus: { 
+        type: String, 
+        enum: ["none", "pending", "confirmed", "auto-confirmed", "rejected"], 
+        default: "none" 
+    },
     startTime: { type: Date, default: Date.now },
     endTime: { type: Date },
     activeMicroLog: { type: String, default: "Initializing..." },
@@ -84,7 +101,9 @@ const ActionWorkflowSchema = new mongoose.Schema({
     executionLogs: [ExecutionLogSchema],
     // --- NEW: Retry metadata ---
     totalRetries: { type: Number, default: 0 },
-    maxRetries: { type: Number, default: 3 }
+    maxRetries: { type: Number, default: 3 },
+    // --- NEW: UI State ---
+    isAcknowledged: { type: Boolean, default: false }
 });
 
 module.exports = mongoose.model("ActionWorkflow", ActionWorkflowSchema);
