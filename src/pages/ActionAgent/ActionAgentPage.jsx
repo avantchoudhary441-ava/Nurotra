@@ -6,9 +6,69 @@ import {
     Send, Terminal, Loader2, Sparkles, Settings2, HardDrive, 
     Mail, FileSpreadsheet, Activity, Bell, FileText, Database, ShieldAlert,
     Zap, ChevronRight, RotateCcw, Timer, ScrollText, Trash2, 
-    ToggleLeft, ToggleRight, Radio, ArrowRight, RefreshCw, Workflow
+    ToggleLeft, ToggleRight, Radio, ArrowRight, RefreshCw, Workflow,
+    Video, VideoIcon, ExternalLink, Globe
 } from 'lucide-react';
 import './ActionAgent.css';
+
+// --- MOCK SIMULATION FLOWS ---
+const FLOWS = {
+    STANDARD: {
+        title: "Uploading Report and Sending to Team",
+        type: 'active',
+        resources: [{ name: "Q4_Final_Report.pdf", source: "Resource Engine" }],
+        steps: [
+            { id: 1, label: "Generating Report via Docs Agent", status: "pending", icon: 'file', microLogs: ["Generating layout...", "Saving as PDF..."] },
+            { id: 2, label: "Uploading to Drive", status: "pending", icon: 'drive', microLogs: ["Authenticating...", "Uploading (2.4MB)...", "Generating link..."] },
+            { id: 3, label: "Dispatching via Communication Agent", status: "pending", icon: 'mail', microLogs: ["Drafting email to 'Team'...", "Email sent!"] }
+        ]
+    },
+    INTERVENTION: {
+        title: "Fetch Q3 Deck & Compile Stats",
+        type: 'active',
+        resources: [],
+        steps: [
+            { id: 1, label: "Searching Financial DB", status: "pending", icon: 'database', microLogs: ["Querying Q3 ledgers..."] },
+            { id: 2, label: "Fetching Q3 Deck", status: "pending", icon: 'drive', requiresIntervention: true, interventionMsg: "Cannot find 'Q3_Deck_FINAL.pptx'. Please manually provide the link or file.", microLogs: ["Searching...", "File Not Found. Pausing for human intervention."] },
+            { id: 3, label: "Compiling Statistics", status: "pending", icon: 'spreadsheet', microLogs: ["Aggregating metrics...", "Rows added."] }
+        ]
+    },
+    BULK_SCHEDULED: {
+        title: "Send Certificates to 50 Students",
+        type: 'scheduled',
+        scheduledTime: "19:00",
+        resources: [{ name: "Student_List_2026.csv", source: "CRM Sync" }, { name: "Certificate_Template.docx", source: "Docs Engine" }],
+        steps: [
+            { id: 1, label: "Wait for Scheduled Time (7:00 PM)", status: "pending", icon: 'clock', isWait: true, microLogs: ["Monitoring time..."] },
+            { id: 2, label: "Generate Personalized Files", status: "pending", icon: 'file', isBulk: true, totalItems: 50, microLogs: [] },
+            { id: 3, label: "Distribute via Email", status: "pending", icon: 'mail', isBulk: true, totalItems: 50, microLogs: [] }
+        ]
+    },
+    ZOOM_MEETING: {
+        title: "Schedule Zoom Roadmap Review",
+        type: 'active',
+        resources: [],
+        resultData: {
+            type: 'meeting',
+            provider: 'zoom',
+            meetingId: "824 9912 0041",
+            joinUrl: "https://zoom.us/j/82499120041",
+            passcode: "NURO2026"
+        },
+        steps: [
+            { id: 1, label: "Authenticating with Zoom", status: "pending", icon: 'zoom', microLogs: ["Verifying OAuth token...", "Authenticated as 'Admin'"] },
+            { id: 2, label: "Checking Host Availability", status: "pending", icon: 'clock', microLogs: ["Querying calendar...", "Found slot at 4:00 PM."] },
+            { id: 3, label: "Generating Meeting Link", status: "pending", icon: 'video', microLogs: ["Requesting Zoom API...", "Meeting Created."] }
+        ]
+    }
+};
+
+const getFlowType = (text) => {
+    if (text.toLowerCase().includes("zoom") || text.toLowerCase().includes("meeting")) return FLOWS.ZOOM_MEETING;
+    if (text.toLowerCase().includes("stats") || text.toLowerCase().includes("deck")) return FLOWS.INTERVENTION;
+    if (text.toLowerCase().includes("student") || text.toLowerCase().includes("bulk") || text.toLowerCase().includes("certificate")) return FLOWS.BULK_SCHEDULED;
+    return FLOWS.STANDARD;
+};
 
 const IconHOC = ({ type, size = 16 }) => {
     switch(type) {
@@ -18,9 +78,12 @@ const IconHOC = ({ type, size = 16 }) => {
         case 'spreadsheet': return <FileSpreadsheet size={size} className="app-icon sheets" />;
         case 'database': return <Database size={size} className="app-icon db" />;
         case 'clock': return <Clock size={size} className="app-icon time" />;
+        case 'zoom': return <Video size={size} className="app-icon zoom" />;
+        case 'video': return <VideoIcon size={size} className="app-icon meet" />;
         default: return <Activity size={size} className="app-icon default" />;
     }
 };
+
 
 const ActionAgentPage = () => {
     const navigate = useNavigate();
@@ -39,12 +102,33 @@ const ActionAgentPage = () => {
     const [commandInput, setCommandInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [interventionInput, setInterventionInput] = useState('');
+    const [integrations, setIntegrations] = useState({ google: false, zoom: false });
 
     // NLP Preview State
     const [nlpPreview, setNlpPreview] = useState(null);
 
     // Execution log visibility per task
     const [expandedLogs, setExpandedLogs] = useState({});
+
+    // Fetch integration status on mount
+    useEffect(() => {
+        const fetchStatus = async () => {
+            try {
+                const res = await fetch('/api/actions/status', {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                const data = await res.json();
+                if (data.success) setIntegrations(data.status);
+            } catch (err) {
+                console.error("Failed to fetch integration status");
+            }
+        };
+        fetchStatus();
+    }, []);
+
+    const handleAuthRedirect = (tool) => {
+        window.location.href = `/api/integrations/${tool === 'meet' || tool === 'sheets' ? 'google' : tool}/auth`;
+    };
 
     // Internal fast frontend simulator for DB OFFLINE mode
     const runMockOfflineSimulation = (mockWf) => {
@@ -90,6 +174,17 @@ const ActionAgentPage = () => {
                 return newTasks;
             });
         }, 3000);
+    };
+
+    // Forces a scheduled task to run early
+    const forceRunScheduled = (taskId) => {
+        console.log("Force Override for ID", taskId);
+    };
+
+    // Submits the intervention data and resumes
+    const resolveIntervention = (taskId, stepIndex) => {
+        if (!interventionInput.trim()) return;
+        setInterventionInput('');
     };
 
     // --- Data Fetching ---
@@ -402,14 +497,6 @@ const ActionAgentPage = () => {
     };
 
     // --- Support UI Triggers ---
-    const forceRunScheduled = (taskId) => {
-        console.log("Force Override for ID", taskId);
-    };
-
-    const resolveIntervention = (taskId, stepIndex) => {
-        if (!interventionInput.trim()) return;
-        setInterventionInput('');
-    };
 
     const toggleLogView = (taskId) => {
         setExpandedLogs(prev => ({ ...prev, [taskId]: !prev[taskId] }));
@@ -472,6 +559,16 @@ const ActionAgentPage = () => {
                             <Zap size={14} /> Automations
                             <span className="tab-count">{eventRules.length}</span>
                         </button>
+                    </div>
+                    
+                    <div className="connection-hub-container">
+                        <Globe size={14} className={`hub-tool-icon ${integrations.google || integrations.zoom ? 'active' : ''}`} />
+                        <div className={`connection-dot ${integrations.google || integrations.zoom ? 'active' : ''}`} />
+                        <div className="connection-hub-icons" style={{ display: 'flex', gap: '8px', marginLeft: '4px' }}>
+                            <FileSpreadsheet size={14} className={`hub-tool-icon ${integrations.google ? 'active' : ''}`} onClick={() => handleAuthRedirect('sheets')} style={{ cursor: 'pointer' }} />
+                            <Mail size={14} className={`hub-tool-icon ${integrations.google ? 'active' : ''}`} onClick={() => handleAuthRedirect('google')} style={{ cursor: 'pointer' }} />
+                            <Video size={14} className={`hub-tool-icon ${integrations.zoom ? 'active' : ''}`} onClick={() => handleAuthRedirect('zoom')} style={{ cursor: 'pointer' }} />
+                        </div>
                     </div>
                 </div>
 
@@ -588,6 +685,7 @@ const ActionAgentPage = () => {
                                                         {task.status === 'retrying' && <RefreshCw size={12} className="spin-icon" />}
                                                         {task.status === 'delayed' && <Timer size={12} />}
                                                         {task.status === 'failed' && <AlertTriangle size={12} />}
+                                                        {task.status === 'recovered' && <Sparkles size={12} />}
                                                         {task.status.toUpperCase()}
                                                     </div>
                                                 </div>
@@ -624,6 +722,40 @@ const ActionAgentPage = () => {
                                                 </div>
                                             )}
 
+                                            {/* Meeting / Tool Specific Results Card */}
+                                            <AnimatePresence>
+                                                {task.status === 'completed' && task.resultData && (
+                                                    <motion.div 
+                                                        initial={{ opacity: 0, y: 10 }} 
+                                                        animate={{ opacity: 1, y: 0 }} 
+                                                        className="execution-result-card"
+                                                    >
+                                                        {task.resultData.type === 'meeting' && (
+                                                            <div className="meeting-result-content">
+                                                                <div className="meeting-result-header">
+                                                                    <div className={`meeting-brand-icon ${task.resultData.provider}`}>
+                                                                        {task.resultData.provider === 'zoom' ? <Video size={20} /> : <VideoIcon size={20} />}
+                                                                    </div>
+                                                                    <div style={{ flex: 1 }}>
+                                                                        <h4>Meeting Scheduled</h4>
+                                                                        <p className="meeting-id-text">Join Link Generated</p>
+                                                                    </div>
+                                                                    <a href={task.resultData.joinUrl} target="_blank" rel="noreferrer" className="join-now-btn">
+                                                                        Join Now <ExternalLink size={14} />
+                                                                    </a>
+                                                                </div>
+                                                                {task.resultData.passcode && (
+                                                                    <div className="passcode-footer">
+                                                                        <span>Meeting ID: <code>{task.resultData.meetingId}</code></span>
+                                                                        <span style={{ marginLeft: '1rem' }}>Passcode: <code>{task.resultData.passcode}</code></span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+
                                             {/* Step Timeline */}
                                             <div className="timeline-container">
                                                 {task.steps.map((step, idx) => {
@@ -653,6 +785,7 @@ const ActionAgentPage = () => {
                                                                     <h4>{step.label}</h4>
                                                                     <IconHOC type={step.icon} size={14} />
                                                                 </div>
+
 
                                                                 {/* Step Badges (retry / delay) */}
                                                                 {(step.retryConfig?.maxRetries > 0 || step.delayMs > 0) && (
@@ -888,6 +1021,7 @@ const ActionAgentPage = () => {
                                             <FileSpreadsheet size={14} style={{color: '#4caf50', marginRight: 6, verticalAlign: -2}} />
                                             Fetch Q3 deck and compile stats
                                         </button>
+
                                     </div>
                                 )}
                             </div>

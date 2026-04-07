@@ -465,3 +465,40 @@
   flex-shrink: 0;
   z-index: 10;
 }
+
+/* Markdown Content Styling */
+.markdown-content p {
+  margin: 0 0 1rem 0;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content ul, 
+.markdown-content ol {
+  margin: 0.5rem 0 1rem 1.5rem;
+  padding: 0;
+}
+
+.markdown-content li {
+  margin-bottom: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+.markdown-content li:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.markdown-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9em;
+}

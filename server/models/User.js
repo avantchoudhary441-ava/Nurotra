@@ -15,6 +15,10 @@ const UserSchema = new mongoose.Schema({
     successfulCollabs: { type: Number, default: 0 },
     gmailAccessToken: { type: String },
     gmailRefreshToken: { type: String },
+    googleAccessToken: { type: String },
+    googleRefreshToken: { type: String },
+    zoomAccessToken: { type: String },
+    zoomRefreshToken: { type: String },
     seenMatches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 
     // Admin Control Room Fields
