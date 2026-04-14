@@ -45,7 +45,7 @@ const ExecutionLogSchema = new mongoose.Schema({
 
 const ConditionSchema = new mongoose.Schema({
     field: { type: String },
-    operator: { type: String, enum: ["contains", "equals", "gt", "lt", "regex", "not_equals", "exists"] },
+    operator: { type: String }, // Relaxed from enum for AI compatibility
     value: { type: mongoose.Schema.Types.Mixed },
     raw_text: { type: String }
 });

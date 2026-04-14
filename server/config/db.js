@@ -5,9 +5,10 @@ const connectDB = async () => {
     console.log(`[DB Debug] Connecting to: ${maskedUri}`);
     try {
         await mongoose.connect(process.env.MONGO_URI, {
-            serverSelectionTimeoutMS: 15000,
-            connectTimeoutMS: 15000,
-            family: 4,
+            serverSelectionTimeoutMS: 30000,
+            connectTimeoutMS: 30000,
+            socketTimeoutMS: 45000,
+            tls: true,
             directConnection: false
         });
         console.log("✅ MongoDB Connected...");

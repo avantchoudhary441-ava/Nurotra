@@ -7,6 +7,7 @@
 const EventRule = require("../models/EventRule");
 const ActionWorkflow = require("../models/ActionWorkflow");
 const mongoose = require("mongoose");
+const syncEngineService = require("./syncEngineService");
 
 const DEV_USER_ID = new mongoose.Types.ObjectId("000000000000000000000001");
 
@@ -93,6 +94,15 @@ const processEvent = async (eventType, eventData, webhookId = null) => {
                 }
             }
         }
+
+        // Trigger Cross-Platform Sync Engine
+        await syncEngineService.captureEvent(
+            null, // userId context
+            eventType === "system_state" ? "System" : eventType,
+            "Event",
+            "processed",
+            eventData
+        );
 
         return triggeredWorkflows;
     } catch (error) {

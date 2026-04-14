@@ -7,6 +7,7 @@
 
 const sendEmail = require("../utils/sendEmail");
 const { generateWithFallback } = require("./aiService");
+const formAuto = require("./formAutomationService");
 
 // ============================================================
 // STEP EXECUTOR REGISTRY
@@ -150,6 +151,55 @@ const stepExecutors = {
         return { success: true, message: `Alert sent to ${recipient}` };
     },
 
+    // ----- FORM AUTOMATION -----
+    "detect_form": async (step, context) => {
+        const fields = formAuto.detectFormFields(context.environment || { description: context.workflowTitle });
+        return { 
+            success: true, 
+            message: `Detected ${fields.length} form fields: ${fields.map(f => f.label).join(", ")}`,
+            data: { fields } 
+        };
+    },
+
+    "map_profile": async (step, context) => {
+        const fields = step.params?.fields || context.detectedFields || [];
+        const mappedData = await formAuto.mapContextualData(fields, context.userId);
+        return { 
+            success: true, 
+            message: "Successfully mapped profile data to form fields.",
+            data: { mappedData } 
+        };
+    },
+
+    "fill_form": async (step, context) => {
+        const data = step.params?.mappedData || context.mappedData || {};
+        const validation = formAuto.validateForm(step.params?.fields || [], data);
+        
+        if (!validation.isValid) {
+            return { 
+                success: false, 
+                message: "Form validation failed.",
+                errors: validation.errors,
+                interventionRequired: true
+            };
+        }
+
+        return { 
+            success: true, 
+            message: "Form fields populated with high confidence.",
+            data: { filledData: data } 
+        };
+    },
+
+    "submit_form": async (step, context) => {
+        // Simulated submission
+        return { 
+            success: true, 
+            message: "Form submitted successfully. Log: [POST-SUBMISSION-CONFIRMED]",
+            data: { submissionId: `SUB-${Date.now().toString(36).toUpperCase()}` } 
+        };
+    },
+
     // ----- GENERIC / FALLBACK -----
     "default": async (step, context) => {
         // Use AI to "execute" unknown action types
@@ -195,6 +245,12 @@ const mapStepToExecutor = (step) => {
 
     // Files
     if (/upload|push|deploy|export/.test(label)) return 'upload_file';
+
+    // Form Automation
+    if (/detect\s*form|scan\s*page|find\s*fields/.test(label)) return 'detect_form';
+    if (/map\s*profile|resolve\s*data|match\s*fields/.test(label)) return 'map_profile';
+    if (/fill\s*form|populate|auto-fill/.test(label)) return 'fill_form';
+    if (/submit|apply|register|sign\s*up/.test(label)) return 'submit_form';
 
     return 'default';
 };

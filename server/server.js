@@ -129,10 +129,14 @@ server.timeout = 900000; // 15 Minutes for very deep AI logic
 server.headersTimeout = 910000;
 server.keepAliveTimeout = 90000;
 
-server.listen(PORT, () => {
-    console.log(`\n================================================`);
-    console.log(`🚀 NUROTRA BACKEND ACTIVE ON PORT ${PORT}`);
-    console.log(`🕒 System Time: ${new Date().toISOString()}`);
-    console.log(`📡 OpenAI: ${process.env.OPENAI_API_KEY ? 'CONFIGURED' : 'MISSING'}`);
-    console.log(`================================================\n`);
-});
+if (require.main === module) {
+    server.listen(PORT, () => {
+        console.log(`\n================================================`);
+        console.log(`🚀 NUROTRA BACKEND ACTIVE ON PORT ${PORT}`);
+        console.log(`🕒 System Time: ${new Date().toISOString()}`);
+        console.log(`📡 OpenAI: ${process.env.OPENAI_API_KEY ? 'CONFIGURED' : 'MISSING'}`);
+        console.log(`================================================\n`);
+    });
+}
+
+module.exports = app;

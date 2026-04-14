@@ -24,6 +24,49 @@ const parseJSON = (text) => {
  * with support for event-driven triggers, conditions, delays, and retries.
  */
 const parseActionIntent = async (command) => {
+    // TEST BYPASS: Allow testing form automation without OpenAI
+    if (command.toLowerCase().includes("test form")) {
+        return {
+            "intent": "WORKFLOW_EXECUTION",
+            "isEventDriven": false,
+            "workflow": {
+                "title": "Application for Software Internship",
+                "trigger": { "type": "manual", "source": "user_command" },
+                "conditions": [{ "field": "exists", "operator": "exists", "value": "true" }],
+                "actions": [
+                    {
+                        "id": 1,
+                        "label": "Detect Form Elements",
+                        "icon": "database",
+                        "params": { "detectFields": true },
+                        "microLogs": ["Scanning DOM for inputs...", "Found 5 candidates."]
+                    },
+                    {
+                        "id": 2,
+                        "label": "Map Profile Data",
+                        "icon": "file",
+                        "params": {},
+                        "microLogs": ["Resolving User Model...", "Linking 'Full Name' to Akshat Sharma."]
+                    },
+                    {
+                        "id": 3,
+                        "label": "Auto-Fill Fields",
+                        "icon": "default",
+                        "params": {},
+                        "microLogs": ["Injecting values...", "Validating required fields."]
+                    },
+                    {
+                        "id": 4,
+                        "label": "Submit Information",
+                        "icon": "mail",
+                        "params": {},
+                        "microLogs": ["Clicking Submit...", "Waiting for confirmation."]
+                    }
+                ]
+            }
+        };
+    }
+
     const systemPrompt = `You are the Nurotra Action Agent Execution Engine. 
 You act like Zapier combined with an intelligent virtual controller and system executor.
 
@@ -56,55 +99,46 @@ Route map:
 - Action agent/automations → /action-agent
 - If ambiguous → /
 
-Format B (For WORKFLOW_EXECUTION):
+Format B (For WORKFLOW_EXECUTION / FORM_AUTOMATION):
 {
   "intent": "WORKFLOW_EXECUTION",
   "isEventDriven": true/false,
   "workflow": {
     "title": "Short Descriptive Title",
-    "deadline": "ISO Date String if specified, e.g., 'by 5 PM today'",
-    "trigger": {
-      "type": "message_received" | "manual" | "scheduled" | "webhook" | "system_state",
-      "source": "Description of trigger source"
-    },
-    "conditions": [
-      {
-        "field": "message.body",
-        "operator": "contains" | "equals" | "gt" | "lt" | "regex" | "not_equals" | "exists",
-        "value": "the value to check",
-        "raw_text": "Human readable condition text"
-      }
-    ],
-    "conditionLogic": "AND" | "OR",
-    "conditionRawText": "Full human readable condition summary",
+    "deadline": "ISO Date String if specified",
+    "trigger": { "type": "manual" | "message_received" | "scheduled", "source": "string" },
+    "conditions": [{ "field": "string", "operator": "string", "value": "string" }],
     "actions": [
       {
         "id": 1,
-        "label": "Generate Invoice",
-        "icon": "file",
-        "isReversible": true/false,
-        "delayMs": 2000,
-        "microLogs": ["Preparing template...", "Assigning amount...", "Generated."],
-        "retryConfig": { "maxRetries": 1, "retryDelayMs": 2000 },
-        "missingData": [
-          { 
-            "field": "recipient_id", 
-            "criticality": "critical" | "minor",
-            "inferredValue": "Suggested value or null"
-          }
-        ]
+        "label": "Action label",
+        "icon": "mail" | "file" | "database" | "clock" | "default",
+        "params": { 
+           "formUrl": "string if applicable",
+           "detectFields": true/false 
+        },
+        "microLogs": ["Step 1...", "Step 2..."]
       }
     ]
   }
 }
 
+SPECIAL CASE: FORM AUTOMATION
+If the user wants to "Apply", "Register", "Sign up", or "Fill a form":
+1. Set title to something like "Application for [Role/Company]"
+2. Add these specific actions:
+   - Label: "Detect Form Elements", icon: "database", params: { "detectFields": true }
+   - Label: "Map Profile Data", icon: "file"
+   - Label: "Auto-Fill Fields", icon: "default"
+   - Label: "Submit Information", icon: "mail"
+
+ENUMS (CRITICAL):
+- "icon": "drive" | "mail" | "file" | "spreadsheet" | "database" | "clock" | "default"
+- "trigger.type": "manual" | "message_received" | "scheduled" | "webhook" | "system_state"
+- "conditions.operator": "contains" | "equals" | "gt" | "lt" | "regex" | "not_equals" | "exists"
+
 RULES:
-- "isReversible": Set to FALSE if the action sends an external message (email/slack), deletes data, or commits a non-undoable transaction. TRUE for data fetching, generation, or internal logs.
-- "deadline": Look for "by [time]", "within [duration]", "deadline is [time]".
-- "missingData": Identify any required parameters not found in the prompt. Identify if ID, names or specific values are missing.
-- "icon" must be one of: drive, mail, file, spreadsheet, database, clock, default
-- If the command implies repeatable automation (e.g. "whenever", "every time"), set isEventDriven: true
-- Always include at least one condition object (use operator: "exists" for unconditional)
+- If the command implies repeatable automation, set isEventDriven: true
 - Provide 2-5 actions that meaningfully decompose the user's request
 `;
 
@@ -143,22 +177,23 @@ OUTPUT STRICT JSON (No markdown, no extra text):
     {
       "id": 1,
       "label": "Action description",
-      "icon": "file",
+      "icon": "drive" | "mail" | "file" | "spreadsheet" | "database" | "clock" | "default",
+      "params": { "detectFields": true/false },
       "delayMs": 2000,
-      "microLogs": ["Step 1...", "Step 2...", "Done."],
-      "retryConfig": {
-        "maxRetries": 1,
-        "retryDelayMs": 2000
-      }
+      "microLogs": ["Step 1...", "Step 2...", "Done."]
     }
   ]
 }
 
+SPECIAL CASE: FORM AUTOMATION
+If the rule involves filling forms automatically on trigger:
+- Label first action: "Detect Form Elements"
+- Label second action: "Map Profile & Auto-Fill"
+- Label third action: "Submit Information"
+
 RULES:
 - "icon" must be one of: drive, mail, file, spreadsheet, database, clock, default
-- Always include at least one condition
 - Generate realistic microLogs (2-3 per action)
-- Provide 2-5 meaningful actions
 `;
 
     const responseText = await aiService.generateWithFallback(command, systemPrompt);

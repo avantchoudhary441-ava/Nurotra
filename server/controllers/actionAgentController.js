@@ -62,11 +62,11 @@ exports.executeCommand = async (req, res) => {
                     })),
                     conditionLogic: workflowData.conditionLogic || "AND",
                     conditionRawText: workflowData.conditionRawText || "",
-                    actions: workflowData.actions.map(action => ({
-                        id: action.id,
+                    actions: workflowData.actions.map((action, index) => ({
+                        id: parseInt(action.id) || index + 1,
                         label: action.label,
                         icon: action.icon || "default",
-                        delayMs: action.delayMs || 2000,
+                        delayMs: parseInt(action.delayMs) || 2000,
                         microLogs: action.microLogs || [],
                         retryConfig: action.retryConfig || { maxRetries: 1, retryDelayMs: 2000 }
                     }))
@@ -122,7 +122,7 @@ exports.executeCommand = async (req, res) => {
                 })),
                 conditionLogic: workflowData.conditionLogic || "AND",
                 conditionRawText: workflowData.conditionRawText || "",
-                steps: workflowData.actions.map(action => {
+                steps: workflowData.actions.map((action, idx) => {
                     // Strict parsing for irreversibility (handle strings or booleans)
                     let isRev = true;
                     if (action.isReversible === false || action.isReversible === 'false') {
@@ -130,12 +130,12 @@ exports.executeCommand = async (req, res) => {
                     }
 
                     return {
-                        id: action.id,
+                        id: parseInt(action.id) || idx + 1,
                         label: action.label,
                         icon: action.icon || "default",
                         status: "pending",
                         microLogs: action.microLogs || [],
-                        delayMs: action.delayMs || 0,
+                        delayMs: parseInt(action.delayMs) || 0,
                         retryConfig: action.retryConfig || { maxRetries: 0, retryCount: 0, retryDelayMs: 2000 },
                         requiresIntervention: false,
                         isBulk: false,
@@ -173,7 +173,26 @@ exports.executeCommand = async (req, res) => {
 
     } catch (error) {
         console.error("Action Agent Execute Controller Error:", error);
-        res.status(500).json({ success: false, message: "Server error during execution." });
+        
+        // Handle AI specific errors gracefully
+        const errorMsg = error.message || "";
+        if (errorMsg.includes("AI") || errorMsg.includes("Gemini") || errorMsg.includes("OpenAI") || errorMsg.includes("keys configured")) {
+            return res.status(503).json({ 
+                success: false, 
+                message: "AI Engine Processing Error: " + error.message,
+                suggestion: "This usually happens when AI keys are missing, rate-limited, or hit context limits. Check your .env or Settings."
+            });
+        }
+        
+        // Return specific validation error if possible
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Validation Error: " + Object.values(error.errors).map(e => e.message).join(", ") 
+            });
+        }
+        
+        res.status(500).json({ success: false, message: "Server error during execution: " + error.message });
     }
 };
 

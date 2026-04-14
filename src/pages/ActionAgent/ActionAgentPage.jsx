@@ -9,6 +9,7 @@ import {
     ToggleLeft, ToggleRight, Radio, ArrowRight, RefreshCw, Workflow,
     ChevronDown, ChevronUp
 } from 'lucide-react';
+import SyncMonitor from './SyncMonitor';
 import './ActionAgent.css';
 
 const IconHOC = ({ type, size = 16 }) => {
@@ -510,6 +511,10 @@ const ActionAgentPage = () => {
                             <Zap size={14} /> Automations
                             <span className="tab-count">{eventRules.length}</span>
                         </button>
+                        <button className={`stage-tab ${activeTab === 'sync' ? 'active' : ''}`} onClick={() => setActiveTab('sync')}>
+                            <RefreshCw size={14} /> Sync Monitor
+                            <div className="live-pulse" />
+                        </button>
                     </div>
                 </div>
 
@@ -590,6 +595,9 @@ const ActionAgentPage = () => {
                                 </div>
                             </div>
                         )
+                    ) : activeTab === 'sync' ? (
+                        /* --- SYNC MONITOR TAB --- */
+                        <SyncMonitor />
                     ) : (
                         /* --- ACTIVE / SCHEDULED TABS --- */
                         (activeTab === 'active' ? activeTasks : scheduledTasks).length === 0 ? (

@@ -1,7 +1,18 @@
+require("dotenv").config();
 const axios = require("axios");
 const OpenAI = require("openai");
 
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+let _openai = null;
+const getOpenAI = () => {
+    if (_openai) return _openai;
+    const apiKey = process.env.OPENAI_API_KEY;
+    console.log(`[AI Service] API Key Check: ${apiKey ? (apiKey.substring(0, 7) + '...') : 'MISSING'}`);
+    if (apiKey) {
+        _openai = new OpenAI({ apiKey: apiKey });
+        return _openai;
+    }
+    return null;
+};
 
 // Simple In-Memory Cache for Cost Saving
 const responseCache = new Map();
@@ -25,9 +36,15 @@ const getApiKeys = () => {
  * @param {Array} images - [{ mimeType, data }]
  */
 const generateWithOpenAI = async (prompt, systemPrompt = "", images = []) => {
-    if (!openai) throw new Error("OpenAI API key not configured");
+    const openai = getOpenAI();
+    console.log(`[AI Service] generateWithOpenAI called. Key present: ${!!process.env.OPENAI_API_KEY}`);
+    if (!openai) {
+        console.error("[AI Service] generateWithOpenAI: OpenAI client is null!");
+        throw new Error("OpenAI API key not configured");
+    }
 
     try {
+        console.log("[AI Service] Creating chat completion...");
         const contentParts = [{ type: "text", text: prompt }];
 
         // Add Vision support
@@ -90,6 +107,7 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = [], mult
         }
 
         // 1. Attempt OpenAI Primary (Vision/Standard)
+        const openai = getOpenAI();
         if (openai && (!multimedia || multimedia.length === 0)) {
             try {
                 console.log(`[AI Service] Attempting delivery via OpenAI (Primary)... ${images.length > 0 ? '[Vision Mode]' : ''}`);
@@ -101,7 +119,8 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = [], mult
                     return text;
                 }
             } catch (openAiError) {
-                console.warn('[AI Service] OpenAI Primary failed, falling back to Gemini Reservoir.');
+                console.warn(`[AI Service] OpenAI Primary failed: ${openAiError.message}`);
+                console.log('[AI Service] Falling back to Gemini Reservoir.');
             }
         } else if (multimedia && multimedia.length > 0) {
             console.log(`[AI Service] Multimedia detected (PDFs). Prioritizing Gemini Native Grounding.`);
@@ -1247,6 +1266,50 @@ const structureVoiceIntent = async (transcript, userContext = {}) => {
     }
 };
 
+/**
+ * Semantic Field Mapper
+ * Automatically maps fields from Source Platform to Target Platform
+ * e.g., "WhatsApp" sender -> "Google Sheets" client_name
+ */
+const mapFieldsSemantically = async (sourceSchema, targetSchema, contextPrompt = "") => {
+    try {
+        const systemPrompt = `You are the Nurotra Semantic Mapping Engine.
+Your job is to intelligently map fields from a Source Platform schema to a Target Platform schema.
+Even if field names differ (e.g. "Customer" vs "Client"), use semantic meaning to find matches.
+
+RULES:
+1. Return a JSON object where keys are Source fields and values are Target fields.
+2. Only include fields that have a high-confidence match.
+3. If no match is found for a critical source field, omit it.
+4. Include a "confidence" field (0-100) and a "reasoning" string for each mapping.
+
+OUTPUT FORMAT:
+{
+  "mappings": {
+    "source_field_1": "target_field_A",
+    "source_field_2": "target_field_B"
+  },
+  "metadata": {
+    "confidence": 85,
+    "reasoning": "Standard contact data normalization across CRM and Sheets."
+  }
+}`;
+
+        const prompt = `
+SOURCE SCHEMA: ${JSON.stringify(sourceSchema)}
+TARGET SCHEMA: ${JSON.stringify(targetSchema)}
+CONTEXT: ${contextPrompt}
+`;
+
+        let text = await generateWithFallback(prompt, systemPrompt);
+        text = text.replace(/```json|```/g, "").trim();
+        return JSON.parse(text);
+    } catch (error) {
+        console.error("[AI Service] Mapping Error:", error.message);
+        throw error;
+    }
+};
+
 module.exports = {
     generateSmartReplies,
     generateOpener,
@@ -1260,5 +1323,6 @@ module.exports = {
     extractMetadata,
     structureVoiceIntent,
     extractIntentWithLLM,
-    generateWithFallback
+    generateWithFallback,
+    mapFieldsSemantically
 };
