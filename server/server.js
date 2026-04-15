@@ -1,4 +1,5 @@
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
@@ -6,7 +7,7 @@ const connectDB = require("./config/db");
 const helmet = require("helmet");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
-const path = require("path");
+// Helmet, compression and other middleware imports...
 
 const app = express();
 app.set("trust proxy", 1);
@@ -89,6 +90,8 @@ app.use("/api/communication", require("./routes/communicationRoutes"));
 app.use("/api/integrations", require("./routes/integrationRoutes"));
 app.use("/api/resources", require("./routes/resourceRoutes"));
 app.use("/api/action-agent", require("./routes/actionAgentRoutes"));
+app.use("/api/actions", require("./routes/actionRoutes"));
+
 
 // Global Error Handler
 app.use((err, req, res, next) => {

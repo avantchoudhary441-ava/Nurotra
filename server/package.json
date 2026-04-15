@@ -38,7 +38,11 @@
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",
     "pdfkit-table": "^0.1.99",
+    "playwright": "^1.59.1",
+    "playwright-core": "^1.59.1",
+    "playwright-extra": "^4.3.6",
     "pptxgenjs": "^4.0.1",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "resend": "^6.6.0",
     "socket.io": "^4.8.3"
   },

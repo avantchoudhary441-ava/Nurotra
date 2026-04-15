@@ -24,6 +24,8 @@ const ActionStepSchema = new mongoose.Schema({
         retryCount: { type: Number, default: 0 },
         retryDelayMs: { type: Number, default: 2000 }
     },
+    // --- Action Parameters (e.g., search query, email recipient) ---
+    params: { type: mongoose.Schema.Types.Mixed, default: {} }
     // --- NEW: Autonomous Execution ---
     isReversible: { type: Boolean, default: true },
     missingData: [{

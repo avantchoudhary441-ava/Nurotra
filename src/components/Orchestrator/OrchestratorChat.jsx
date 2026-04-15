@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, Mic, ArrowUp, ArrowRight, Loader2, Bot, User, CheckCircle2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
@@ -309,7 +310,7 @@ const OrchestratorChat = ({ activeChatId, setActiveChatId, onChatCreated }) => {
                 </div>
               )}
 
-              <div style={{
+              <div className="markdown-content" style={{
                 background: msg.role === 'user' ? '#1f2937' : (msg.isSystem ? 'rgba(16, 227, 178, 0.1)' : 'transparent'),
                 color: msg.isSystem ? '#10e3b2' : msg.isError ? '#ef4444' : '#f3f4f6',
                 padding: '16px 20px', borderRadius: '16px',
@@ -318,9 +319,11 @@ const OrchestratorChat = ({ activeChatId, setActiveChatId, onChatCreated }) => {
                 borderTopRightRadius: msg.role === 'user' ? '4px' : '16px',
                 borderTopLeftRadius: msg.role === 'agent' ? '4px' : '16px',
               }}>
-                {msg.content}
+                <ReactMarkdown>
+                  {msg.content.replace(/(\d+\.\s+\*\*)/g, '\n$1')}
+                </ReactMarkdown>
                 {msg.type && (
-                  <div style={{ fontSize: '0.7em', marginTop: '8px', opacity: 0.5, textTransform: 'uppercase' }}>
+                  <div style={{ fontSize: '0.7em', marginTop: '12px', opacity: 0.5, textTransform: 'uppercase', fontStyle: 'italic' }}>
                     [Label: {msg.type}]
                   </div>
                 )}

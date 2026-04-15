@@ -9,6 +9,10 @@ router.post("/intervention/:id", actionAgentController.submitIntervention);
 router.get("/active-tasks", actionAgentController.getActiveTasks);
 router.post("/acknowledge/:workflowId", actionAgentController.acknowledgeTask);
 router.get("/history", actionAgentController.getHistory);
+router.get("/chat", actionAgentController.getChatHistory);
+router.delete("/chat", actionAgentController.clearChatHistory);
+router.post("/restart-browser", actionAgentController.restartBrowser);
+router.get("/suggestions", actionAgentController.getSuggestions);
 
 // --- Event Rules (Automation) ---
 router.post("/event-rules", actionAgentController.createEventRule);

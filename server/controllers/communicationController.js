@@ -1,6 +1,6 @@
 const communicationService = require("../services/communicationService");
 const CommunicationFactory = require("../services/communication/CommunicationFactory");
-const Meeting = require("../models/Meeting");
+const MeetingModel = require("../models/Meeting");
 const BulkCampaign = require("../models/BulkCampaign");
 const Contact = require("../models/Contact");
 const CommMessage = require("../models/CommMessage");
@@ -51,162 +51,85 @@ const chat = async (req, res) => {
     }
 };
 
-/**
- * List Contacts
- * GET /api/communication/contacts
- */
-const getContacts = async (req, res) => {
+const getCampaigns = async (req, res) => {
     try {
-        const contacts = await Contact.find({
-            userId: req.user._id,
-            isArchived: false
-        }).sort({ "metadata.lastContacted": -1 });
-
-        res.json({ success: true, contacts });
+        const userId = req.user?._id;
+        const campaigns = await BulkCampaign.find({ userId }).sort({ createdAt: -1 });
+        res.json({ success: true, campaigns });
     } catch (error) {
-        console.error("[CommController] Contacts error:", error);
-        res.status(500).json({ message: "Failed to fetch contacts." });
-    }
-};
-
-/**
- * Add/Update Contacts
- * POST /api/communication/contacts
- */
-const upsertContact = async (req, res) => {
-    const { name, email, platform = "email", groups = [] } = req.body;
-
-    if (!email) {
-        return res.status(400).json({ message: "Email is required." });
-    }
-
-    try {
-        const contact = await Contact.findOneAndUpdate(
-            { userId: req.user._id, email },
-            {
-                $set: { name: name || email.split("@")[0], email, platform },
-                $addToSet: { groups: { $each: groups } }
-            },
-            { upsert: true, new: true }
-        );
-
-        // AUTO-INGEST into Resource Engine
-        const resourceEngineService = require("../services/resourceEngineService");
-        await resourceEngineService.autoIngest(
-            req.user._id, 
-            "contact", 
-            { email: contact.email, platform: contact.platform, groups: contact.groups },
-            contact.name, 
-            contact._id
-        );
-
-        res.json({ success: true, contact });
-    } catch (error) {
-        console.error("[CommController] Upsert contact error:", error);
-        res.status(500).json({ message: "Failed to save contact." });
-    }
-};
-
-/**
- * Get Daily Digest
- * GET /api/communication/digest
- */
-const getDigest = async (req, res) => {
-    try {
-        const result = await communicationService.generateDigest(req.user._id);
-        res.json({ success: true, ...result });
-    } catch (error) {
-        console.error("[CommController] Digest error:", error);
-        res.status(500).json({ message: "Failed to generate digest." });
-    }
-};
-
-/**
- * Get Message History
- * GET /api/communication/history
- */
-const getHistory = async (req, res) => {
-    try {
-        const { limit = 50, contact } = req.query;
-        const query = { userId: req.user._id };
-
-        if (contact) {
-            query.recipientEmail = contact;
-        }
-
-        const messages = await CommMessage.find(query)
-            .sort({ createdAt: -1 })
-            .limit(parseInt(limit))
-            .populate("contactId", "name email");
-
-        res.json({ success: true, messages });
-    } catch (error) {
-        console.error("[CommController] History error:", error);
-        res.status(500).json({ message: "Failed to fetch history." });
-    }
-};
-
-/**
- * Create Automation Rule
- * POST /api/communication/rules
- */
-const createRule = async (req, res) => {
-    const { type, name, trigger, action } = req.body;
-
-    if (!type || !name) {
-        return res.status(400).json({ message: "Rule type and name are required." });
-    }
-
-    try {
-        const rule = await CommRule.create({
-            userId: req.user._id,
-            type,
-            name,
-            trigger: trigger || {},
-            action: action || {}
-        });
-
-        res.json({ success: true, rule });
-    } catch (error) {
-        console.error("[CommController] Rule error:", error);
-        res.status(500).json({ message: "Failed to create rule." });
-    }
-};
-
-/**
- * List Automation Rules
- * GET /api/communication/rules
- */
-const getRules = async (req, res) => {
-    try {
-        const rules = await CommRule.find({
-            userId: req.user._id,
-            isActive: true
-        }).sort({ createdAt: -1 });
-
-        res.json({ success: true, rules });
-    } catch (error) {
-        console.error("[CommController] List rules error:", error);
-        res.status(500).json({ message: "Failed to fetch rules." });
-    }
-};
-
-/**
- * Fetch messages directly from external platforms via Adapters
- * GET /api/communication/messages?platform=email
- */
-const getPlatformMessages = async (req, res) => {
-    try {
-        const platform = req.query.platform || "email";
-        const adapter = CommunicationFactory.getService(platform);
-        const messages = await adapter.readMessages(req.user._id, req.query);
-        res.json({ success: true, messages });
-    } catch (error) {
-        console.error(`[CommController] getPlatformMessages error:`, error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
+const getContacts = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const contacts = await Contact.find({ userId }).sort({ name: 1 });
+        res.json({ success: true, contacts });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const getHistory = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const messages = await CommMessage.find({ userId }).sort({ timestamp: -1 }).limit(50);
+        res.json({ success: true, messages });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const getRules = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const rules = await CommRule.find({ userId }).sort({ createdAt: -1 });
+        res.json({ success: true, rules });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const toggleRule = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const rule = await CommRule.findById(id);
+        if (!rule) return res.status(404).json({ success: false, message: "Rule not found" });
+        rule.enabled = !rule.enabled;
+        await rule.save();
+        res.json({ success: true, rule });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const deleteRule = async (req, res) => {
+    try {
+        const { id } = req.params;
+        await CommRule.findByIdAndDelete(id);
+        res.json({ success: true, message: "Rule deleted" });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const getAnalytics = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const messages = await CommMessage.find({ userId });
+        const analytics = {
+            totalMessages: messages.length,
+            inbound: messages.filter(m => m.direction === 'inbound').length,
+            outbound: messages.filter(m => m.direction === 'outbound').length,
+            byChannel: messages.reduce((acc, m) => {
+                acc[m.channel] = (acc[m.channel] || 0) + 1;
+                return acc;
+            }, {})
+        };
+        res.json({ success: true, analytics });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
 /**
  * List Meetings
  * GET /api/communication/meetings
@@ -288,16 +211,11 @@ const handleWebhook = async (req, res) => {
 
 module.exports = {
     chat,
-    getContacts,
-    upsertContact,
-    getDigest,
-    getHistory,
-    createRule,
-    getRules,
-    getPlatformMessages,
-    handleWebhook,
-    getMeetings,
-    syncMeetings,
     getCampaigns,
-    getCampaignDetail
+    getContacts,
+    getHistory,
+    getRules,
+    toggleRule,
+    deleteRule,
+    getAnalytics
 };

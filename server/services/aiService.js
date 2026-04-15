@@ -92,11 +92,12 @@ const crypto = require("crypto");
  * @param {Array} images - Optional array of { mimeType: string, data: base64 } objects
  * @param {Array} multimedia - Optional array of { mimeType: string, data: base64 } for PDFs, etc.
  */
-const generateWithFallback = async (prompt, systemPrompt = "", images = [], multimedia = []) => {
+const generateWithFallback = async (prompt, systemPrompt = "", images = [], multimedia = [], options = { forceJson: true }) => {
     try {
+        const forceJson = options.forceJson !== false;
         // Generate a unique cache key based on the full prompt and system prompt
         const mmSample = multimedia.map(m => (m.data && typeof m.data === 'string') ? m.data.substring(0, 100) : (m.hint || '')).join('');
-        const hashData = `${prompt}|${systemPrompt}|${images.length > 0 ? (images[0].data ? images[0].data.substring(0, 50) : '') : ''}|${mmSample}`;
+        const hashData = `${prompt}|${systemPrompt}|${images.length > 0 ? (images[0].data ? images[0].data.substring(0, 50) : '') : ''}|${mmSample}|${forceJson}`;
         const cacheKey = crypto.createHash('md5').update(hashData).digest('hex');
 
         if (responseCache.has(cacheKey) && images.length === 0) {
@@ -198,7 +199,7 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = [], mult
                         const response = await axios.post(url, {
                             contents: [{ parts }],
                             generationConfig: {
-                                responseMimeType: "application/json",
+                                responseMimeType: forceJson ? "application/json" : "text/plain",
                                 maxOutputTokens: 8192
                             }
                         }, {

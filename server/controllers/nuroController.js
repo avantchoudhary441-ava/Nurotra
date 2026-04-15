@@ -84,37 +84,40 @@ exports.getNuroMemory = async (req, res) => {
         const Chat = require('../models/Chat'); // Import Chat for fallback resolution
         let historyModified = false;
 
-        for (let entry of memory.collabHistory) {
-            // Check if partnerName is an ID or missing
-            const isObjectId = /^[0-9a-fA-F]{24}$/.test(entry.partnerName || "");
-            const hasNoName = !entry.partnerName || entry.partnerName === "Anonymous Partner" || entry.partnerName === entry.collabId;
+        if (memory.collabHistory && memory.collabHistory.length > 0) {
+            for (let entry of memory.collabHistory) {
+                // Check if partnerName is an ID or missing
+                const isObjectId = /^[0-9a-fA-F]{24}$/.test(entry.partnerName || "");
+                const hasNoName = !entry.partnerName || entry.partnerName === "Anonymous Partner" || entry.partnerName === entry.collabId;
 
-            if (isObjectId || hasNoName) {
-                // Resolution Strategy 1: The ID is a User ID
-                const potentialUserId = isObjectId ? entry.partnerName : entry.collabId;
+                if (isObjectId || hasNoName) {
+                    // Resolution Strategy 1: The ID is a User ID
+                    const potentialUserId = isObjectId ? entry.partnerName : entry.collabId;
 
-                if (mongoose.Types.ObjectId.isValid(potentialUserId)) {
-                    // Try User lookup first
-                    let user = await User.findById(potentialUserId).select('name');
+                    if (mongoose.Types.ObjectId.isValid(potentialUserId)) {
+                        // Try User lookup first
+                        let user = await User.findById(potentialUserId).select('name');
 
-                    if (!user) {
-                        // Resolution Strategy 2: The ID is a Chat ID
-                        const chat = await Chat.findById(potentialUserId).populate('users', 'name');
-                        if (chat && chat.users) {
-                            // Find the OTHER user in the chat
-                            const partner = chat.users.find(u => u._id.toString() !== req.user.id);
-                            if (partner) {
-                                entry.partnerName = partner.name;
-                                historyModified = true;
+                        if (!user) {
+                            // Resolution Strategy 2: The ID is a Chat ID
+                            const chat = await Chat.findById(potentialUserId).populate('users', 'name');
+                            if (chat && chat.users) {
+                                // Find the OTHER user in the chat
+                                const partner = chat.users.find(u => u._id.toString() !== req.user.id);
+                                if (partner) {
+                                    entry.partnerName = partner.name;
+                                    historyModified = true;
+                                }
                             }
+                        } else {
+                            entry.partnerName = user.name;
+                            historyModified = true;
                         }
-                    } else {
-                        entry.partnerName = user.name;
-                        historyModified = true;
                     }
                 }
             }
         }
+
 
         if (modified || historyModified) await memory.save();
 
