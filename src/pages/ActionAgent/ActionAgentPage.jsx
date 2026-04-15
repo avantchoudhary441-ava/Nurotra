@@ -2,6 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, Sparkles, Globe, User, ShieldAlert, AlertCircle, RefreshCw, X, Paperclip, CheckCircle2, AlertTriangle, Play, Pause, Activity } from 'lucide-react';
+import { 
+    CheckCircle2, CircleDashed, AlertTriangle, Clock, History, Paperclip, 
+    Send, Terminal, Loader2, Sparkles, Settings2, HardDrive, 
+    Mail, FileSpreadsheet, Activity, Bell, FileText, Database, ShieldAlert,
+    Zap, ChevronRight, RotateCcw, Timer, ScrollText, Trash2, 
+    ToggleLeft, ToggleRight, Radio, ArrowRight, RefreshCw, Workflow,
+    ChevronDown, ChevronUp
+} from 'lucide-react';
+import SyncMonitor from './SyncMonitor';
 import './ActionAgent.css';
 import { io } from "socket.io-client";
 
@@ -33,6 +42,54 @@ const ActionAgentPage = () => {
     const [commandInput, setCommandInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [suggestions, setSuggestions] = useState([]);
+    const [interventionInput, setInterventionInput] = useState('');
+
+    // NLP Preview State
+    const [nlpPreview, setNlpPreview] = useState(null);
+
+    // Execution log visibility per task
+    const [expandedLogs, setExpandedLogs] = useState({});
+    const [expandedHistory, setExpandedHistory] = useState({});
+
+    // Internal fast frontend simulator for DB OFFLINE mode
+    const runMockOfflineSimulation = (mockWf) => {
+        let currentStep = 0;
+        let microLogIndex = 0;
+        const simInterval = setInterval(() => {
+            setActiveTasks(prev => {
+                const newTasks = [...prev];
+                const wfIndex = newTasks.findIndex(t => t._id === mockWf._id);
+                if (wfIndex === -1) return prev;
+                
+                let wf = { ...newTasks[wfIndex] };
+                if (currentStep < wf.steps.length) {
+                    const currentStepData = wf.steps[currentStep];
+                    wf.steps = wf.steps.map((s, idx) => {
+                        if (idx < currentStep) return { ...s, status: 'completed' };
+                        if (idx === currentStep) return { ...s, status: 'running' };
+                        return s;
+                    });
+                    // Cycle through micro-logs for realism
+                    const logs = currentStepData.microLogs || [];
+                    wf.activeMicroLog = logs[microLogIndex % logs.length] || `Executing ${currentStepData.label}...`;
+                    microLogIndex++;
+                    
+                    // Move to next step every 2 ticks (so each step takes ~6s visible time)
+                    if (microLogIndex % 2 === 0) {
+                        currentStep++;
+                        microLogIndex = 0;
+                    }
+                } else if (currentStep === wf.steps.length) {
+                    wf.steps = wf.steps.map(s => ({ ...s, status: 'completed' }));
+                    wf.status = 'completed';
+                    wf.activeMicroLog = "All tasks finished successfully!";
+                    clearInterval(simInterval);
+                }
+                newTasks[wfIndex] = wf;
+                return newTasks;
+            });
+        }, 3000);
+    };
 
     // Layout State (Split Screen)
     const [leftWidth, setLeftWidth] = useState(window.innerWidth * 0.4);
@@ -254,6 +311,37 @@ const ActionAgentPage = () => {
                     {animate ? <TypewriterText text={trimmed} speed={10} /> : trimmed}
                 </div>;
             }
+    const deleteRule = async (ruleId) => {
+        try {
+            await fetch(`http://localhost:5000/api/action-agent/event-rules/${ruleId}`, { method: 'DELETE' });
+            setEventRules(prev => prev.filter(r => r._id !== ruleId));
+        } catch (e) { console.error(e); }
+    };
+
+    // --- Support UI Triggers ---
+    const forceRunScheduled = (taskId) => {
+        console.log("Force Override for ID", taskId);
+    };
+
+    const confirmAction = async (taskId) => {
+        try {
+            await fetch(`http://localhost:5000/api/action-agent/confirm/${taskId}`, { method: 'POST' });
+            fetchTasks();
+        } catch (e) { console.error(e); }
+    };
+
+    const resolveIntervention = async (taskId, field) => {
+        if (!interventionInput.trim()) return;
+        try {
+            await fetch(`http://localhost:5000/api/action-agent/intervention/${taskId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field, value: interventionInput })
+            });
+            setInterventionInput('');
+            fetchTasks();
+        } catch (e) { console.error(e); }
+    };
 
             // Bullet points
             if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('  •')) {
@@ -283,6 +371,40 @@ const ActionAgentPage = () => {
                         </div>
                     );
                 }
+    const toggleHistoryView = (taskId) => {
+        setExpandedHistory(prev => ({ ...prev, [taskId]: !prev[taskId] }));
+    };
+
+    const dismissWorkflow = async (workflowId) => {
+        // Handle local mock tasks (if ID starts with 'mock_')
+        if (typeof workflowId === 'string' && workflowId.startsWith('mock_')) {
+            setActiveTasks(prev => prev.filter(t => t._id !== workflowId));
+            return;
+        }
+
+        try {
+            const res = await fetch(`http://localhost:5000/api/action-agent/acknowledge/${workflowId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await res.json();
+            if (data.success) {
+                fetchTasks();
+            }
+        } catch (error) {
+            console.error("Failed to dismiss workflow:", error);
+            // Fallback: remove locally if API fails
+            setActiveTasks(prev => prev.filter(t => t._id !== workflowId));
+        }
+    };
+
+    // --- Resizing ---
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            if (!isResizing.current) return;
+            const newWidth = e.clientX;
+            if (newWidth > 400 && newWidth < window.innerWidth - 300) {
+                setLeftWidth(newWidth);
             }
 
             // Default
@@ -348,6 +470,28 @@ const ActionAgentPage = () => {
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#888', fontWeight: '600', fontSize: '12px', letterSpacing: '0.5px' }}>
                         <Globe size={14} /> Execution Monitor
+        <div className="action-workspace-container">
+            {/* --- LEFT: LIVE EXECUTION --- */}
+            <div className="action-left-pane" style={{ width: leftWidth }}>
+                
+                <div className="stage-tabs-header">
+                    <div className="stage-tabs">
+                        <button className={`stage-tab ${activeTab === 'active' ? 'active' : ''}`} onClick={() => setActiveTab('active')}>
+                            <Activity size={14} /> Active
+                            <span className="tab-count">{activeTasks.length}</span>
+                        </button>
+                        <button className={`stage-tab ${activeTab === 'scheduled' ? 'active' : ''}`} onClick={() => setActiveTab('scheduled')}>
+                            <Clock size={14} /> Scheduled
+                            <span className="tab-count">{scheduledTasks.length}</span>
+                        </button>
+                        <button className={`stage-tab ${activeTab === 'automations' ? 'active' : ''}`} onClick={() => { setActiveTab('automations'); fetchEventRules(); }}>
+                            <Zap size={14} /> Automations
+                            <span className="tab-count">{eventRules.length}</span>
+                        </button>
+                        <button className={`stage-tab ${activeTab === 'sync' ? 'active' : ''}`} onClick={() => setActiveTab('sync')}>
+                            <RefreshCw size={14} /> Sync Monitor
+                            <div className="live-pulse" />
+                        </button>
                     </div>
                     {(activeTasks.length > 0 || isConnecting) && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#666', fontSize: '11px' }}>
@@ -409,6 +553,280 @@ const ActionAgentPage = () => {
                         </div>
                     ) : (
                         <div style={{ color: '#222', fontSize: '12px', fontFamily: 'monospace' }}>Awaiting tasks...</div>
+                            </div>
+                        )
+                    ) : activeTab === 'sync' ? (
+                        /* --- SYNC MONITOR TAB --- */
+                        <SyncMonitor />
+                    ) : (
+                        /* --- ACTIVE / SCHEDULED TABS --- */
+                        (activeTab === 'active' ? activeTasks : scheduledTasks).length === 0 ? (
+                            <div className="empty-stage-state">
+                                <Terminal size={48} className="pulse-icon" />
+                                <h2>{activeTab === 'scheduled' ? 'No Scheduled Tasks' : 'System Ready'}</h2>
+                                <p>Waiting for your command. Tell me what you need done to start.</p>
+                            </div>
+                        ) : (
+                            <div className="active-execution-scrollable">
+                                <AnimatePresence>
+                                    {(activeTab === 'active' ? activeTasks : scheduledTasks).map(task => (
+                                        <motion.div 
+                                            key={task._id || task.id} 
+                                            className={`execution-card ${task.status}`}
+                                            initial={{ opacity: 0, y: 30 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                        >
+                                            <div className="execution-header">
+                                                <div className="exec-title-row">
+                                                    <Sparkles size={18} className="sparkle-icon" />
+                                                    <h2>{task.title}</h2>
+                                                    {task.isEventDriven && (
+                                                        <span className="event-driven-indicator">
+                                                            <Zap size={10} /> Event-Driven
+                                                        </span>
+                                                    )}
+                                                    <div className={`status-pill ${task.status}`}>
+                                                        {task.status === 'running' && <Loader2 size={12} className="spin-icon" />}
+                                                        {task.status === 'intervention' && <ShieldAlert size={12} />}
+                                                        {task.status === 'completed' && <CheckCircle2 size={12} />}
+                                                        {task.status === 'waiting' && <Bell size={12} />}
+                                                        {task.status === 'retrying' && <RefreshCw size={12} className="spin-icon" />}
+                                                        {task.status === 'delayed' && <Timer size={12} />}
+                                                        {task.status === 'failed' && <AlertTriangle size={12} />}
+                                                        {task.status.toUpperCase()}
+                                                    </div>
+                                                    {task.executionMode === 'background' && task.status !== 'completed' && (
+                                                        <span className="background-badge">
+                                                            <ShieldAlert size={10} /> Autonomous
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="exec-timer-block">
+                                                    {task.deadline && (
+                                                        <div className="deadline-timer">
+                                                            <Clock size={12} />
+                                                            Due: {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </div>
+                                                    )}
+                                                    <Clock size={14} />
+                                                    {task.type === 'scheduled' && task.status === 'waiting' 
+                                                        ? <span>Expected: {task.scheduledTime}</span>
+                                                        : <span>{formatTime(task.elapsed)}</span>
+                                                    }
+                                                </div>
+                                                {task.status === 'waiting' && task.autoAcceptAt && (
+                                                    <div className="auto-accept-countdown">
+                                                        <Timer size={14} className="pulse-timer" />
+                                                        <div className="countdown-info">
+                                                            <span className="countdown-label">Auto-accepting in:</span>
+                                                            <span className="countdown-value">
+                                                                {formatTime(Math.max(0, Math.floor((new Date(task.autoAcceptAt).getTime() - Date.now()) / 1000)))}
+                                                            </span>
+                                                        </div>
+                                                        <button className="confirm-now-btn" onClick={() => confirmAction(task._id)}>
+                                                            Confirm Now
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Pipeline Flow Visualization */}
+                                            {(task.triggerConfig || task.intentData?.trigger) && (
+                                                <div className="pipeline-flow">
+                                                    <div className="pipeline-node trigger-node">
+                                                        <Radio size={10} />
+                                                        {task.triggerConfig?.type || task.intentData?.trigger?.type || 'manual'}
+                                                    </div>
+                                                    <div className="pipeline-arrow"><ArrowRight size={12} /></div>
+                                                    {(task.conditionRawText || task.intentData?.condition?.raw_text) && (
+                                                        <>
+                                                            <div className="pipeline-node condition-node">
+                                                                <ShieldAlert size={10} />
+                                                                {(task.conditionRawText || task.intentData?.condition?.raw_text || '').slice(0, 40)}
+                                                            </div>
+                                                            <div className="pipeline-arrow"><ArrowRight size={12} /></div>
+                                                        </>
+                                                    )}
+                                                    <div className="pipeline-node action-node">
+                                                        <Zap size={10} />
+                                                        {task.steps?.length || 0} action{(task.steps?.length || 0) !== 1 ? 's' : ''}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Step Timeline */}
+                                            <div className="timeline-container">
+                                                {task.steps.map((step, idx) => {
+                                                    const isRunning = step.status === 'running';
+                                                    const isCompleted = step.status === 'completed';
+                                                    const isIntervention = step.status === 'intervention';
+                                                    const isRetrying = step.status === 'retrying';
+                                                    const isDelayed = step.status === 'delayed';
+                                                    
+                                                    return (
+                                                        <div key={step._id || step.id} className={`timeline-step ${step.status}`}>
+                                                            <div className="step-indicator">
+                                                                {isCompleted ? <CheckCircle2 size={20} className="check-icon" />
+                                                                : isIntervention ? <AlertTriangle size={20} className="alert-icon" />
+                                                                : isRetrying ? <RefreshCw size={20} className="spin-icon" style={{color: '#ffc107'}} />
+                                                                : isDelayed ? <Timer size={20} style={{color: '#00d2ff'}} />
+                                                                : isRunning ? (
+                                                                    <div className="live-dot-container">
+                                                                        <div className="live-dot" />
+                                                                        <div className="live-dot-pulse" />
+                                                                    </div>
+                                                                ) : <CircleDashed size={20} className="pending-icon" />}
+                                                                {idx < task.steps.length - 1 && <div className="step-line" />}
+                                                            </div>
+                                                            <div className="step-content">
+                                                                <div className="step-title-row">
+                                                                    <h4>{step.label}</h4>
+                                                                    <IconHOC type={step.icon} size={14} />
+                                                                </div>
+
+                                                                {/* Step Badges (retry / delay) */}
+                                                                {(step.retryConfig?.maxRetries > 0 || step.delayMs > 0) && (
+                                                                    <div className="step-badges">
+                                                                        {step.retryConfig?.maxRetries > 0 && (
+                                                                            <span className="step-badge retry-badge">
+                                                                                <RotateCcw size={9} />
+                                                                                {step.retryConfig.retryCount || 0}/{step.retryConfig.maxRetries}
+                                                                            </span>
+                                                                        )}
+                                                                        {step.delayMs > 0 && (
+                                                                            <span className="step-badge delay-badge">
+                                                                                <Timer size={9} />
+                                                                                {Math.round(step.delayMs / 1000)}s delay
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                <AnimatePresence>
+                                                                    {(isRunning || isCompleted) && !step.isBulk && (
+                                                                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="micro-log-terminal">
+                                                                            <code>&gt; {isRunning ? (task.activeMicroLog || step.microLogs?.[0] || '...') : (step.resultData ? 'Process completed. Viewing data below:' : 'Action completed successfully.')}</code>
+                                                                                                                                                        {isCompleted && step.resultData && (
+                                                                                <div className="step-result-display">
+                                                                                    {step.metadata?.source && (
+                                                                                        <div className="data-source-tag">
+                                                                                            <Database size={10} />
+                                                                                            Source: {step.metadata.source}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {typeof step.resultData === 'string' ? (
+                                                                                        <p>{step.resultData}</p>
+                                                                                    ) : Array.isArray(step.resultData) ? (
+                                                                                        <div className="result-data-grid">
+                                                                                            {step.resultData.map((item, i) => (
+                                                                                                <div key={i} className="result-data-item">
+                                                                                                    {Object.entries(item).map(([k, v]) => (
+                                                                                                        <div key={k} className="result-field">
+                                                                                                            <span className="field-key">{k}:</span>
+                                                                                                            <span className="field-val">{String(v)}</span>
+                                                                                                        </div>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <pre className="result-json-pre">
+                                                                                            {JSON.stringify(step.resultData, null, 2)}
+                                                                                        </pre>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </motion.div>
+                                                                    )}
+                                                                </AnimatePresence>
+                                                                
+                                                                {isCompleted && !task.isAcknowledged && (
+                                                                    <div className="dismiss-action-row">
+                                                                        <button className="dismiss-active-btn" onClick={() => dismissWorkflow(task._id)}>
+                                                                            <CheckCircle2 size={12} />
+                                                                            Dismiss & Archive to History
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+
+                                                                {step.isBulk && (isRunning || isCompleted) && (
+                                                                    <div className="bulk-progress-container">
+                                                                        <div className="progress-bar-bg">
+                                                                            <div className="progress-bar-fill" style={{ width: `${(step.bulkProgress / step.totalItems) * 100}%` }}></div>
+                                                                        </div>
+                                                                        <span className="bulk-count">{Math.min(step.bulkProgress || 0, step.totalItems)} / {step.totalItems} Items Processed</span>
+                                                                    </div>
+                                                                )}
+
+                                                                <AnimatePresence>
+                                                                    {isIntervention && (
+                                                                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="intervention-box">
+                                                                            <ShieldAlert size={18} className="intervention-icon" />
+                                                                            <div className="intervention-content">
+                                                                                <p className="intervention-msg">{step.interventionMsg}</p>
+                                                                                <div className="intervention-input-row">
+                                                                                    <input 
+                                                                                        type="text" 
+                                                                                        placeholder={`Enter ${step.missingData?.find(m => m.criticality === 'critical')?.field || 'value'}...`}
+                                                                                        value={interventionInput}
+                                                                                        onChange={(e) => setInterventionInput(e.target.value)}
+                                                                                    />
+                                                                                    <button onClick={() => resolveIntervention(task._id, step.missingData?.find(m => m.criticality === 'critical')?.field)}>
+                                                                                        Submit & Resume
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </motion.div>
+                                                                    )}
+                                                                </AnimatePresence>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {/* Execution Log Viewer */}
+                                            {task.executionLogs && task.executionLogs.length > 0 && (
+                                                <div className="execution-log-section">
+                                                    <button 
+                                                        className={`log-toggle-btn ${expandedLogs[task._id] ? 'active' : ''}`}
+                                                        onClick={() => toggleLogView(task._id)}
+                                                    >
+                                                        <ScrollText size={12} />
+                                                        {expandedLogs[task._id] ? 'Hide Logs' : 'View Logs'} ({task.executionLogs.length})
+                                                    </button>
+                                                    <AnimatePresence>
+                                                        {expandedLogs[task._id] && (
+                                                            <motion.div 
+                                                                className="log-viewer"
+                                                                initial={{ opacity: 0, height: 0 }}
+                                                                animate={{ opacity: 1, height: 'auto' }}
+                                                                exit={{ opacity: 0, height: 0 }}
+                                                            >
+                                                                {task.executionLogs.map((log, li) => (
+                                                                    <div key={li} className={`log-entry ${log.level}`}>
+                                                                        <span className="log-time">{formatLogTime(log.timestamp)}</span>
+                                                                        {log.stepLabel && <span className="log-step-label">[{log.stepLabel}]</span>}
+                                                                        <span className="log-msg">{log.message}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
+                                            )}
+
+                                            {task.type === 'scheduled' && task.status === 'waiting' && (
+                                                <button className="force-run-btn" onClick={() => forceRunScheduled(task.id)}>
+                                                    Execute Now (Override Time)
+                                                </button>
+                                            )}
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+                        )
                     )}
                 </div>
             </div>
@@ -493,6 +911,137 @@ const ActionAgentPage = () => {
                                                 ? <User size={13} color="#666" />
                                                 : <Sparkles size={13} color="#555" />
                                             }
+                    <div className="cc-dynamic-area">
+                        {showHistory ? (
+                            <div className="history-view">
+                                <h3>Execution History</h3>
+                                <div className="history-list">
+                                    {taskHistory.length === 0 ? <p className="no-history">No tasks completed yet.</p> : (
+                                        taskHistory.map(task => {
+                                            const isExpanded = expandedHistory[task._id];
+                                            return (
+                                                <div key={task._id} className={`history-card ${isExpanded ? 'expanded' : ''}`}>
+                                                    <div className="hist-header" onClick={() => toggleHistoryView(task._id)}>
+                                                        <span className="hist-title">{task.title}</span>
+                                                        <div className="hist-status-group">
+                                                            {task.status === 'completed' ? 
+                                                                <CheckCircle2 size={14} className="hist-icon success" /> :
+                                                                <AlertTriangle size={14} className="hist-icon error" />
+                                                            }
+                                                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                        </div>
+                                                    </div>
+                                                    <span className="hist-time">
+                                                        {task.status === 'completed' ? 'Completed' : 'Failed'} in {task.endTime && task.startTime ? formatTime(Math.floor((new Date(task.endTime).getTime() - new Date(task.startTime).getTime()) / 1000)) : '0:00'}
+                                                    </span>
+
+                                                    <AnimatePresence>
+                                                        {isExpanded && (
+                                                            <motion.div 
+                                                                className="hist-expanded-detail"
+                                                                initial={{ opacity: 0, height: 0 }}
+                                                                animate={{ opacity: 1, height: 'auto' }}
+                                                                exit={{ opacity: 0, height: 0 }}
+                                                            >
+                                                                <div className="hist-timeline-mini">
+                                                                    {task.steps.map((step, sidx) => (
+                                                                        <div key={step._id || sidx} className={`hist-step-row ${step.status}`}>
+                                                                            <div className="hist-step-head">
+                                                                                <div className="hist-step-dot" />
+                                                                                <span className="hist-step-label">{step.label}</span>
+                                                                                <IconHOC type={step.icon} size={12} />
+                                                                                {step.resultData && <span className="res-available-badge">Results Received</span>}
+                                                                            </div>
+                                                                            
+                                                                            {step.resultData && (
+                                                                                <div className="hist-step-result animate-in">
+                                                                                    {typeof step.resultData === 'string' ? (
+                                                                                        <p className="res-str">{step.resultData}</p>
+                                                                                    ) : (Array.isArray(step.resultData) && step.resultData.length > 0) ? (
+                                                                                        <div className="hist-result-grid">
+                                                                                            {step.resultData.map((item, ii) => (
+                                                                                                <div key={ii} className="hist-result-item">
+                                                                                                    {Object.entries(item).map(([k, v]) => (
+                                                                                                        <div key={k} className="hist-result-field">
+                                                                                                            <span className="f-k">{k}:</span>
+                                                                                                            <span className="f-v">{String(v)}</span>
+                                                                                                        </div>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            ))}
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <pre className="hist-result-pre">
+                                                                                            {JSON.stringify(step.resultData, null, 2)}
+                                                                                        </pre>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                
+                                                                {task.executionLogs && task.executionLogs.length > 0 && (
+                                                                    <div className="hist-log-brief">
+                                                                        <span className="log-count">+{task.executionLogs.length} execution logs</span>
+                                                                    </div>
+                                                                )}
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="intent-view">
+                                {/* NLP Preview Panel */}
+                                {nlpPreview && nlpPreview.type === 'workflow' && (
+                                    <motion.div className="nlp-preview-panel" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+                                        <div className="nlp-preview-header">
+                                            <Sparkles size={14} className="sparkle-icon" />
+                                            <span className="nlp-preview-badge">Parsed Intent</span>
+                                        </div>
+                                        <h3 className="nlp-preview-title">{nlpPreview.title}</h3>
+                                        <div className="nlp-pipeline-preview">
+                                            <div className="nlp-pipeline-row">
+                                                <span className="nlp-pipeline-label trigger">Event</span>
+                                                <span className="nlp-pipeline-value">{nlpPreview.trigger?.type || 'manual'} {nlpPreview.trigger?.source ? `— ${nlpPreview.trigger.source}` : ''}</span>
+                                            </div>
+                                            {nlpPreview.conditionText && (
+                                                <div className="nlp-pipeline-row">
+                                                    <span className="nlp-pipeline-label condition">Condition</span>
+                                                    <span className="nlp-pipeline-value">{nlpPreview.conditionText}</span>
+                                                </div>
+                                            )}
+                                            <div className="nlp-pipeline-row">
+                                                <span className="nlp-pipeline-label actions">Actions</span>
+                                                <div className="nlp-action-chips">
+                                                    {nlpPreview.actions.map((action, i) => (
+                                                        <React.Fragment key={action.id || i}>
+                                                            <span className="nlp-action-chip">
+                                                                <IconHOC type={action.icon} size={11} />
+                                                                {action.label}
+                                                            </span>
+                                                            {i < nlpPreview.actions.length - 1 && (
+                                                                <span className="nlp-action-chip-arrow">→</span>
+                                                            )}
+                                                        </React.Fragment>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {/* Rule Created Notification */}
+                                {nlpPreview && nlpPreview.type === 'rule_created' && (
+                                    <motion.div className="nlp-preview-panel" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+                                        <div className="nlp-preview-header">
+                                            <Zap size={14} style={{color: '#00d2ff'}} />
+                                            <span className="nlp-preview-badge">Automation Created</span>
                                         </div>
 
                                         {/* Bubble */}

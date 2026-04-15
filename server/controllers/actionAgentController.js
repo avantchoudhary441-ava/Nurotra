@@ -120,11 +120,11 @@ exports.executeCommand = async (req, res) => {
                     })),
                     conditionLogic: workflowData.conditionLogic || "AND",
                     conditionRawText: workflowData.conditionRawText || "",
-                    actions: workflowData.actions.map(action => ({
-                        id: action.id,
+                    actions: workflowData.actions.map((action, index) => ({
+                        id: parseInt(action.id) || index + 1,
                         label: action.label,
                         icon: action.icon || "default",
-                        delayMs: action.delayMs || 2000,
+                        delayMs: parseInt(action.delayMs) || 2000,
                         microLogs: action.microLogs || [],
                         retryConfig: action.retryConfig || { maxRetries: 1, retryDelayMs: 2000 }
                     }))
@@ -142,11 +142,33 @@ exports.executeCommand = async (req, res) => {
             }
 
             // 2. Build the workflow DB entry
+            // 2. Build the workflow DB entry for immediate execution
+            const deadlineDate = workflowData.deadline ? new Date(workflowData.deadline) : null;
+            const now = Date.now();
+            let autoAcceptAt = null;
+            
+            // Check if any action is irreversible
+            const hasIrreversible = workflowData.actions.some(a => a.isReversible === false);
+            
+            if (hasIrreversible) {
+                let waitMs = 15 * 60 * 1000; // 15 mins default
+                if (deadlineDate && !isNaN(deadlineDate.getTime())) {
+                    const timeToDeadline = deadlineDate.getTime() - now;
+                    if (timeToDeadline > 0) {
+                        waitMs = Math.min(waitMs, timeToDeadline / 2);
+                    }
+                }
+                autoAcceptAt = new Date(now + waitMs);
+            }
+
             const newWorkflow = new ActionWorkflow({
                 userId: req.user ? req.user._id : DEV_USER_ID,
                 title: workflowData.title || "Automated Task",
                 type: "active",
                 status: "running",
+                deadline: deadlineDate,
+                autoAcceptAt: autoAcceptAt,
+                confirmationStatus: hasIrreversible ? "pending" : "none",
                 triggerConfig: {
                     type: workflowData.trigger?.type || "manual",
                     source: workflowData.trigger?.source || "user_command"
@@ -171,6 +193,27 @@ exports.executeCommand = async (req, res) => {
                     isBulk: false,
                     params: action.params || {}
                 })),
+                steps: workflowData.actions.map((action, idx) => {
+                    // Strict parsing for irreversibility (handle strings or booleans)
+                    let isRev = true;
+                    if (action.isReversible === false || action.isReversible === 'false') {
+                        isRev = false;
+                    }
+
+                    return {
+                        id: parseInt(action.id) || idx + 1,
+                        label: action.label,
+                        icon: action.icon || "default",
+                        status: "pending",
+                        microLogs: action.microLogs || [],
+                        delayMs: parseInt(action.delayMs) || 0,
+                        retryConfig: action.retryConfig || { maxRetries: 0, retryCount: 0, retryDelayMs: 2000 },
+                        requiresIntervention: false,
+                        isBulk: false,
+                        isReversible: isRev,
+                        missingData: action.missingData || []
+                    };
+                }),
                 intentData: {
                     trigger: workflowData.trigger,
                     condition: { raw_text: workflowData.conditionRawText || "" },
@@ -222,6 +265,26 @@ exports.executeCommand = async (req, res) => {
         console.error("Action Agent Execute Controller Error:", error);
         const errorMsg = error.isAiFailure ? error.message : "Server error during execution.";
         res.status(500).json({ success: false, message: errorMsg });
+        
+        // Handle AI specific errors gracefully
+        const errorMsg = error.message || "";
+        if (errorMsg.includes("AI") || errorMsg.includes("Gemini") || errorMsg.includes("OpenAI") || errorMsg.includes("keys configured")) {
+            return res.status(503).json({ 
+                success: false, 
+                message: "AI Engine Processing Error: " + error.message,
+                suggestion: "This usually happens when AI keys are missing, rate-limited, or hit context limits. Check your .env or Settings."
+            });
+        }
+        
+        // Return specific validation error if possible
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Validation Error: " + Object.values(error.errors).map(e => e.message).join(", ") 
+            });
+        }
+        
+        res.status(500).json({ success: false, message: "Server error during execution: " + error.message });
     }
 };
 
@@ -432,6 +495,70 @@ exports.getWorkflowLogs = async (req, res) => {
 };
 
 // ===========================================
+// CONFIRM WORKFLOW (Manual Override)
+// ===========================================
+exports.confirmWorkflow = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const wf = await ActionWorkflow.findById(id);
+        if (!wf) return res.status(404).json({ success: false, message: "Workflow not found." });
+
+        wf.confirmationStatus = "confirmed";
+        wf.status = "running";
+        wf.activeMicroLog = "User confirmed. Resuming execution...";
+        await wf.save();
+
+        res.json({ success: true, message: "Workflow confirmed. Execution will resume shortly." });
+    } catch (error) {
+        console.error("Confirm Workflow Error:", error);
+        res.status(500).json({ success: false, message: "Failed to confirm workflow." });
+    }
+};
+
+// ===========================================
+// SUBMIT INTERVENTION (Missing Data)
+// ===========================================
+exports.submitIntervention = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { field, value } = req.body;
+        
+        const wf = await ActionWorkflow.findById(id);
+        if (!wf) return res.status(404).json({ success: false, message: "Workflow not found." });
+
+        // Update the blocked step with the new data
+        const stepIndex = wf.steps.findIndex(s => s.status === 'intervention');
+        if (stepIndex !== -1) {
+            const step = wf.steps[stepIndex];
+            
+            // Find the missing data entry and update it
+            const mIndex = step.missingData.findIndex(m => m.field === field);
+            if (mIndex !== -1) {
+                step.missingData[mIndex].inferredValue = value;
+            } else {
+                step.missingData.push({ field, inferredValue: value, criticality: 'critical' });
+            }
+            
+            wf.steps[stepIndex].status = "pending";
+            wf.steps[stepIndex].interventionMsg = null;
+        }
+
+        wf.status = "running";
+        wf.activeMicroLog = "Input received. Resuming execution...";
+        addLog(wf, null, null, "info", `User provided missing data for field: ${field}`);
+        await wf.save();
+
+        // Resume async execution if it stopped (it did since simulateExecution returned on intervention)
+        simulateExecution(wf._id, null); // actionDefs are already in the DB steps now or we can look them up
+
+        res.json({ success: true, message: "Intervention resolved. Execution resumed." });
+    } catch (error) {
+        console.error("Submit Intervention Error:", error);
+        res.status(500).json({ success: false, message: "Failed to resolve intervention." });
+    }
+};
+
+// ===========================================
 // FETCH ACTIVE TASKS
 // ===========================================
 exports.getActiveTasks = async (req, res) => {
@@ -453,6 +580,20 @@ exports.getActiveTasks = async (req, res) => {
         if (latestTask && !allTasks.some(t => t._id.toString() === latestTask._id.toString())) {
             allTasks.push(latestTask);
         }
+        const query = req.user
+            ? { 
+                userId: req.user._id, 
+                $or: [
+                    { status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } },
+                    { status: "completed", isAcknowledged: false }
+                ]
+              }
+            : { 
+                $or: [
+                    { status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } },
+                    { status: "completed", isAcknowledged: false }
+                ]
+              };
 
         // Also fetch scheduled tasks separately so they aren't lost
         const scheduledTasks = await ActionWorkflow.find({ ...userIdFilter, type: 'scheduled', status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } });
@@ -466,6 +607,25 @@ exports.getActiveTasks = async (req, res) => {
     } catch (err) {
         console.error("Action Agent Fetch Tasks Error:", err.message);
         res.json({ success: true, tasks: [], error: err.message });
+    }
+};
+
+// ===========================================
+// ACKNOWLEDGE & DISMISS TASK
+// ===========================================
+exports.acknowledgeTask = async (req, res) => {
+    try {
+        const { workflowId } = req.params;
+        const wf = await ActionWorkflow.findById(workflowId);
+        if (!wf) return res.status(404).json({ success: false, message: "Task not found." });
+
+        wf.isAcknowledged = true;
+        await wf.save();
+
+        res.json({ success: true, message: "Task dismissed to history." });
+    } catch (err) {
+        console.error("Acknowledge Task Error:", err.message);
+        res.status(500).json({ success: false, message: err.message });
     }
 };
 
@@ -528,10 +688,12 @@ const buildMockWorkflow = (workflowData, isEventDriven) => ({
 
 
 // ===========================================
-// ASYNC EXECUTION ENGINE (with retry + delay + logging)
+// ASYNC EXECUTION ENGINE (with Background & Intervention Handling)
 // ===========================================
 const simulateExecution = async (workflowId, actionDefs, io = null) => {
     const { executeStep } = require("../services/actionExecutionService");
+const simulateExecution = async (workflowId, actionDefs) => {
+    const { executeStep, validateStep } = require("../services/actionExecutionService");
 
     try {
         let wf = await ActionWorkflow.findById(workflowId);
@@ -559,12 +721,57 @@ const simulateExecution = async (workflowId, actionDefs, io = null) => {
 
         for (let i = 0; i < wf.steps.length; i++) {
             wf = await ActionWorkflow.findById(workflowId);
-            if (!wf || wf.status === 'intervention' || wf.status === 'failed') break;
+            if (!wf || wf.status === 'failed') break;
 
             const step = wf.steps[i];
-            const actionDef = actionDefs.find(a => a.id === step.id);
+            
+            // --- DECISION ENGINE: Validation ---
+            const validation = validateStep(step);
+            if (validation.isBlocked) {
+                wf.status = "intervention";
+                wf.activeMicroLog = validation.context;
+                wf.steps[i].status = "intervention";
+                wf.steps[i].interventionMsg = validation.context;
+                addLog(wf, i, step, "warn", `Paused: Intervention required for "${step.label}"`);
+                await wf.save();
+                return; // Stop execution until user provides input
+            }
+
+            const actionDef = actionDefs?.find(a => a.id === step.id);
             const maxRetries = step.retryConfig?.maxRetries || actionDef?.retryConfig?.maxRetries || 0;
             const retryDelayMs = step.retryConfig?.retryDelayMs || actionDef?.retryConfig?.retryDelayMs || 2000;
+
+            // --- REVERSIBILITY & CONFIRMATION ---
+            if (step.isReversible === false && wf.confirmationStatus === 'pending') {
+                wf.status = "waiting";
+                wf.activeMicroLog = "Awaiting confirmation for irreversible action...";
+                addLog(wf, i, step, "info", `Waiting for confirmation: ${step.label} is an irreversible task.`);
+                await wf.save();
+
+                // Send Email Notification
+                sendConfirmationNotification(wf, step).catch(err => console.error("Notification failed:", err.message));
+
+                // Wait loop for auto-accept or user confirm
+                let confirmed = false;
+                while (!confirmed) {
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    wf = await ActionWorkflow.findById(workflowId);
+                    if (!wf || wf.status === 'failed') return;
+
+                    if (wf.confirmationStatus === 'confirmed') {
+                        confirmed = true;
+                    } else if (wf.autoAcceptAt && Date.now() > new Date(wf.autoAcceptAt).getTime()) {
+                        wf.confirmationStatus = 'auto-confirmed';
+                        addLog(wf, i, step, "info", "Confirmation requirement auto-accepted (timeout reached).");
+                        confirmed = true;
+                    }
+
+                    if (confirmed) {
+                        wf.status = "running";
+                        await wf.save();
+                    }
+                }
+            }
 
             // Handle step delay (delayed execution)
             if (step.delayMs > 0) {
@@ -620,6 +827,17 @@ const simulateExecution = async (workflowId, actionDefs, io = null) => {
                     wf = await ActionWorkflow.findById(workflowId);
                     wf.activeMicroLog = result.message || `${step.label} completed.`;
                     await wf.save();
+                    // Atomic update for micro log and PERSIST DATA
+                    await ActionWorkflow.findOneAndUpdate(
+                        { _id: workflowId, "steps.id": step.id },
+                        { 
+                            $set: { 
+                                "steps.$.resultData": result.data || null,
+                                "steps.$.status": "completed",
+                                activeMicroLog: result.message || `${step.label} completed.`
+                            }
+                        }
+                    );
 
                 } catch (stepErr) {
                     lastError = stepErr;
@@ -762,6 +980,38 @@ const simulateExecution = async (workflowId, actionDefs, io = null) => {
             console.error(e);
         }
     }
+};
+
+/**
+ * Helper to notify user about an irreversible task awaiting confirmation
+ */
+const sendConfirmationNotification = async (wf, step) => {
+    const sendEmail = require("../utils/sendEmail");
+    const recipient = process.env.EMAIL_USER || "user@example.com";
+    
+    const subject = `⚠️ Confirmation Required: ${wf.title}`;
+    const autoAcceptStr = wf.autoAcceptAt ? new Date(wf.autoAcceptAt).toLocaleTimeString() : "15 minutes";
+    
+    const message = `
+        <div style="font-family: sans-serif; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
+            <h2 style="color: #6c5ce7;">Action Confirmation Required</h2>
+            <p>The Nurotra Action Agent is performing the following irreversible task and needs your approval:</p>
+            <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #6c5ce7; margin: 20px 0;">
+                <strong>Task:</strong> ${wf.title}<br/>
+                <strong>Current Step:</strong> ${step.label}
+            </div>
+            <p><strong>Auto-Accept Clause:</strong> If no action is taken, this task will be automatically confirmed at <strong>${autoAcceptStr}</strong> to maintain workflow momentum.</p>
+            <div style="margin-top: 30px;">
+                <a href="http://localhost:5173/#/action-agent" style="background: #6c5ce7; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Review in Dashboard</a>
+            </div>
+        </div>
+    `;
+
+    return sendEmail({
+        email: recipient,
+        subject,
+        message
+    });
 };
 
 /**

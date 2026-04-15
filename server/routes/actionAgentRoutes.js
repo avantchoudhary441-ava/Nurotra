@@ -4,7 +4,10 @@ const actionAgentController = require("../controllers/actionAgentController");
 
 // --- Core execution ---
 router.post("/execute", actionAgentController.executeCommand);
+router.post("/confirm/:id", actionAgentController.confirmWorkflow);
+router.post("/intervention/:id", actionAgentController.submitIntervention);
 router.get("/active-tasks", actionAgentController.getActiveTasks);
+router.post("/acknowledge/:workflowId", actionAgentController.acknowledgeTask);
 router.get("/history", actionAgentController.getHistory);
 router.get("/chat", actionAgentController.getChatHistory);
 router.delete("/chat", actionAgentController.clearChatHistory);

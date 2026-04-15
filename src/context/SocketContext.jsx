@@ -29,8 +29,9 @@ export const SocketProvider = ({ children }) => {
         // Initialize socket once
         if (!socket.current) {
             socket.current = io(SOCKET_URL, {
-                transports: ['websocket'], // Force websocket to avoid polling issues
+                transports: ['websocket'],
                 reconnection: true,
+                auth: { token: localStorage.getItem('token') }
             });
 
             socket.current.on('connect', () => {

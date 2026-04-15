@@ -13,6 +13,10 @@ const connectDB = async () => {
             connectTimeoutMS: 5000,
             socketTimeoutMS: 5000,
             family: 4,
+            serverSelectionTimeoutMS: 30000,
+            connectTimeoutMS: 30000,
+            socketTimeoutMS: 45000,
+            tls: true,
             directConnection: false
         });
         console.log("✅ MongoDB Connected...");

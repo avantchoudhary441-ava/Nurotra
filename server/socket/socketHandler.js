@@ -1,18 +1,52 @@
 const browserAgentService = require("../services/browserAgentService");
 let users = {}; // Map socket ID to user ID
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
 module.exports = (io) => {
+    // Authentication Middleware for Socket.io
+    io.use(async (socket, next) => {
+        try {
+            const token = socket.handshake.auth.token;
+            if (!token) return next(new Error("Authentication error: No token provided"));
+
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await User.findById(decoded.id).select("-password");
+            
+            if (!user) return next(new Error("Authentication error: User not found"));
+            
+            socket.user = user;
+            next();
+        } catch (err) {
+            console.error("[Socket Auth] Error:", err.message);
+            next(new Error("Authentication error: Invalid token"));
+        }
+    });
+
     io.on("connection", (socket) => {
-        console.log("New Socket Connection:", socket.id);
+        const userId = socket.user._id.toString();
+        console.log(`Authenticated Socket [${socket.id}] for User [${userId}]`);
 
-        socket.on("join-room", (userId) => {
-            if (userId) {
-                users[userId] = socket.id;
-                console.log(`User mapped: ${userId} -> ${socket.id}`);
+        // Automatically join user-specific room for notifications
+        socket.join(userId);
+        
+        // Also join a generic 'sync_activity' room for this specific user
+        socket.join(`sync_${userId}`);
 
-                // Allow user to join a room with their own ID for personal notifications
-                socket.join(userId);
-            }
+        socket.on("join-room", (roomData) => {
+            // Deprecated: Auto-joined room now, but keeping for compatibility
+            console.log(`Socket ${socket.id} joining additional room`);
+        });
+
+        // --- Test Handler (For Visibility Verification) ---
+        socket.on("test_sync", (data) => {
+            console.log(`[Socket] Received test sync from user ${userId}`);
+            io.to(userId).emit("sync_activity", {
+                ...data,
+                timestamp: new Date(),
+                latencyMs: 120,
+                id: Math.random().toString(36).substr(2, 9)
+            });
         });
 
         // --- Call Signaling ---

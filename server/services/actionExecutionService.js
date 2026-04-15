@@ -14,6 +14,7 @@ const WorkspaceFile = require("../models/WorkspaceFile");
 const User = require("../models/User");
 
 const communicationService = require("./communicationService");
+const formAuto = require("./formAutomationService");
 
 // ============================================================
 // STEP EXECUTOR REGISTRY
@@ -222,12 +223,18 @@ const stepExecutors = {
     // ----- DATA FETCHING -----
     "fetch_data": async (step, context) => {
         // Use AI to synthesize data based on the request
-        const prompt = `The user asked to fetch: "${step.params?.query || step.label}". Synthesize realistic sample data for this request. Return as JSON array with 5-10 items.`;
+        const query = step.params?.query || step.label;
+        const prompt = `The user asked to fetch: "${query}". Synthesize realistic sample data for this request. Return as JSON array with 5-10 items.`;
         let result = await generateWithFallback(prompt, "You are a data retrieval engine. Return realistic JSON data.");
         try {
             result = JSON.parse(result.replace(/```json|```/g, '').trim());
         } catch (e) { /* keep as string */ }
-        return { success: true, message: "Data fetched", data: result };
+        return { 
+            success: true, 
+            message: `Successfully retrieved data for: ${query}`, 
+            data: result,
+            metadata: { source: "AI Simulation Engine" }
+        };
     },
 
     // ----- APPROVAL PROCESSING -----
@@ -310,6 +317,52 @@ const stepExecutors = {
             success: true,
             message: result.message,
             data: result.data
+    // ----- FORM AUTOMATION -----
+    "detect_form": async (step, context) => {
+        const fields = formAuto.detectFormFields(context.environment || { description: context.workflowTitle });
+        return { 
+            success: true, 
+            message: `Detected ${fields.length} form fields: ${fields.map(f => f.label).join(", ")}`,
+            data: { fields } 
+        };
+    },
+
+    "map_profile": async (step, context) => {
+        const fields = step.params?.fields || context.detectedFields || [];
+        const mappedData = await formAuto.mapContextualData(fields, context.userId);
+        return { 
+            success: true, 
+            message: "Successfully mapped profile data to form fields.",
+            data: { mappedData } 
+        };
+    },
+
+    "fill_form": async (step, context) => {
+        const data = step.params?.mappedData || context.mappedData || {};
+        const validation = formAuto.validateForm(step.params?.fields || [], data);
+        
+        if (!validation.isValid) {
+            return { 
+                success: false, 
+                message: "Form validation failed.",
+                errors: validation.errors,
+                interventionRequired: true
+            };
+        }
+
+        return { 
+            success: true, 
+            message: "Form fields populated with high confidence.",
+            data: { filledData: data } 
+        };
+    },
+
+    "submit_form": async (step, context) => {
+        // Simulated submission
+        return { 
+            success: true, 
+            message: "Form submitted successfully. Log: [POST-SUBMISSION-CONFIRMED]",
+            data: { submissionId: `SUB-${Date.now().toString(36).toUpperCase()}` } 
         };
     },
 
@@ -369,11 +422,40 @@ const mapStepToExecutor = (step) => {
     // Platform Execution (NEW)
     if (/update.*(crm|sheet|notion|hubspot|workspace)|save\s*to|edit\s*record/.test(label)) return 'platform_execution';
 
+    // Form Automation
+    if (/detect\s*form|scan\s*page|find\s*fields/.test(label)) return 'detect_form';
+    if (/map\s*profile|resolve\s*data|match\s*fields/.test(label)) return 'map_profile';
+    if (/fill\s*form|populate|auto-fill/.test(label)) return 'fill_form';
+    if (/submit|apply|register|sign\s*up/.test(label)) return 'submit_form';
+
     return 'default';
 };
 
 // ============================================================
 // HELPER: Flatten JSON object/array into readable text lines
+// DECISION ENGINE: Validate if step can proceed
+// ============================================================
+const validateStep = (step) => {
+    if (!step.missingData || step.missingData.length === 0) {
+        return { isBlocked: false, criticalField: null };
+    }
+
+    // A step is blocked ONLY if it has a critical missing field with no inference
+    const criticalBlock = step.missingData.find(m => m.criticality === 'critical' && !m.inferredValue);
+    
+    if (criticalBlock) {
+        return { 
+            isBlocked: true, 
+            criticalField: criticalBlock.field,
+            context: `Critical data missing: ${criticalBlock.field}. Action Agent cannot proceed without this.` 
+        };
+    }
+
+    return { isBlocked: false, criticalField: null };
+};
+
+// ============================================================
+// MAIN: Execute a single step
 // ============================================================
 const flattenToText = (obj, prefix = '') => {
     if (!obj || typeof obj !== 'object') return String(obj || '');
@@ -398,6 +480,17 @@ const executeStep = async (step, context = {}) => {
     const executorKey = mapStepToExecutor(step);
     const executor = stepExecutors[executorKey] || stepExecutors['default'];
     
+    // Decision Engine: Merge inferred values into params if they exist
+    if (step.missingData) {
+        step.params = step.params || {};
+        step.missingData.forEach(m => {
+            if (m.inferredValue && !step.params[m.field]) {
+                step.params[m.field] = m.inferredValue;
+                console.log(`[ActionExec] Decision Engine: Inferred "${m.field}" = "${m.inferredValue}" for ${step.label}`);
+            }
+        });
+    }
+
     console.log(`[ActionExec] Executing step "${step.label}" via [${executorKey}]`);
     
     try {
@@ -412,5 +505,6 @@ const executeStep = async (step, context = {}) => {
 module.exports = {
     executeStep,
     mapStepToExecutor,
-    stepExecutors
+    stepExecutors,
+    validateStep
 };

@@ -12,13 +12,13 @@ const EventRuleSchema = new mongoose.Schema({
     description: { type: String, default: "" },
     enabled: { type: Boolean, default: true },
     trigger: {
-        type: { type: String, enum: ["webhook", "message_received", "system_state", "scheduled"], required: true },
+        type: { type: String, enum: ["manual", "webhook", "message_received", "system_state", "scheduled"], required: true },
         source: { type: String, default: "" },
         webhookId: { type: String, default: () => crypto.randomBytes(16).toString("hex") }
     },
     conditions: [{
         field: { type: String },
-        operator: { type: String, enum: ["contains", "equals", "gt", "lt", "regex", "not_equals", "exists"] },
+        operator: { type: String }, // Relaxed for AI
         value: { type: mongoose.Schema.Types.Mixed }
     }],
     conditionLogic: { type: String, enum: ["AND", "OR"], default: "AND" },
