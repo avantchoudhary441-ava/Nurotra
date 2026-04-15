@@ -99,6 +99,77 @@ ACTIVE GOALS: ${memory.longTermPlan?.activeGoals?.join(", ") || "None"}
     }
 }
 
+/**
+ * ODE Phase 1: Destination Discovery
+ * Searches for a recipient based on an alias (e.g., "Boss", "Sarah").
+ */
+async function resolveRecipient(userId, alias) {
+    if (!alias) return null;
+    const lowerAlias = alias.toLowerCase();
+    
+    // 1. Precise Role Match (The "Boss" or "Professor" case)
+    let contact = await Contact.findOne({ 
+        userId, 
+        relationshipRole: new RegExp('^' + lowerAlias + '$', 'i') 
+    });
+    
+    if (contact) return contact;
+
+    // 2. Fuzzy Name Match
+    contact = await Contact.findOne({ 
+        userId, 
+        name: new RegExp(lowerAlias, 'i') 
+    });
+    
+    if (contact) return contact;
+
+    // 3. Email Match (if the alias is an email)
+    if (lowerAlias.includes('@')) {
+        contact = await Contact.findOne({ userId, email: lowerAlias });
+        if (contact) return contact;
+    }
+
+    return null;
+}
+
+/**
+ * ODE Phase 2: Professional Dispatch
+ * Drafts an AI message and sends it.
+ */
+async function dispatchOutput(userId, deliveryData) {
+    const { contact, fileLink, context, platform = "email" } = deliveryData;
+    
+    if (!contact || !contact.email) {
+        throw new Error("Invalid recipient for delivery.");
+    }
+
+    console.log(`[CommService] Dispatching output to ${contact.name} via ${platform}`);
+
+    // AI Drafting for the "Last Mile"
+    const draftPrompt = `Draft a professional, concise email to ${contact.name} (${contact.relationshipRole || 'Recipient'}).
+    The user has just completed this task: "${context}".
+    
+    Please include this direct link to the finalized output: ${fileLink}
+    
+    Write ONLY the body of the email. Keep it professional, helpful, and direct.`;
+
+    const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: draftPrompt }],
+        temperature: 0.7
+    });
+
+    const body = response.choices[0].message.content;
+
+    // Final Dispatch
+    return await executeSendMessage(userId, {
+        recipients: [contact.email],
+        subject: `Result: ${context}`,
+        body,
+        platform
+    });
+}
+
 // ─── §2.1 MESSAGE EXECUTION ────────────────────────────────────────────────
 async function executeSendMessage(userId, data) {
     const { recipients = [], subject, body, platform = "email" } = data;

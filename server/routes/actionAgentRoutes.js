@@ -6,6 +6,10 @@ const actionAgentController = require("../controllers/actionAgentController");
 router.post("/execute", actionAgentController.executeCommand);
 router.get("/active-tasks", actionAgentController.getActiveTasks);
 router.get("/history", actionAgentController.getHistory);
+router.get("/chat", actionAgentController.getChatHistory);
+router.delete("/chat", actionAgentController.clearChatHistory);
+router.post("/restart-browser", actionAgentController.restartBrowser);
+router.get("/suggestions", actionAgentController.getSuggestions);
 
 // --- Event Rules (Automation) ---
 router.post("/event-rules", actionAgentController.createEventRule);

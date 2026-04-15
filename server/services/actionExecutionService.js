@@ -7,12 +7,137 @@
 
 const sendEmail = require("../utils/sendEmail");
 const { generateWithFallback } = require("./aiService");
+const browserAgentService = require("./browserAgentService");
+
+const googleDriveService = require("./googleDriveService");
+const WorkspaceFile = require("../models/WorkspaceFile");
+const User = require("../models/User");
+
+const communicationService = require("./communicationService");
 
 // ============================================================
 // STEP EXECUTOR REGISTRY
 // Maps action keywords / types to real implementation functions
 // ============================================================
 const stepExecutors = {
+
+    // ----- OUTPUT DELIVERY EXECUTION (ODE) -----
+    "execute_output_delivery": async (step, context) => {
+        const userId = context.userId;
+        const taskDescription = context.workflowTitle || step.label;
+
+        try {
+            // 1. Identify Target Recipient (Dynamic Discovery)
+            // Extract recipient hint from label (e.g. "Send report to client" -> "client") 
+            // or from params if the Orchestrator was specific.
+            const recipientHint = step.params?.recipient || step.label.toLowerCase().split(' to ')[1] || step.label.toLowerCase().split(' via ')[0].replace('send ', '');
+            
+            console.log(`[ActionExec] Resolving recipient for: ${recipientHint}`);
+            const contact = await communicationService.resolveRecipient(userId, recipientHint);
+
+            if (!contact) {
+                throw new Error(`Could not find a contact for "${recipientHint}". Please add them to your contacts or provide an email.`);
+            }
+
+            // 2. Identify the content to deliver (Handoff)
+            // We look for a fileLink in the context (passed from previous FSE step)
+            // or we grab the latest WorkspaceFile as a fallback.
+            let fileLink = context.lastResult?.data?.link || context.fileLink;
+            
+            if (!fileLink) {
+                const latestFile = await WorkspaceFile.findOne({ userId }).sort({ createdAt: -1 });
+                // If it was just uploaded to Drive (FSE step), we'd usually have a link. 
+                // In ODE, we expect the link.
+                if (!latestFile) throw new Error("No output found to deliver.");
+                // Note: Direct file attachment logic can be added here if no link exists.
+                fileLink = "See Nurotra Workplace for finalized file."; 
+            }
+
+            // 3. Dispatch (AI Drafting + Delivery)
+            const deliveryResult = await communicationService.dispatchOutput(userId, {
+                contact,
+                fileLink,
+                context: taskDescription,
+                platform: contact.preferredPlatform || "email"
+            });
+
+            return {
+                success: true,
+                message: `Output delivered successfully to ${contact.name} via ${contact.preferredPlatform || 'Email'}.`,
+                data: {
+                    recipient: contact.name,
+                    email: contact.email,
+                    platform: contact.preferredPlatform || 'Email',
+                    link: fileLink
+                }
+            };
+
+        } catch (error) {
+            console.error(`[ActionExec] Output delivery failed:`, error.message);
+            throw error;
+        }
+    },
+
+    // ----- FILE SYSTEM EXECUTION -----
+    "execute_file_lifecycle": async (step, context) => {
+        const userId = context.userId;
+        const taskDescription = context.workflowTitle || step.label;
+
+        try {
+            // 1. Fetch the latest workspace file for this user
+            const latestFile = await WorkspaceFile.findOne({ userId }).sort({ createdAt: -1 });
+            if (!latestFile) {
+                throw new Error("No recently created files found to finalize.");
+            }
+
+            console.log(`[ActionExec] Finalizing file lifecycle for: ${latestFile.fileName}`);
+
+            // 2. Intelligent Renaming (AI Phase)
+            const namingPrompt = `You are a professional file organizer. The user just completed this task: "${taskDescription}".
+            The current temporary file name is: "${latestFile.fileName}".
+            
+            Generate a DIRECT, PROFESSIONAL, and SPECIFIC new file name including extension. 
+            Format: [Topic]_[Category]_[Date_In_MMDD].ext (e.g., Marketing_Report_0413.docx)
+            
+            Respond with ONLY the new file name. No quotes, no explanation.`;
+
+            let finalName = await generateWithFallback(namingPrompt, "You are a professional file systems expert.", [], [], { forceJson: false });
+            finalName = finalName.trim().replace(/["']/g, '');
+            
+            console.log(`[ActionExec] AI-Renamed file to: ${finalName}`);
+
+            // 3. User Lookup (for OAuth tokens)
+            const user = await User.findById(userId);
+            if (!user || !user.googleAccessToken) {
+                throw new Error("Google Drive is not connected. Please connect your Google account first.");
+            }
+
+            // 4. Cloud Transit: Upload to Drive (googleDriveService handles Public Share + Link)
+            const uploadResult = await googleDriveService.uploadFile(
+                user,
+                latestFile.fileData,
+                finalName,
+                latestFile.fileType === 'pdf' ? 'application/pdf' : 
+                (latestFile.fileType === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 
+                (latestFile.fileType === 'pptx' ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' : 
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'))
+            );
+
+            return { 
+                success: true, 
+                message: `File finalized and shared: ${finalName}`, 
+                data: {
+                    fileName: finalName,
+                    link: uploadResult.webViewLink,
+                    fileId: uploadResult.fileId
+                }
+            };
+
+        } catch (error) {
+            console.error(`[ActionExec] File lifecycle execution failed:`, error.message);
+            throw error;
+        }
+    },
 
     // ----- EMAIL / NOTIFICATION -----
     "send_email": async (step, context) => {
@@ -144,6 +269,50 @@ const stepExecutors = {
         return { success: true, message: `Alert sent to ${recipient}` };
     },
 
+    // ----- WEB BROWSING -----
+    "web_search": async (step, context) => {
+        // 3-layer fallback: DB params → original parsed params → label
+        const query = step.params?.query 
+            || context.actionDef?.params?.query 
+            || step.label;
+        const socket = context.socket;
+        
+        console.log(`[ActionExec] WEB SEARCH: Query resolved to: "${query}"`);
+        const result = await browserAgentService.searchInfo(context.userId, query, socket, true); // true = skip individual chat save
+        
+        // Convert answer to readable text if it's JSON
+        let cleanAnswer = result.answer;
+        if (typeof cleanAnswer === 'string') {
+            cleanAnswer = cleanAnswer.trim();
+            // Try to parse and flatten JSON answers
+            if (cleanAnswer.startsWith('[') || cleanAnswer.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(cleanAnswer);
+                    cleanAnswer = flattenToText(Array.isArray(parsed) ? parsed[0] : parsed);
+                } catch {}
+            }
+        }
+        
+        return { 
+            success: true, 
+            message: `Found information: ${cleanAnswer}`,
+            data: { answer: cleanAnswer }
+        };
+    },
+
+    "platform_execution": async (step, context) => {
+        const platform = step.params?.platform || "custom";
+        const task = step.params?.task || step.label;
+        const socket = context.socket;
+
+        const result = await browserAgentService.executeTask(context.userId, platform, task, socket);
+        return {
+            success: true,
+            message: result.message,
+            data: result.data
+        };
+    },
+
     // ----- GENERIC / FALLBACK -----
     "default": async (step, context) => {
         // Use AI to "execute" unknown action types
@@ -160,6 +329,9 @@ const stepExecutors = {
 const mapStepToExecutor = (step) => {
     const label = (step.label || '').toLowerCase();
     const icon = (step.icon || '').toLowerCase();
+
+    // Web Search / Information Retrieval (HIGHER PRIORITY)
+    if (/search|score|match|team|news|fetch.*info|lookup|find.*on\s*web/.test(label) || icon === 'globe') return 'web_search';
 
     // Email / Notification
     if (/send\s*(email|mail|notification|notify)/.test(label) || icon === 'mail') return 'send_email';
@@ -187,15 +359,41 @@ const mapStepToExecutor = (step) => {
     // Scheduling
     if (/schedule|plan|calendar|book|reserve/.test(label) || icon === 'clock') return 'schedule_task';
 
-    // Files
+    // Output Delivery Execution (ODE)
+    if (/send|deliver|email|mail/.test(label)) return 'execute_output_delivery';
+
+    // Files & Lifecycle Execution
+    if (/file system execution|finalize|lifecycle/.test(label)) return 'execute_file_lifecycle';
     if (/upload|push|deploy|export/.test(label)) return 'upload_file';
+    
+    // Platform Execution (NEW)
+    if (/update.*(crm|sheet|notion|hubspot|workspace)|save\s*to|edit\s*record/.test(label)) return 'platform_execution';
 
     return 'default';
 };
 
 // ============================================================
-// MAIN: Execute a single step
+// HELPER: Flatten JSON object/array into readable text lines
 // ============================================================
+const flattenToText = (obj, prefix = '') => {
+    if (!obj || typeof obj !== 'object') return String(obj || '');
+    if (Array.isArray(obj)) {
+        return obj.map((item, i) => flattenToText(item, '')).filter(Boolean).join('\n\n');
+    }
+    return Object.entries(obj)
+        .filter(([, v]) => v !== null && v !== undefined && v !== '' && !(typeof v === 'object' && Object.keys(v).length === 0))
+        .map(([k, v]) => {
+            const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            if (typeof v === 'object') {
+                const nested = flattenToText(v);
+                return nested ? `${label}:\n  ${nested.split('\n').join('\n  ')}` : null;
+            }
+            return `${label}: ${v}`;
+        })
+        .filter(Boolean)
+        .join('\n');
+};
+
 const executeStep = async (step, context = {}) => {
     const executorKey = mapStepToExecutor(step);
     const executor = stepExecutors[executorKey] || stepExecutors['default'];

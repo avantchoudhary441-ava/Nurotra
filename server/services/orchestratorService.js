@@ -12,14 +12,20 @@ const breakDownTask = async (prompt, contextIntent) => {
     try {
         const systemPrompt = `You are the Nurotra Orchestrator Task Engine. 
 The user has provided a prompt, and the internal engine classified the primary intent as: ${contextIntent.intent} with content type: ${contextIntent.docType}.
+
 Your job is to cleanly break this entire goal into 3 to 5 logical, executable sub-tasks.
-Provide a JSON array of task objects.
 Each object must strictly have:
 - "step": Number
 - "action": String (Short 2-3 word title)
-- "description": String (Detailed instruction outlining exactly what to do)
-- "suggested_agent": String (Must precisely be one of: "docs_agent", "time_agent", "communication_agent", "collaborator_agent")
-- "is_delayed": Boolean (Does this task specifically need to wait for a future time event before executing?)
+- "description": String (Detailed instruction)
+- "suggested_agent": String (Must be: "docs_agent", "action_agent", "time_agent", "communication_agent")
+- "is_delayed": Boolean (Does this task need to wait for a future event?)
+
+CRITICAL INSTRUCTIONS:
+1. If the goal involves creating a file (Word, Excel, PPT, Report), you MUST include a step for the "action_agent" to perform "File System Execution" (FSE) for professional renaming and cloud upload.
+2. If the user mentions a RECIPIENT (e.g., "send to client", "email my boss", "notify Sarah"), you MUST ALWAYS include a final step for the "action_agent" to perform "Output Delivery Execution" (ODE). This step handles identifying the recipient in contacts and professional dispatching.
+3. The description for the ODE step must specify the intended recipient.
+4. If search or navigation is needed, use "action_agent".
 
 User Prompt: "${prompt}"`;
 

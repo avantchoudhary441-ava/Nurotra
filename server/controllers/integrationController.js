@@ -43,8 +43,8 @@ exports.authGmail = async (req, res) => {
             state: userId.toString()
         });
 
-        console.log(`[GmailAuth] Success! URL: ${url}`);
-        res.json({ success: true, url });
+        console.log(`[GmailAuth] Success! Redirecting...`);
+        res.redirect(url);
     } catch (error) {
         console.error("Auth Gmail Error:", error);
         res.status(500).json({ success: false, message: "Failed to generate Gmail auth URL", error: error.message });
@@ -90,7 +90,7 @@ exports.authZoom = (req, res) => {
     const userId = req.user._id;
     const redirectUri = `${getBackendUrl()}/api/integrations/zoom/callback`;
     const url = `https://zoom.us/oauth/authorize?response_type=code&client_id=${process.env.ZOOM_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${userId}`;
-    res.json({ success: true, url });
+    res.redirect(url);
 };
 
 exports.callbackZoom = async (req, res) => {

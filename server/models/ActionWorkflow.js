@@ -23,7 +23,9 @@ const ActionStepSchema = new mongoose.Schema({
         maxRetries: { type: Number, default: 0 },
         retryCount: { type: Number, default: 0 },
         retryDelayMs: { type: Number, default: 2000 }
-    }
+    },
+    // --- Action Parameters (e.g., search query, email recipient) ---
+    params: { type: mongoose.Schema.Types.Mixed, default: {} }
 });
 
 const ExecutionLogSchema = new mongoose.Schema({

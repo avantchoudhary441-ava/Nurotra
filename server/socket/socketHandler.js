@@ -1,3 +1,4 @@
+const browserAgentService = require("../services/browserAgentService");
 let users = {}; // Map socket ID to user ID
 
 module.exports = (io) => {
@@ -48,6 +49,14 @@ module.exports = (io) => {
             const { to } = data;
             io.to(to).emit("call-ended");
             console.log(`Call ended for ${to}`);
+        });
+
+        // --- Action Agent Browser Remote Control ---
+        socket.on("browser_input", async (data) => {
+            const { userId, type, x, y, key, text } = data;
+            if (userId) {
+                await browserAgentService.handleRemoteInput(userId, data);
+            }
         });
 
         socket.on("disconnect", () => {

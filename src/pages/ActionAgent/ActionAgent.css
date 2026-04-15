@@ -240,68 +240,71 @@
 .execution-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 1.25rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-    flex-shrink: 0;
 }
 
-.exec-title-row {
+.task-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.task-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #fff;
     display: flex;
     align-items: center;
     gap: 0.75rem;
 }
 
-.exec-title-row h2 {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 600;
-    letter-spacing: -0.2px;
-}
-
-.sparkle-icon { color: #a29bfe; }
-
-/* --- Status Pill --- */
-.status-pill {
+.task-header-controls {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.2rem 0.65rem;
-    border-radius: 50px;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.8px;
+    gap: 1rem;
+}
+
+.task-timer {
+    display: flex;
+    align-items: center;
+    color: #444;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+}
+
+.dismiss-task-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #666;
+    padding: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    transition: all 0.2s;
+}
+
+.dismiss-task-btn:hover {
+    background: rgba(255, 71, 87, 0.1);
+    border-color: rgba(255, 71, 87, 0.3);
+    color: #ff4757;
+}
+
+.task-badge {
+    font-size: 0.62rem;
+    font-weight: 800;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
 }
 
-.status-pill.running { background: rgba(108, 92, 231, 0.15); color: #a29bfe; border: 1px solid rgba(108, 92, 231, 0.3); }
-.status-pill.completed { background: rgba(46, 213, 115, 0.15); color: #2ed573; border: 1px solid rgba(46, 213, 115, 0.3); }
-.status-pill.failed { background: rgba(255, 71, 87, 0.15); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.3); }
-.status-pill.intervention { background: rgba(255, 152, 0, 0.15); color: #ff9800; border: 1px solid rgba(255, 152, 0, 0.3); }
-.status-pill.waiting { background: rgba(255, 235, 59, 0.15); color: #ffd32a; border: 1px solid rgba(255, 235, 59, 0.3); }
-.status-pill.delayed { background: rgba(0, 210, 255, 0.15); color: #00d2ff; border: 1px solid rgba(0, 210, 255, 0.3); }
-.status-pill.retrying { background: rgba(255, 193, 7, 0.15); color: #ffc107; border: 1px solid rgba(255, 193, 7, 0.3); animation: retrying-pulse 1.5s infinite; }
-.status-pill.recovered { background: rgba(46, 213, 115, 0.1); color: #2ed573; border: 1px solid rgba(46, 213, 115, 0.4); }
-
-@keyframes retrying-pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.6; }
-    100% { opacity: 1; }
-}
-
-
-.spin-icon { animation: spin 1.5s linear infinite; }
-@keyframes spin { 100% { transform: rotate(360deg); } }
-
-.exec-timer {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: #666;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 0.8rem;
-}
+.task-badge.running { background: rgba(162, 155, 254, 0.15); color: #a29bfe; border: 1px solid rgba(162, 155, 254, 0.3); }
+.task-badge.completed { background: rgba(46, 213, 115, 0.15); color: #2ed573; border: 1px solid rgba(46, 213, 115, 0.3); }
+.task-badge.failed { background: rgba(255, 71, 87, 0.15); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.3); }
 
 /* === PIPELINE FLOW VISUALIZATION === */
 .pipeline-flow {
@@ -558,6 +561,45 @@
     color: #7bed9f;
     overflow: hidden;
 }
+
+/* --- Step Result Box (shown after step completes) --- */
+.step-result-box {
+    background: rgba(46, 213, 115, 0.04);
+    border: 1px solid rgba(46, 213, 115, 0.15);
+    border-left: 3px solid rgba(46, 213, 115, 0.5);
+    border-radius: 0 8px 8px 0;
+    padding: 0.65rem 0.85rem;
+    margin-top: 0.35rem;
+    overflow: hidden;
+}
+
+.step-result-label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #2ed573;
+    margin-bottom: 0.45rem;
+    opacity: 0.8;
+}
+
+.step-result-content {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    color: #ccc;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.step-result-content::-webkit-scrollbar { width: 3px; }
+.step-result-content::-webkit-scrollbar-thumb { background: rgba(46, 213, 115, 0.2); border-radius: 2px; }
 
 /* --- Bulk Progress --- */
 .bulk-progress-container {
@@ -1112,6 +1154,51 @@
     color: #555;
 }
 
+/* === INPUT LOCKED STATE (task executing) === */
+.command-input-container:has(input:disabled) {
+    border-color: rgba(108, 92, 231, 0.15);
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0.7;
+    box-shadow: none;
+}
+
+.master-input:disabled {
+    cursor: not-allowed;
+    color: #555;
+}
+
+.master-input:disabled::placeholder {
+    color: #444;
+    font-style: italic;
+    animation: placeholder-pulse 2s ease-in-out infinite;
+}
+
+@keyframes placeholder-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+}
+
+/* === TASK LOCKED INDICATOR BANNER === */
+.input-locked-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.8rem;
+    background: rgba(108, 92, 231, 0.07);
+    border: 1px solid rgba(108, 92, 231, 0.15);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    color: #a29bfe;
+    flex-shrink: 0;
+    animation: banner-glow 2s ease-in-out infinite;
+}
+
+@keyframes banner-glow {
+    0%, 100% { box-shadow: 0 0 0 rgba(108, 92, 231, 0); }
+    50% { box-shadow: 0 0 12px rgba(108, 92, 231, 0.12); }
+}
+
 /* === AUTOMATIONS TAB (Event Rules List) === */
 .automations-list {
     display: flex;
@@ -1272,6 +1359,63 @@
 .action-workspace-container ::-webkit-scrollbar-track { background: transparent; }
 .action-workspace-container ::-webkit-scrollbar-thumb { background: rgba(108, 92, 231, 0.15); border-radius: 3px; }
 
+/* Chat Result Card (for formatted workflow completion results) */
+.chat-result-card {
+    background: rgba(46, 213, 115, 0.04);
+    border: 1px solid rgba(46, 213, 115, 0.2);
+    border-left: 3px solid rgba(46, 213, 115, 0.6);
+    border-radius: 0 10px 10px 0;
+    padding: 0.85rem 1rem;
+    margin: 0;
+}
+
+.chat-result-text {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.84rem;
+    color: #ddd;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Step Result Box (Green box in the timeline) */
+.step-result-box {
+    margin: 0.75rem 0 0.25rem;
+    padding: 0.75rem 1rem;
+    background: rgba(46, 213, 115, 0.04);
+    border-left: 2px solid rgba(46, 213, 115, 0.5);
+    border-radius: 4px;
+    animation: fadeInSlide 0.3s ease-out;
+}
+
+.step-result-label {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: #2ed573;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.step-result-content {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #aaa;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'Inter', sans-serif;
+}
+
+@keyframes fadeInSlide {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* Execution Result Cards */
 .execution-result-card {
     margin-top: 1.5rem;
@@ -1375,3 +1519,344 @@
     color: #666;
 }
 
+
+/* === LIVE BROWSER MONITOR (NEW) === */
+.browser-execution-monitor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid rgba(108, 92, 231, 0.3);
+    box-shadow: 20px 0 50px rgba(0, 0, 0, 0.5);
+}
+
+.monitor-header {
+    height: 40px;
+    background: rgba(15, 15, 25, 0.9);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1rem;
+    flex-shrink: 0;
+}
+
+.monitor-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #a29bfe;
+    letter-spacing: 1px;
+}
+
+.monitor-close-btn {
+    background: transparent;
+    border: none;
+    color: #444;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.monitor-close-btn:hover {
+    color: #ff4757;
+    background: rgba(255, 71, 87, 0.1);
+}
+
+.monitor-viewport {
+    flex: 1;
+    background: #111;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.monitor-viewport img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+}
+
+.browser-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 2rem 1.5rem 1rem;
+    background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.browser-url-bar {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50px;
+    padding: 0.35rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.7rem;
+    color: #888;
+}
+
+.browser-status-toast {
+    background: rgba(108, 92, 231, 0.2);
+    border: 1px solid rgba(108, 92, 231, 0.4);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    color: #c0bfff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.monitor-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    color: #444;
+}
+
+.monitor-footer {
+    height: 32px;
+    background: rgba(108, 92, 231, 0.05);
+    border-top: 1px solid rgba(108, 92, 231, 0.1);
+    display: flex;
+    align-items: center;
+    padding: 0 1rem;
+    font-size: 0.65rem;
+    color: #666;
+    gap: 0.5rem;
+}
+
+.ai-vision-icon {
+    color: #a29bfe;
+}
+
+/* === CHAT INTERFACE VIEW === */
+.chat-interface-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    max-height: 100%;
+}
+
+.chat-messages-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    scroll-behavior: smooth;
+    max-height: calc(100vh - 280px);
+}
+
+.chat-messages-scrollable::-webkit-scrollbar { width: 4px; }
+.chat-messages-scrollable::-webkit-scrollbar-thumb { background: rgba(108, 92, 231, 0.2); border-radius: 4px; }
+
+.welcome-chat-context {
+    text-align: center;
+    padding: 2rem 1rem;
+    background: rgba(108, 92, 231, 0.03);
+    border-radius: 16px;
+    border: 1px dashed rgba(108, 92, 231, 0.15);
+    margin-bottom: 2rem;
+}
+
+.welcome-chat-context h3 { font-size: 1.1rem; color: #fff; margin-bottom: 0.5rem; }
+.welcome-chat-context p { font-size: 0.85rem; color: #888; line-height: 1.5; }
+
+/* Bubble Rows */
+.chat-bubble-row {
+    display: flex;
+    gap: 0.75rem;
+    max-width: 85%;
+}
+
+.chat-bubble-row.user {
+    flex-direction: row-reverse;
+    align-self: flex-end;
+}
+
+.chat-bubble-row.system, .chat-bubble-row.agent {
+    align-self: flex-start;
+}
+
+.bubble-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chat-bubble-row.user .bubble-avatar { background: rgba(108, 92, 231, 0.2); border-color: rgba(108, 92, 231, 0.4); }
+.chat-bubble-row.agent .bubble-avatar { background: rgba(0, 210, 255, 0.1); border-color: rgba(0, 210, 255, 0.3); }
+
+.bubble-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.text-message {
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #eee;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+}
+
+.chat-bubble-row.user .text-message {
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.15), rgba(108, 92, 231, 0.08));
+    border-color: rgba(108, 92, 231, 0.2);
+    border-top-right-radius: 2px;
+}
+
+.chat-bubble-row.agent .text-message, .chat-bubble-row.system .text-message {
+    background: rgba(255, 255, 255, 0.04);
+    border-top-left-radius: 2px;
+}
+
+.msg-source {
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.65rem;
+    color: #666;
+    font-style: italic;
+}
+
+.bubble-time {
+    font-size: 0.62rem;
+    color: #555;
+    margin-top: 0.1rem;
+}
+
+.chat-bubble-row.user .bubble-time { text-align: right; }
+
+/* Workflow Card in Chat */
+.chat-workflow-card {
+    background: rgba(10, 10, 10, 0.4);
+    border: 1px solid rgba(108, 92, 231, 0.2);
+    border-radius: 12px;
+    padding: 1rem;
+    width: 280px;
+    border-top-left-radius: 2px;
+}
+
+.wf-card-badge {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #a29bfe;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.chat-workflow-card h4 {
+    font-size: 0.9rem;
+    margin: 0 0 0.5rem 0;
+    color: #fff;
+}
+
+.wf-card-steps {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    color: #7bed9f;
+}
+
+/* Quick Actions Overlay Fix */
+.chat-interface-view .quick-actions-grid {
+    margin-top: 1rem;
+    padding: 0;
+    background: transparent;
+    border: none;
+}
+
+ / *   = = =   E X E C U T I O N   T I M E L I N E   S T Y L E S   = = =   * / 
+ . c h a t - e x e c u t i o n - t i m e l i n e   { 
+         b a c k g r o u n d :   r g b a ( 1 6 ,   1 6 ,   2 4 ,   0 . 8 ) ; 
+         b o r d e r :   1 p x   s o l i d   r g b a ( 2 5 5 ,   2 5 5 ,   2 5 5 ,   0 . 0 8 ) ; 
+         b o r d e r - r a d i u s :   1 2 p x ; 
+         p a d d i n g :   1 r e m ; 
+         m a r g i n - t o p :   0 . 5 r e m ; 
+         w i d t h :   1 0 0 % ; 
+ } 
+ 
+ . t i m e l i n e - h e a d e r   { 
+         d i s p l a y :   f l e x ; 
+         a l i g n - i t e m s :   c e n t e r ; 
+         c o l o r :   # a 2 9 b f e ; 
+         m a r g i n - b o t t o m :   0 . 5 r e m ; 
+         b o r d e r - b o t t o m :   1 p x   d a s h e d   r g b a ( 2 5 5 ,   2 5 5 ,   2 5 5 ,   0 . 1 ) ; 
+         p a d d i n g - b o t t o m :   0 . 5 r e m ; 
+ } 
+ 
+ . t i m e l i n e - h e a d e r   h 4   { 
+         m a r g i n :   0 ; 
+         f o n t - s i z e :   0 . 8 5 r e m ; 
+         f o n t - w e i g h t :   6 0 0 ; 
+         t e x t - t r a n s f o r m :   u p p e r c a s e ; 
+         l e t t e r - s p a c i n g :   0 . 5 p x ; 
+ } 
+ 
+ . t i m e l i n e - e n t r i e s   { 
+         d i s p l a y :   f l e x ; 
+         f l e x - d i r e c t i o n :   c o l u m n ; 
+         g a p :   0 . 2 5 r e m ; 
+ } 
+ 
+ . t i m e l i n e - e n t r y   { 
+         b a c k g r o u n d :   r g b a ( 0 ,   0 ,   0 ,   0 . 2 ) ; 
+         b o r d e r - r a d i u s :   4 p x ; 
+         t r a n s i t i o n :   b a c k g r o u n d   0 . 2 s ; 
+ } 
+ 
+ . t i m e l i n e - e n t r y : h o v e r   { 
+         b a c k g r o u n d :   r g b a ( 2 5 5 ,   2 5 5 ,   2 5 5 ,   0 . 0 3 ) ; 
+ } 
+ 
+ . t i m e l i n e - e n t r y . c o m p l e t e d   { 
+         b o r d e r - l e f t - c o l o r :   # 0 0 d 2 f f   ! i m p o r t a n t ; 
+ } 
+ 
+ . t i m e l i n e - e n t r y . f a i l e d   { 
+         b o r d e r - l e f t - c o l o r :   # f f 4 7 5 7   ! i m p o r t a n t ; 
+ } 
+ 
+ . n o - l o g s   { 
+         f o n t - s i z e :   0 . 8 r e m ; 
+         c o l o r :   # 8 8 8 ; 
+         f o n t - s t y l e :   i t a l i c ; 
+         m a r g i n :   0 . 5 r e m   0 ; 
+ } 
+  
+ 
