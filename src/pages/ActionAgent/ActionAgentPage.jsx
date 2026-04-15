@@ -27,13 +27,13 @@ const TypewriterText = ({ text, speed = 18 }) => {
 
 const ActionAgentPage = () => {
     const navigate = useNavigate();
-    
+
     // Core Engine State
     const [activeTasks, setActiveTasks] = useState([]);
     const [commandInput, setCommandInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [suggestions, setSuggestions] = useState([]);
-    
+
     // Layout State (Split Screen)
     const [leftWidth, setLeftWidth] = useState(window.innerWidth * 0.4);
     const isResizing = useRef(false);
@@ -41,7 +41,7 @@ const ActionAgentPage = () => {
     // Chat History State
     const [chatMessages, setChatMessages] = useState([]);
     const chatEndRef = useRef(null);
-    
+
     // Browser Monitor State (Execution Screen)
     const [browserFrame, setBrowserFrame] = useState(null);
     const [monitorVisible, setMonitorVisible] = useState(true);
@@ -126,7 +126,7 @@ const ActionAgentPage = () => {
     useEffect(() => {
         const timer = setInterval(() => {
             setActiveTasks(prev => prev.map(t => {
-                if (['running','waiting','retrying'].includes(t.status)) {
+                if (['running', 'waiting', 'retrying'].includes(t.status)) {
                     return { ...t, elapsed: Math.floor((Date.now() - new Date(t.startTime).getTime()) / 1000) };
                 }
                 return t;
@@ -238,8 +238,8 @@ const ActionAgentPage = () => {
 
             // Headlines (ALL CAPS or Task Complete)
             const isHeadline = (trimmed === trimmed.toUpperCase() && trimmed.length > 4 && !/^[•\-\*⚠]/.test(trimmed) && !trimmed.includes(':'))
-                             || trimmed.startsWith('✅') || trimmed.startsWith('📌');
-            
+                || trimmed.startsWith('✅') || trimmed.startsWith('📌');
+
             if (isHeadline) {
                 return (
                     <div key={i} style={{ fontWeight: '600', fontSize: '13px', color: '#d0d0d0', marginBottom: 6, marginTop: i > 0 ? 12 : 0 }}>
@@ -318,43 +318,43 @@ const ActionAgentPage = () => {
     };
 
     return (
-        <div style={{ 
-            display: 'flex', 
-            flexDirection: 'row', 
-            width: '100vw', 
-            height: '100vh', 
-            overflow: 'hidden', 
+        <div style={{
+            display: 'flex',
+            flexDirection: 'row',
+            width: '100vw',
+            height: '100vh',
+            overflow: 'hidden',
             backgroundColor: '#000',
             color: '#fff'
         }}>
-            
+
             {/* --- LEFT PANE (EXECUTION MONITOR) --- */}
-            <div style={{ 
-                width: leftWidth, 
-                display: 'flex', 
-                flexDirection: 'column', 
-                backgroundColor: '#080808', 
+            <div style={{
+                width: leftWidth,
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: '#080808',
                 borderRight: '2px solid #1a1a1a',
                 height: '100%'
             }}>
                 {/* Header for Left Pane */}
-                <div style={{ 
-                    padding: '16px 20px', 
-                    backgroundColor: '#111', 
-                    borderBottom: '1px solid #222', 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center' 
+                <div style={{
+                    padding: '16px 20px',
+                    backgroundColor: '#111',
+                    borderBottom: '1px solid #222',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#888', fontWeight: '600', fontSize: '12px', letterSpacing: '0.5px' }}>
                         <Globe size={14} /> Execution Monitor
                     </div>
                     {(activeTasks.length > 0 || isConnecting) && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#666', fontSize: '11px' }}>
-                            <div style={{ 
-                                width: 6, 
-                                height: 6, 
-                                borderRadius: '50%', 
+                            <div style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: '50%',
                                 backgroundColor: isConnecting ? '#888' : '#aaa',
                                 animation: 'pulse 2s infinite'
                             }} /> {isConnecting ? 'connecting' : 'active'}
@@ -363,25 +363,25 @@ const ActionAgentPage = () => {
                 </div>
 
                 {/* Browser Viewport Area */}
-                <div style={{ 
-                    flex: '0 0 auto', 
-                    width: '100%', 
-                    aspectRatio: '16/9', 
-                    backgroundColor: '#000', 
-                    position: 'relative', 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                <div style={{
+                    flex: '0 0 auto',
+                    width: '100%',
+                    aspectRatio: '16/9',
+                    backgroundColor: '#000',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
                     borderBottom: '1px solid #1a1a1a',
                     borderLeft: (activeTasks.length > 0 || isConnecting) ? '2px solid #6c5ce7' : 'none'
                 }}>
                     {browserFrame ? (
-                        <img 
+                        <img
                             ref={monitorImgRef}
-                            src={browserFrame.frame} 
-                            alt="Browser View" 
+                            src={browserFrame.frame}
+                            alt="Browser View"
                             onClick={handleMonitorClick}
-                            style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'crosshair' }} 
+                            style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'crosshair' }}
                         />
                     ) : isConnecting ? (
                         <div style={{ textAlign: 'center', color: '#555', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -414,14 +414,14 @@ const ActionAgentPage = () => {
             </div>
 
             {/* --- VISIBLE RESIZER --- */}
-            <div 
+            <div
                 onMouseDown={() => { isResizing.current = true; document.body.style.cursor = 'col-resize'; }}
-                style={{ 
-                    width: '10px', 
-                    cursor: 'col-resize', 
-                    backgroundColor: '#151515', 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                style={{
+                    width: '10px',
+                    cursor: 'col-resize',
+                    backgroundColor: '#151515',
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'center',
                     borderLeft: '1px solid #222',
                     borderRight: '1px solid #222',
@@ -432,17 +432,17 @@ const ActionAgentPage = () => {
             </div>
 
             {/* --- RIGHT PANE (PROMPTING AREA) --- */}
-            <div style={{ 
-                flex: 1, 
-                display: 'flex', 
-                flexDirection: 'column', 
+            <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
                 backgroundColor: '#0a0a0a',
                 height: '100%'
             }}>
                 {/* Header for Right Pane */}
-                <div style={{ 
-                    padding: '16px 20px', 
-                    backgroundColor: '#0d0d0d', 
+                <div style={{
+                    padding: '16px 20px',
+                    backgroundColor: '#0d0d0d',
                     borderBottom: '1px solid #1a1a1a',
                     display: 'flex',
                     alignItems: 'center',
@@ -468,84 +468,84 @@ const ActionAgentPage = () => {
                                 const isNew = idx === chatMessages.length - 1;
 
                                 return (
-                                <motion.div 
-                                    key={idx} 
-                                    initial={{ opacity: 0, y: 8 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    style={{ 
-                                        display: 'flex', 
-                                        gap: 10, 
-                                        flexDirection: isUser ? 'row-reverse' : 'row',
-                                        maxWidth: '88%',
-                                        alignSelf: isUser ? 'flex-end' : 'flex-start'
-                                    }}
-                                >
-                                    {/* Avatar */}
-                                    <div style={{ 
-                                        width: 28, height: 28, borderRadius: '50%', 
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        backgroundColor: isUser ? '#1a1a1a' : '#111',
-                                        border: '1px solid #222',
-                                        marginTop: 2, flexShrink: 0
-                                    }}>
-                                        {isUser 
-                                            ? <User size={13} color="#666" /> 
-                                            : <Sparkles size={13} color="#555" />
-                                        }
-                                    </div>
-
-                                    {/* Bubble */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
-                                        <div style={{ 
-                                            padding: isExecStep ? '6px 0' : '0', 
-                                            color: '#ccc',
-                                            fontSize: '13px',
-                                            lineHeight: '1.7',
+                                    <motion.div
+                                        key={idx}
+                                        initial={{ opacity: 0, y: 8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.2 }}
+                                        style={{
+                                            display: 'flex',
+                                            gap: 10,
+                                            flexDirection: isUser ? 'row-reverse' : 'row',
+                                            maxWidth: '88%',
+                                            alignSelf: isUser ? 'flex-end' : 'flex-start'
+                                        }}
+                                    >
+                                        {/* Avatar */}
+                                        <div style={{
+                                            width: 28, height: 28, borderRadius: '50%',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            backgroundColor: isUser ? '#1a1a1a' : '#111',
+                                            border: '1px solid #222',
+                                            marginTop: 2, flexShrink: 0
                                         }}>
-                                            {/* Execution step — typewriter */}
-                                            {isExecStep ? (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    <span style={{ color: '#333', fontSize: '11px' }}>›</span>
-                                                    <span style={{ color: '#555', fontSize: '12px', fontFamily: 'monospace' }}>
-                                                        {isNew ? <TypewriterText text={msg.content} speed={20} /> : msg.content}
-                                                    </span>
-                                                </div>
-                                            ) : isResult ? (
-                                                /* Result — flat, no box, structured typewriter */
-                                                <div style={{ padding: '8px 0' }}>
-                                                    {renderStructuredContent(msg.content, isNew)}
-                                                    {msg.metadata?.sourceUrl && (
-                                                        <div style={{ marginTop: 12, fontSize: '11px', color: '#333' }}>
-                                                            <a href={msg.metadata.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#444', textDecoration: 'none' }}>
-                                                                {msg.metadata.provider || 'Web'} ↗
-                                                            </a>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : isUser ? (
-                                                /* User message — subtle pill */
-                                                <div style={{ 
-                                                    display: 'inline-block',
-                                                    padding: '8px 14px', 
-                                                    borderRadius: '16px 4px 16px 16px',
-                                                    backgroundColor: '#161616',
-                                                    border: '1px solid #1e1e1e',
-                                                    color: '#ccc',
-                                                    fontSize: '13px'
-                                                }}>
-                                                    {msg.content}
-                                                </div>
-                                            ) : (
-                                                /* System/AI message — no box, just text */
-                                                <span style={{ color: '#888', fontSize: '13px' }}>{msg.content}</span>
-                                            )}
+                                            {isUser
+                                                ? <User size={13} color="#666" />
+                                                : <Sparkles size={13} color="#555" />
+                                            }
                                         </div>
-                                        <span style={{ fontSize: '10px', color: '#2a2a2a', alignSelf: isUser ? 'flex-end' : 'flex-start', paddingLeft: 2 }}>
-                                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    </div>
-                                </motion.div>
+
+                                        {/* Bubble */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%' }}>
+                                            <div style={{
+                                                padding: isExecStep ? '6px 0' : '0',
+                                                color: '#ccc',
+                                                fontSize: '13px',
+                                                lineHeight: '1.7',
+                                            }}>
+                                                {/* Execution step — typewriter */}
+                                                {isExecStep ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <span style={{ color: '#333', fontSize: '11px' }}>›</span>
+                                                        <span style={{ color: '#555', fontSize: '12px', fontFamily: 'monospace' }}>
+                                                            {isNew ? <TypewriterText text={msg.content} speed={20} /> : msg.content}
+                                                        </span>
+                                                    </div>
+                                                ) : isResult ? (
+                                                    /* Result — flat, no box, structured typewriter */
+                                                    <div style={{ padding: '8px 0' }}>
+                                                        {renderStructuredContent(msg.content, isNew)}
+                                                        {msg.metadata?.sourceUrl && (
+                                                            <div style={{ marginTop: 12, fontSize: '11px', color: '#333' }}>
+                                                                <a href={msg.metadata.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#444', textDecoration: 'none' }}>
+                                                                    {msg.metadata.provider || 'Web'} ↗
+                                                                </a>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : isUser ? (
+                                                    /* User message — subtle pill */
+                                                    <div style={{
+                                                        display: 'inline-block',
+                                                        padding: '8px 14px',
+                                                        borderRadius: '16px 4px 16px 16px',
+                                                        backgroundColor: '#161616',
+                                                        border: '1px solid #1e1e1e',
+                                                        color: '#ccc',
+                                                        fontSize: '13px'
+                                                    }}>
+                                                        {msg.content}
+                                                    </div>
+                                                ) : (
+                                                    /* System/AI message — no box, just text */
+                                                    <span style={{ color: '#888', fontSize: '13px' }}>{msg.content}</span>
+                                                )}
+                                            </div>
+                                            <span style={{ fontSize: '10px', color: '#2a2a2a', alignSelf: isUser ? 'flex-end' : 'flex-start', paddingLeft: 2 }}>
+                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                    </motion.div>
                                 );
                             })}
                             <div ref={chatEndRef} />
@@ -555,7 +555,7 @@ const ActionAgentPage = () => {
 
                 {/* Input Bar area at the bottom */}
                 <div style={{ padding: '12px 30px 28px 30px', borderTop: '1px solid #1a1a1a', backgroundColor: '#080808' }}>
-                    
+
                     {/* --- Dynamic Suggestion Chips --- */}
                     {suggestions.length > 0 && !isLoading && (
                         <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -590,11 +590,11 @@ const ActionAgentPage = () => {
                     )}
 
                     {/* --- Text Input --- */}
-                    <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        backgroundColor: '#111', 
-                        borderRadius: '20px', 
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        backgroundColor: '#111',
+                        borderRadius: '20px',
                         padding: '10px 15px',
                         border: isLoading ? '1px solid #6c5ce755' : '1px solid #222',
                         boxShadow: isLoading ? '0 0 20px rgba(108,92,231,0.15)' : '0 4px 20px rgba(0,0,0,0.3)',
@@ -603,7 +603,7 @@ const ActionAgentPage = () => {
                         <button style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', padding: '8px' }}>
                             <Paperclip size={20} />
                         </button>
-                        <input 
+                        <input
                             type="text"
                             placeholder={isConnecting ? 'Agent is initializing...' : "Type a command (e.g., 'What is the IPL score?')"}
                             style={{ flex: 1, background: 'none', border: 'none', color: isConnecting ? '#6c5ce7' : '#fff', padding: '10px 15px', outline: 'none', fontSize: '15px' }}
@@ -612,15 +612,15 @@ const ActionAgentPage = () => {
                             onKeyDown={(e) => e.key === 'Enter' && sendCommand()}
                             disabled={isLoading}
                         />
-                        <button 
+                        <button
                             onClick={sendCommand}
                             disabled={!commandInput.trim() || isLoading}
-                            style={{ 
-                                background: commandInput.trim() ? '#6c5ce7' : '#222', 
-                                color: '#fff', 
-                                border: 'none', 
-                                padding: '10px 20px', 
-                                borderRadius: '15px', 
+                            style={{
+                                background: commandInput.trim() ? '#6c5ce7' : '#222',
+                                color: '#fff',
+                                border: 'none',
+                                padding: '10px 20px',
+                                borderRadius: '15px',
                                 fontWeight: '700',
                                 cursor: 'pointer',
                                 display: 'flex',
@@ -639,3 +639,6 @@ const ActionAgentPage = () => {
 };
 
 export default ActionAgentPage;
+
+
+// hi 
