@@ -12,6 +12,7 @@ chromium.use(stealth);
 const mongoose = require("mongoose");
 const Integration = require("../models/Integration");
 const ActionMessage = require("../models/ActionMessage");
+const ActionWorkflow = require("../models/ActionWorkflow");
 const { generateWithFallback } = require("./aiService");
 
 class BrowserAgentService {
@@ -19,6 +20,11 @@ class BrowserAgentService {
         this.browser = null;
         this.activeContexts = new Map(); // userId -> browserContext
         this.activePages = new Map(); // userId -> Page
+        this.io = null; // Global socket server instance
+    }
+
+    setIO(io) {
+        this.io = io;
     }
 
     /**
@@ -67,6 +73,33 @@ class BrowserAgentService {
     }
 
     /**
+     * Log a granular execution step to the active workflow for the user.
+     */
+    async logExecutionStep(userId, message, status = "info", socket = null) {
+        try {
+            // Find the most recent running workflow for this user
+            const wf = await ActionWorkflow.findOne({ userId, status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } }).sort({ startTime: -1 });
+            if (!wf) return;
+
+            wf.executionLogs.push({
+                stepLabel: "Browser Agent",
+                status,
+                message,
+                timestamp: new Date(),
+                level: status
+            });
+            wf.activeMicroLog = message;
+            await wf.save();
+
+            if (socket) {
+                socket.emit("task_update", { userId, workflowId: wf._id });
+            }
+        } catch (err) {
+            console.error(`[BrowserAgent] Failed to log step for ${userId}:`, err.message);
+        }
+    }
+
+    /**
      * Initialize the browser instance if not already running
      */
     async init() {
@@ -74,8 +107,45 @@ class BrowserAgentService {
             console.log("[BrowserAgent] Starting Chromium engine...");
             this.browser = await chromium.launch({
                 headless: true, // Run invisible for speed
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,720']
             });
+        }
+    }
+
+    /**
+     * Clear and initialize a clean frame to wake up the UI monitor.
+     */
+    async wakeUpMonitor(userId, socket = null) {
+        if (!socket && !this.io) return;
+        const io = this.io || socket?.server;
+        
+        // Emit a simple "Virtual Environment Initialized" placeholder frame or clear state
+        io.to(userId.toString()).emit("browser_frame", {
+            userId,
+            frame: null, 
+            status: "Virtual Environment Initialized. Preparing engine...",
+            url: "about:blank",
+            timestamp: new Date()
+        });
+    }
+
+    /**
+     * Smoothly scroll a page down while emitting frames to the client
+     */
+    async autoScrollAndStream(page, socket, userId, scrollSteps = 3, delayMs = 600) {
+        if (!socket) return;
+        try {
+            await this.logExecutionStep(userId, "Scrolling through page to load content...", "info", socket);
+            for (let i = 0; i < scrollSteps; i++) {
+                await page.evaluate(() => {
+                    window.scrollBy({ top: 400, left: 0, behavior: 'smooth' });
+                });
+                await page.waitForTimeout(delayMs);
+                await this.emitFrame(socket, userId, page, "Reading page content...");
+            }
+            await page.waitForTimeout(500);
+        } catch (err) {
+            console.warn(`[BrowserAgent] Scroll failed: ${err.message}`);
         }
     }
 
@@ -130,9 +200,13 @@ class BrowserAgentService {
         const page = await context.newPage();
         this.activePages.set(userId.toString(), page);
         
+        // Instant reality: Show the browser immediately
+        await this.emitFrame(socket, userId, page);
+        
         try {
             console.log(`[BrowserAgent] Searching for: "${query}" using ${currentProvider}`);
-            await this.emitFrame(socket, userId, page, `Searching ${currentProvider} for: "${query}"...`);
+            await this.logExecutionStep(userId, `Searching ${currentProvider} for: "${query}"`, "info", socket);
+            await this.emitFrame(socket, userId, page, `Looking on ${currentProvider} for "${query}"...`);
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
             // Detection for CAPTCHA/Blocks
@@ -140,7 +214,7 @@ class BrowserAgentService {
 
             if (isBlocked) {
                 console.warn(`[BrowserAgent] Block detected. Switching to DuckDuckGo...`);
-                await this.emitFrame(socket, userId, page, "Search blocked. Switching to backup engine (DuckDuckGo)...");
+                await this.emitFrame(socket, userId, page, "Access temporarily restricted. Switching to backup source...");
                 currentProvider = 'DuckDuckGo';
                 searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
                 await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
@@ -148,7 +222,7 @@ class BrowserAgentService {
             }
 
             // --- DEEP SEARCH LOGIC ---
-            await this.emitFrame(socket, userId, page, `Analyzing results for "${query}"...`);
+            await this.emitFrame(socket, userId, page, `Reviewing the findings for "${query}"...`);
             
             // 1. Get Snippets & Links
             const pageText = await page.innerText('body');
@@ -177,12 +251,12 @@ class BrowserAgentService {
                 Available Links to Explore:
                 ${links.map((l, i) => `[${i}] ${l.title} - ${l.url}`).join('\n')}
                 
-                Based on the snippets, choose the best path:
-                1. If the snippets ALREADY contain the definitive, full answer, respond: "STAY [Summarized Answer]"
-                2. If you need to visit a site for a better/full answer, respond: "VISIT [URL]"
-                3. If no results are relevant, respond: "NONE"
+                Based on the snippets, choose the most efficient path:
+                1. STAY [Summarized Answer]: Use this if the snippets or info-cards clearly show the definitive answer (e.g. "Scores are 145/2", "The winner was X"). Do NOT visit a site if the SERP snippet is sufficient.
+                2. VISIT [URL]: Use this only if the snippets are vague, missing crucial data, or you need deep details that aren't visible on the search results page.
+                3. NONE: Use this if absolutely nothing relevant is found.
                 
-                Respond with ONLY the command (STAY [text] or VISIT [url] or NONE).`;
+                Respond with ONLY the command (STAY [text] or VISIT [url] or NONE). Be lazy but smart: prefer STAY if possible.`;
 
                 decision = await generateWithFallback(decisionPrompt, "You are a web search strategist.", [], [], { forceJson: false });
                 console.log(`[BrowserAgent] Search Decision: ${decision}`);
@@ -196,16 +270,31 @@ class BrowserAgentService {
             let finalUrl = page.url();
 
             if (decision.startsWith("VISIT")) {
-                const targetUrl = decision.replace("VISIT", "").trim();
+                let targetUrl = decision.replace("VISIT", "").trim();
+                
+                // Sanitize: Remove common AI wrappers like [ ], " ", ( )
+                targetUrl = targetUrl.replace(/^[\[\("']+|[\]\)"']+$/g, '');
+                
+                // Validate protocol
+                if (!targetUrl.startsWith('http')) {
+                    targetUrl = 'https://' + targetUrl;
+                }
+
                 console.log(`[BrowserAgent] Deep-diving into: ${targetUrl}`);
-                await this.emitFrame(socket, userId, page, `Opening: ${targetUrl.split('/')[2]} for detailed data...`);
+                await this.logExecutionStep(userId, `Opening: ${targetUrl.split('/')[2]} for more details`, "info", socket);
+                await this.emitFrame(socket, userId, page, `Opening: ${targetUrl.split('/')[2]} for more details...`);
                 
                 try {
                     await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-                    await page.waitForTimeout(1500); // Allow JS widgets to load
+                    await page.waitForTimeout(1000); 
+                    
+                    // Trigger the visual scrolling effect to scan the page
+                    await this.autoScrollAndStream(page, socket, userId);
+
                     finalContent = await page.innerText('body');
                     finalUrl = page.url();
-                    await this.emitFrame(socket, userId, page, "Deep page data extracted.");
+                    await this.logExecutionStep(userId, "Deep page data extracted.", "success", socket);
+                    await this.emitFrame(socket, userId, page, "Data extraction complete.");
                 } catch (navErr) {
                     console.error(`[BrowserAgent] Deep navigation failed: ${navErr.message}. Falling back to snippets.`);
                     await this.emitFrame(socket, userId, page, "Site blocked/timed out. Falling back to search snippets...");
@@ -218,23 +307,32 @@ class BrowserAgentService {
             // Small delay to prevent hitting RPM limits when making back-to-back calls
             await new Promise(r => setTimeout(r, 1500)); 
 
-            // 3. Final Extraction
+            // 3. Final Extraction: Business Grace & Conversational Follow-up
+            await this.logExecutionStep(userId, "Completing professional strategic report...", "info", socket);
             const extractionPrompt = `User Question: "${query}"
             Current URL: ${finalUrl}
             
-            EXTRACT the EXACT answer from the web content below. Format your response as STRUCTURED TEXT:
+            TASK: As the Nurotra Professional Assistant, provide the final results of your investigation based EXCLUSIVELY on the provided content.
             
-            RULES:
-            1. Start with a one-line status/headline in CAPS (e.g., "STATUS: RCB WON BY 4 WICKETS")
-            2. Use bullets (•) for individual facts (scores, dates, CEO name, etc.)
-            3. Use "Label: Value" format for pairs
-            4. End with "Source: [The specific URL visited]"
-            5. If not found, say "⚠ Information not found in current view"
+            TONE & PERSONALITY:
+            - FOLLOW-UP CONNECTION: Frame this as a continuation of your initial acknowledgment. Use phrases like "I've successfully gathered those details for you..." or "As promised, here is the breakdown...".
+            - BUSINESS GRACE: Maintain respectful, elegant, and simple language.
+            - INTEGRATED NARRATIVE: Weave findings together naturally. 
+            - PROACTIVE ASSISTANCE: NEVER tell the user to visit a website or check another platform themselves. Instead, offer to do it on their behalf (e.g., "If you want, I can visit [Website Name] or [Platform] on your behalf for further insights. Just let me know and I will execute it.").
             
-            CONTENT:
-            ${finalContent.substring(0, 8000)}`;
+            CONTENT REQUIREMENTS & ABSOLUTE ACCURACY:
+            - AUTHENTIC DATA ONLY: NEVER hallucinate, invent, or use placeholder names like "Team A" or "Team B". You MUST extract and use only the REAL team names, scores, and facts from the CONTENT below.
+            - NO GUESSING: If the actual data is barely mentioned or missing, simply state gracefully that the exact information is not currently detailed in the immediate sources, rather than making things up.
+            - VISUAL CLARITY: Use clean bullet points (•) for data density. Bold keys where appropriate (**Team Name**: Detail).
+            - COMPREHENSIVENESS: Include scores, dates, teams, and next schedules if applicable.
+            
+            SOURCE BRANDING:
+            - At the end, add: "Source: ${finalUrl}"
+            
+            CONTENT TO ANALYZE:
+            ${finalContent.substring(0, 10000)}`;
 
-            const finalResult = await generateWithFallback(extractionPrompt, "You are a real-time data extraction engine.", [], [], { forceJson: false });
+            const finalResult = await generateWithFallback(extractionPrompt, "You are the Nurotra Professional Strategic Assistant. Your voice is graceful, simple, and respectful.", [], [], { forceJson: false });
             
             if (!skipSave) {
                 this.safeSaveMessage(userId, "agent", finalResult, "browser_result", { query, sourceUrl: finalUrl, provider: currentProvider });
@@ -258,6 +356,9 @@ class BrowserAgentService {
         const context = await this.getContext(userId);
         const page = await context.newPage();
         this.activePages.set(userId.toString(), page);
+
+        // Immediate wake up frame
+        await this.emitFrame(socket, userId, page, "Preparing Virtual Workspace...");
         
         try {
             const integration = await Integration.findOne({ userId, platform });
@@ -295,17 +396,27 @@ class BrowserAgentService {
 
                 if (decision.startsWith("GOTO")) {
                     const url = decision.replace("GOTO", "").trim();
+                    await this.logExecutionStep(userId, `Navigating to ${url}`, "info", socket);
+                    await this.emitFrame(socket, userId, page, `Navigating to ${url}...`);
                     await page.goto(url);
+                    await this.emitFrame(socket, userId, page, `Arrived at ${url}`);
                 } else if (decision.startsWith("CLICK")) {
                     const selector = decision.replace("CLICK", "").trim();
+                    await this.logExecutionStep(userId, `Clicking on element ${selector}`, "info", socket);
+                    await this.emitFrame(socket, userId, page, `Clicking...`);
                     await page.click(selector);
+                    await this.emitFrame(socket, userId, page, `Clicked element`);
                 } else if (decision.startsWith("TYPE")) {
                     const parts = decision.replace("TYPE", "").trim().split(" ");
                     const selector = parts[0];
                     const text = parts.slice(1).join(" ");
+                    await this.logExecutionStep(userId, `Typing text into ${selector}`, "info", socket);
+                    await this.emitFrame(socket, userId, page, `Typing...`);
                     await page.fill(selector, text);
+                    await this.emitFrame(socket, userId, page, `Finished typing`);
                 } else if (decision.startsWith("WAIT")) {
                     const ms = parseInt(decision.replace("WAIT", "").trim());
+                    await this.logExecutionStep(userId, `Waiting for ${ms}ms`, "info", socket);
                     await page.waitForTimeout(ms);
                 } else if (decision.startsWith("COMPLETE")) {
                     completed = true;
@@ -330,11 +441,24 @@ class BrowserAgentService {
             }
 
             await page.close();
-            return { success: true, message: "Task completed after maximum steps." };
+            
+            const failPrompt = `The Action Agent was trying to: "${taskDescription}" on "${platform}".
+            It stopped after ${steps} steps. 
+            URL: ${page.url()}
+            
+            Provide a helpful summary for the user:
+            - What we managed to see or do.
+            - Why we might have stopped (e.g. reached page limit, couldn't find button).
+            - Suggested Preparation: What should the user prepare or check to help the agent succeed next time?
+            
+            Return strictly plain text helpful advice.`;
+            
+            const failAdvice = await generateWithFallback(failPrompt, "You are a helpful automation troubleshooter.");
+            return { success: true, message: `Task paused/incomplete. REASON: ${failAdvice}`, data: { advice: failAdvice } };
         } catch (error) {
             console.error("[BrowserAgent] Task failed:", error.message);
             await page.close();
-            throw error;
+            return { success: false, message: `Execution Error: ${error.message}. TIP: Ensure you are logged in or provide more specific selectors.` };
         }
     }
 
@@ -401,7 +525,8 @@ class BrowserAgentService {
      * Stream a screenshot to the frontend via Socket.io
      */
     async emitFrame(socket, userId, page, statusMessage) {
-        if (!socket) return;
+        const io = this.io || socket?.server; // Fallback to provided socket if global io not set
+        if (!io) return;
         
         try {
             // Check for blocks every few frames
@@ -412,7 +537,8 @@ class BrowserAgentService {
             const screenshot = await page.screenshot({ type: 'jpeg', quality: 50 });
             const base64 = screenshot.toString('base64');
             
-            socket.emit("browser_frame", {
+            // Broadcast to the user's room so all tabs are synced
+            io.to(userId.toString()).emit("browser_frame", {
                 userId,
                 frame: `data:image/jpeg;base64,${base64}`,
                 status: statusMessage,
@@ -421,6 +547,42 @@ class BrowserAgentService {
             });
         } catch (e) {
             console.warn("[BrowserAgent] Failed to emit frame:", e.message);
+        }
+    }
+
+    /**
+     * Capture a high-resolution final screenshot as evidence of task completion.
+     * Uploads to Cloudinary for investor-ready proof.
+     */
+    async captureFinalProof(userId, workflowId, page) {
+        if (!page) page = this.activePages.get(userId.toString());
+        if (!page) return null;
+
+        try {
+            console.log(`[BrowserAgent] Capturing final proof for workflow: ${workflowId}`);
+            const screenshot = await page.screenshot({ fullPage: true, type: 'jpeg', quality: 90 });
+            
+            // Temporary write to file for Cloudinary upload tool compatibility or direct upload
+            const { cloudinary } = require("../config/cloudinary");
+            
+            return new Promise((resolve, reject) => {
+                cloudinary.uploader.upload_stream({
+                    folder: 'nurotra_proofs',
+                    public_id: `proof_${workflowId}_${Date.now()}`,
+                    resource_type: 'image'
+                }, (error, result) => {
+                    if (error) {
+                        console.error("[BrowserAgent] Proof upload failed:", error.message);
+                        resolve(null);
+                    } else {
+                        console.log("[BrowserAgent] Final proof uploaded:", result.secure_url);
+                        resolve(result.secure_url);
+                    }
+                }).end(screenshot);
+            });
+        } catch (e) {
+            console.error("[BrowserAgent] Failed to capture proof:", e.message);
+            return null;
         }
     }
 }

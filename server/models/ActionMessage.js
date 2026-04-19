@@ -18,7 +18,7 @@ const ActionMessageSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ["text", "workflow_preview", "browser_result", "execution_timeline", "result"],
+        enum: ["text", "workflow_preview", "browser_result", "execution_timeline", "result", "milestone", "clarification"],
         default: "text"
     },
     workflowId: {

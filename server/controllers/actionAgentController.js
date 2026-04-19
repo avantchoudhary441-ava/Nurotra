@@ -4,7 +4,11 @@ const eventListenerService = require("../services/eventListenerService");
 const ActionWorkflow = require("../models/ActionWorkflow");
 const EventRule = require("../models/EventRule");
 const ActionMessage = require("../models/ActionMessage");
+const User = require("../models/User");
 const systemLoggerService = require("../services/systemLoggerService");
+const browserAgentService = require("../services/browserAgentService");
+const { executeStep, mapStepToExecutor } = require("../services/actionExecutionService");
+const SystemExecutionLog = require("../models/SystemExecutionLog");
 
 const DEV_USER_ID = new mongoose.Types.ObjectId("000000000000000000000001");
 
@@ -43,7 +47,25 @@ exports.executeCommand = async (req, res) => {
         await userMsg.save();
 
         // 2. Analyze Intent using NLP
-        const parsedData = await actionAgentService.parseActionIntent(command);
+        const user = req.user ? await User.findById(req.user._id) : await User.findById(DEV_USER_ID);
+        const parsedData = await actionAgentService.parseActionIntent(command, user ? user.personaMemory : {});
+
+        if (parsedData.intent === "CLARIFICATION") {
+            await new ActionMessage({
+                userId,
+                role: "system",
+                content: parsedData.question,
+                type: "clarification"
+            }).save();
+
+            if (req.io) req.io.emit('chat_update', { userId });
+
+            return res.json({
+                success: true,
+                intent: "CLARIFICATION",
+                question: parsedData.question
+            });
+        }
 
         if (parsedData.intent === "ENVIRONMENT_CONTROL") {
             await new ActionMessage({
@@ -241,14 +263,42 @@ exports.executeCommand = async (req, res) => {
             browserAgentService.safeSaveMessage(
                 userId, 
                 "system", 
-                `Initiating: ${workflowData.title}`, 
+                `Starting: ${workflowData.title}`, 
                 "workflow_preview", 
                 { title: workflowData.title, workflowId: finalWorkflow._id }
             );
 
-            // 4. Kick off async execution
-            const io = req.app.get("socketio");
-            simulateExecution(finalWorkflow._id, workflowData.actions, io);
+            // 3. Persist and Start Execution
+            const workflowId = finalWorkflow._id;
+
+            // --- Capture Memory facts if present in actions ---
+            if (workflowData.actions.some(a => a.params?.saveFact)) {
+                const memoryActions = workflowData.actions.filter(a => a.params?.saveFact);
+                for (const factAction of memoryActions) {
+                    const { key, value } = factAction.params.saveFact;
+                    if (key && value && user) {
+                        if (!user.personaMemory) user.personaMemory = new Map();
+                        user.personaMemory.set(key, value);
+                    }
+                }
+                if (user) await user.save();
+            }
+
+            // --- LLM-Style Immediate Interaction ---
+            // Send an immediate acknowledgment to "connect" with the user while background work begins
+            await new ActionMessage({
+                userId,
+                role: "system",
+                content: `Certainly! I've started working on "${finalWorkflow.title}" for you. I'll analyze everything and get back to you with a report in just a moment.`,
+                type: "text",
+                timestamp: new Date()
+            }).save();
+            
+            // Notify frontend
+            if (req.io) req.io.emit('chat_update', { userId });
+
+            // Begin background simulation
+            simulateExecution(workflowId, workflowData.actions, req.io);
 
             return res.json({
                 success: true,
@@ -263,12 +313,12 @@ exports.executeCommand = async (req, res) => {
 
     } catch (error) {
         console.error("Action Agent Execute Controller Error:", error);
-        const errorMsg = error.isAiFailure ? error.message : "Server error during execution.";
-        res.status(500).json({ success: false, message: errorMsg });
         
+        if (res.headersSent) return;
+
         // Handle AI specific errors gracefully
-        const errorMsg = error.message || "";
-        if (errorMsg.includes("AI") || errorMsg.includes("Gemini") || errorMsg.includes("OpenAI") || errorMsg.includes("keys configured")) {
+        const aiErrorMsg = error.message || "";
+        if (aiErrorMsg.includes("AI") || aiErrorMsg.includes("Gemini") || aiErrorMsg.includes("OpenAI") || aiErrorMsg.includes("keys configured")) {
             return res.status(503).json({ 
                 success: false, 
                 message: "AI Engine Processing Error: " + error.message,
@@ -284,7 +334,8 @@ exports.executeCommand = async (req, res) => {
             });
         }
         
-        res.status(500).json({ success: false, message: "Server error during execution: " + error.message });
+        const errorMsg = error.isAiFailure ? error.message : "Server error during execution: " + error.message;
+        res.status(500).json({ success: false, message: errorMsg });
     }
 };
 
@@ -611,6 +662,57 @@ exports.getActiveTasks = async (req, res) => {
 };
 
 // ===========================================
+// STOP WORKFLOW
+// ===========================================
+exports.stopWorkflow = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const wf = await ActionWorkflow.findById(id);
+        if (!wf) return res.status(404).json({ success: false, message: "Task not found." });
+
+        wf.status = "stopped";
+        wf.activeMicroLog = "Execution stopped by user.";
+        addLog(wf, null, null, "error", "Execution stopped by user.", req.io, null, true);
+        await wf.save();
+
+        // Also terminate browser if it was a browser task
+        await browserAgentService.restartSession(wf.userId);
+
+        res.json({ success: true, message: "Task stopped." });
+    } catch (err) {
+        console.error("Stop Workflow Error:", err.message);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// ===========================================
+// PAUSE WORKFLOW
+// ===========================================
+exports.pauseWorkflow = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const wf = await ActionWorkflow.findById(id);
+        if (!wf) return res.status(404).json({ success: false, message: "Task not found." });
+
+        if (wf.status === 'paused') {
+            wf.status = "running";
+            wf.activeMicroLog = "Resuming execution...";
+            addLog(wf, null, null, "info", "Execution resumed.", req.io, null, true);
+        } else {
+            wf.status = "paused";
+            wf.activeMicroLog = "Execution paused by user.";
+            addLog(wf, null, null, "warn", "Execution paused.", req.io, null, true);
+        }
+        await wf.save();
+
+        res.json({ success: true, message: wf.status === 'paused' ? "Task paused." : "Task resumed.", status: wf.status });
+    } catch (err) {
+        console.error("Pause Workflow Error:", err.message);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+// ===========================================
 // ACKNOWLEDGE & DISMISS TASK
 // ===========================================
 exports.acknowledgeTask = async (req, res) => {
@@ -691,8 +793,6 @@ const buildMockWorkflow = (workflowData, isEventDriven) => ({
 // ASYNC EXECUTION ENGINE (with Background & Intervention Handling)
 // ===========================================
 const simulateExecution = async (workflowId, actionDefs, io = null) => {
-    const { executeStep } = require("../services/actionExecutionService");
-const simulateExecution = async (workflowId, actionDefs) => {
     const { executeStep, validateStep } = require("../services/actionExecutionService");
 
     try {
@@ -720,8 +820,20 @@ const simulateExecution = async (workflowId, actionDefs) => {
         const sysLogId = sysLog ? sysLog._id : null;
 
         for (let i = 0; i < wf.steps.length; i++) {
+            // --- SYNC STATE ---
             wf = await ActionWorkflow.findById(workflowId);
-            if (!wf || wf.status === 'failed') break;
+            if (!wf || wf.status === 'failed' || wf.status === 'stopped') {
+                if (wf?.status === 'stopped') addLog(wf, i, wf.steps[i], "error", `Terminated at step: ${wf.steps[i]?.label}`, io, null, true);
+                break;
+            }
+
+            // --- PAUSE LOOP ---
+            while (wf.status === 'paused') {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                wf = await ActionWorkflow.findById(workflowId);
+                if (!wf || wf.status === 'stopped' || wf.status === 'failed') break;
+            }
+            if (!wf || wf.status === 'stopped' || wf.status === 'failed') break;
 
             const step = wf.steps[i];
             
@@ -732,7 +844,7 @@ const simulateExecution = async (workflowId, actionDefs) => {
                 wf.activeMicroLog = validation.context;
                 wf.steps[i].status = "intervention";
                 wf.steps[i].interventionMsg = validation.context;
-                addLog(wf, i, step, "warn", `Paused: Intervention required for "${step.label}"`);
+                addLog(wf, i, step, "warn", `Paused: Intervention required for "${step.label}"`, io);
                 await wf.save();
                 return; // Stop execution until user provides input
             }
@@ -745,7 +857,7 @@ const simulateExecution = async (workflowId, actionDefs) => {
             if (step.isReversible === false && wf.confirmationStatus === 'pending') {
                 wf.status = "waiting";
                 wf.activeMicroLog = "Awaiting confirmation for irreversible action...";
-                addLog(wf, i, step, "info", `Waiting for confirmation: ${step.label} is an irreversible task.`);
+                addLog(wf, i, step, "info", `Waiting for confirmation: ${step.label} is an irreversible task.`, io);
                 await wf.save();
 
                 // Send Email Notification
@@ -762,7 +874,7 @@ const simulateExecution = async (workflowId, actionDefs) => {
                         confirmed = true;
                     } else if (wf.autoAcceptAt && Date.now() > new Date(wf.autoAcceptAt).getTime()) {
                         wf.confirmationStatus = 'auto-confirmed';
-                        addLog(wf, i, step, "info", "Confirmation requirement auto-accepted (timeout reached).");
+                        addLog(wf, i, step, "info", "Confirmation requirement auto-accepted (timeout reached).", io);
                         confirmed = true;
                     }
 
@@ -777,27 +889,43 @@ const simulateExecution = async (workflowId, actionDefs) => {
             if (step.delayMs > 0) {
                 wf.steps[i].status = "delayed";
                 wf.activeMicroLog = `Waiting ${Math.round(step.delayMs / 1000)}s before executing ${step.label}...`;
-                addLog(wf, i, step, "info", `Delayed execution: waiting ${Math.round(step.delayMs / 1000)}s`);
+                addLog(wf, i, step, "info", `Delayed execution: waiting ${Math.round(step.delayMs / 1000)}s`, io);
                 await wf.save();
                 await new Promise(resolve => setTimeout(resolve, Math.min(step.delayMs, 30000)));
             }
 
             // Mark running
             wf = await ActionWorkflow.findById(workflowId);
+            // Push a chat update for the step start ONLY if it's high impact
+            const isHighImpact = mapStepToExecutor(step) === 'submit_form' || mapStepToExecutor(step) === 'execute_output_delivery';
+            if (isHighImpact) {
+                await new ActionMessage({
+                    userId: wf.userId,
+                    role: "system",
+                    content: `Preparing high-impact action: ${step.label}. Please monitor the execution screen.`,
+                    type: "text",
+                    timestamp: new Date()
+                }).save();
+                if (io) io.emit('chat_update');
+                
+                // User requirement: Auto-pause for high-impact tasks
+                wf.status = "paused";
+                wf.activeMicroLog = `Awaiting confirmation for high-impact action: ${step.label}`;
+                addLog(wf, i, step, "warn", `Paused for verification: ${step.label}`, io, null, true);
+                await wf.save();
+
+                while (wf.status === 'paused') {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    wf = await ActionWorkflow.findById(workflowId);
+                    if (wf.status === 'stopped' || wf.status === 'failed') break;
+                }
+                if (wf.status === 'stopped' || wf.status === 'failed') break;
+            }
+
             wf.steps[i].status = "running";
             wf.activeMicroLog = step.microLogs?.[0] || `Executing ${step.label}...`;
-            addLog(wf, i, step, "info", `Started: ${step.label}`);
+            addLog(wf, i, step, "info", `Started: ${step.label}`, io, null, isHighImpact);
             await wf.save();
-            
-            // Push a chat update for the step start
-            await new ActionMessage({
-                userId: wf.userId,
-                role: "system",
-                content: `Executing: ${step.label}...`,
-                type: "text",
-                timestamp: new Date()
-            }).save();
-            if (io) io.emit('chat_update');
 
             // REAL EXECUTION with retry logic
             let success = false;
@@ -815,7 +943,17 @@ const simulateExecution = async (workflowId, actionDefs) => {
                     }
 
                     // >>> REAL EXECUTION CALL <<<
-                    result = await executeStep(step, { ...context });
+                    // Strategically push high-level milestone to chat for context
+                    const executorKey = mapStepToExecutor(step);
+                    if (executorKey === 'web_search') {
+                        await addMilestone(wf.userId, `🌐 Analyzing live data for: "${step.label}"`, io);
+                    } else if (executorKey === 'submit_form') {
+                        await addMilestone(wf.userId, `📝 Finalizing form/application submission...`, io);
+                    } else if (executorKey === 'platform_execution') {
+                        await addMilestone(wf.userId, `⚙️ Syncing data with ${step.params?.platform || 'platform'}...`, io);
+                    }
+
+                    result = await executeStep(step, { ...context, socket: io }); // Pass io as socket for real-time frames
                     success = true;
 
                     // --- ODE HANDOFF: Store result for next step ---
@@ -845,8 +983,8 @@ const simulateExecution = async (workflowId, actionDefs) => {
                     wf = await ActionWorkflow.findById(workflowId);
                     wf.steps[i].status = "retrying";
                     wf.steps[i].retryConfig.retryCount = retryCount;
-                    wf.activeMicroLog = `Retrying ${step.label} (attempt ${retryCount}/${maxRetries})...`;
-                    addLog(wf, i, step, "warn", `Retry ${retryCount}/${maxRetries}: ${stepErr.message}`);
+                    wf.activeMicroLog = `Trying again: ${step.label} (attempt ${retryCount} of ${maxRetries})...`;
+                    addLog(wf, i, step, "warn", `Retrying (${retryCount}/${maxRetries}): ${stepErr.message}`, io);
                     await wf.save();
 
                     if (retryCount <= maxRetries) {
@@ -862,14 +1000,27 @@ const simulateExecution = async (workflowId, actionDefs) => {
             if (success) {
                 wf.steps[i].status = "completed";
                 const logMsg = result?.message ? `Completed: ${step.label} — ${result.message}` : `Completed: ${step.label}`;
-                addLog(wf, i, step, "success", logMsg);
+                addLog(wf, i, step, "success", logMsg, io);
                 if (sysLogId) await systemLoggerService.addStep(sysLogId, { label: step.label, status: "completed", message: logMsg, metadata: result });
+                
+                // FINAL PROOF CAPTURE: If this was the last step or a data-heavy step
+                if (i === wf.steps.length - 1) {
+                    try {
+                        const evidenceUrl = await browserAgentService.captureFinalProof(wf.userId, workflowId);
+                        if (evidenceUrl) {
+                            addLog(wf, i, step, "success", "Final execution proof captured.", io, evidenceUrl);
+                            context.evidenceUrl = evidenceUrl;
+                        }
+                    } catch (e) {
+                        console.error("Proof capture failed:", e.message);
+                    }
+                }
             } else {
                 wf.steps[i].status = "failed";
                 wf.status = "failed";
-                wf.activeMicroLog = `Step "${step.label}" failed: ${lastError?.message || 'Unknown error'}`;
+                wf.activeMicroLog = `Encountered an issue with "${step.label}": ${lastError?.message || 'The request couldn\'t be completed.'}`;
                 wf.endTime = Date.now();
-                addLog(wf, i, step, "error", `Failed after ${maxRetries} retries: ${lastError?.message || 'Unknown error'}`);
+                addLog(wf, i, step, "error", `Stopped after ${maxRetries} attempts: ${lastError?.message || 'Error details unavailable.'}`, io);
                 await wf.save();
                 
                 if (sysLogId) {
@@ -877,78 +1028,59 @@ const simulateExecution = async (workflowId, actionDefs) => {
                     await systemLoggerService.concludeLog(sysLogId, "Failed", `Step failed: ${step.label}`);
                 }
 
-                await new ActionMessage({
-                    userId: wf.userId,
-                    role: "system",
-                    content: `Workflow failed at step "${step.label}": ${lastError?.message || 'Unknown error'}`,
-                    type: "text",
-                    timestamp: new Date()
-                }).save();
-                if (io) io.emit('chat_update');
-                
-                return;
+                // Instead of returning early, we break the loop to allow final response generation
+                break;
             }
             await wf.save();
         }
 
-        // Mark entire workflow completed
+        // 4. Wrap up and Generate Final Agent Response
         wf = await ActionWorkflow.findById(workflowId);
-        if (wf && wf.status !== "intervention" && wf.status !== "failed") {
-            const allCompleted = wf.steps.every(s => s.status === 'completed');
-            if (allCompleted) {
+        if (wf) {
+            if (wf.status !== "failed") {
                 wf.status = "completed";
-                wf.activeMicroLog = "All tasks finished successfully!";
                 wf.endTime = Date.now();
-                addLog(wf, null, null, "success", "Workflow completed successfully");
-                await wf.save();
-                                // Build a clean, human-readable summary for the chat panel
-                const resultSections = [];
-                for (const s of wf.steps.filter(s => s.status === 'completed')) {
-                    const logMsg = wf.executionLogs.find(l => l.stepId === s.id && l.level === 'success')?.message || '';
-                    let extracted = null;
-                    if (logMsg.includes('Found information:')) {
-                        extracted = logMsg.split('Found information:')[1].trim();
-                        // If it's JSON, flatten it to readable text
-                        if (extracted.startsWith('[') || extracted.startsWith('{')) {
-                            try {
-                                const parsed = JSON.parse(extracted);
-                                const obj = Array.isArray(parsed) ? parsed[0] : parsed;
-                                extracted = Object.entries(obj)
-                                    .filter(([, v]) => v && typeof v !== 'object')
-                                    .map(([k, v]) => `  • ${k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}: ${v}`)
-                                    .join('\n');
-                            } catch {}
-                        }
-                    } else if (logMsg.includes(' — ')) {
-                        const part = logMsg.split(' — ')[1]?.trim();
-                        if (part && !['Data fetched','Report generated','Analytics compiled','Database status updated (simulated target)'].includes(part)) {
-                            extracted = part;
-                        }
-                    }
-                    if (extracted) {
-                        resultSections.push(`📌 ${s.label}:\n${extracted}`);
-                    }
-                }
-
-                let finalSummary;
-                if (resultSections.length > 0) {
-                    finalSummary = `✅ Task Complete: ${wf.title}\n\n${resultSections.join('\n\n')}`;
-                } else {
-                    finalSummary = `✅ Task Complete: ${wf.title}\n\nAll ${wf.steps.length} steps executed successfully.`;
-                }
-                
-                if (sysLogId) await systemLoggerService.concludeLog(sysLogId, "Completed", "Workflow completed successfully.");
-                
-                await new ActionMessage({
-                    userId: wf.userId,
-                    role: "system",
-                    content: finalSummary,
-                    type: "result",
-                    timestamp: new Date()
-                }).save();
-                
-                if (io) io.emit('chat_update');
+                wf.activeMicroLog = "Task completed successfully.";
+                await addMilestone(wf.userId, `✅ Task Completed: ${wf.title}. All objectives reached.`, io);
             }
+            
+            addLog(wf, null, null, "success", "Final response generated", io, context.evidenceUrl);
+            await wf.save();
+
+            // Build a clean, human-readable summary
+            const resultSections = [];
+            for (const s of wf.steps.filter(s => s.status === 'completed')) {
+                const allLogs = wf.executionLogs.filter(l => l.stepId === s.id && l.level === 'success');
+                let extracted = s.resultData?.answer 
+                            || allLogs.reverse().find(l => l.message.includes(' — '))?.message?.split(' — ')[1] 
+                            || null;
+
+                if (extracted) {
+                    resultSections.push(`📌 ${s.label}:\n${extracted}`);
+                }
+            }
+
+            let finalSummary;
+            if (wf.status === "failed") {
+                finalSummary = `⚠️ Task Update: ${wf.title}\n\nI was able to complete some parts of your request, but I encountered an issue during the final steps.\n\n${resultSections.length > 0 ? "What I found so far:\n" + resultSections.join('\n\n') : ""}\n\nPlease let me know if you would like me to try a different approach.`;
+            } else {
+                finalSummary = resultSections.length > 0 
+                    ? `✅ Task Complete: ${wf.title}\n\n${resultSections.join('\n\n')}`
+                    : `✅ Task Complete: ${wf.title}\n\nAll objectives were reached successfully.`;
+            }
+            
+            if (sysLogId) await systemLoggerService.concludeLog(sysLogId, wf.status === "failed" ? "Failed" : "Completed", "Process finalized.");
+            
+            await new ActionMessage({
+                userId: wf.userId,
+                role: "agent",
+                content: finalSummary,
+                type: "browser_result",
+                metadata: { evidenceUrl: context.evidenceUrl },
+                timestamp: new Date()
+            }).save();
+            
+            if (io) io.emit('chat_update', { userId: wf.userId });
         }
     } catch (err) {
         console.error("Async Execution Failed:", err);
@@ -958,7 +1090,7 @@ const simulateExecution = async (workflowId, actionDefs) => {
                 wf.status = "failed";
                 wf.activeMicroLog = `Error: ${err.message}`;
                 wf.endTime = Date.now();
-                addLog(wf, null, null, "error", `Critical error: ${err.message}`);
+                addLog(wf, null, null, "error", `Critical error: ${err.message}`, io);
                 await wf.save();
                 
                 // Conclude system log as failed if we caught it here
@@ -1017,16 +1149,49 @@ const sendConfirmationNotification = async (wf, step) => {
 /**
  * Helper to append an execution log entry
  */
-const addLog = (wf, stepIndex, step, level, message) => {
+const addLog = (wf, stepIndex, step, level, message, io = null, evidenceUrl = null, isMilestone = false) => {
     if (!wf.executionLogs) wf.executionLogs = [];
     wf.executionLogs.push({
         stepId: step?.id || stepIndex,
         stepLabel: step?.label || "System",
         status: level,
         message,
+        evidenceUrl,
         timestamp: new Date(),
         level
     });
+    
+    // If it's a milestone, also push a chat message for the right pane
+    if (isMilestone && io) {
+        const ActionMessage = require("../models/ActionMessage");
+        new ActionMessage({
+            userId: wf.userId,
+            role: "system",
+            content: message,
+            type: "text",
+            timestamp: new Date()
+        }).save().then(() => {
+            io.emit('chat_update', { userId: wf.userId });
+        });
+    }
+
+    if (io) io.emit('task_update', { userId: wf.userId, workflowId: wf._id });
+};
+
+/**
+ * Helper to push a strategic milestone to the Chat interface
+ */
+const addMilestone = async (userId, message, io = null) => {
+    const ActionMessage = require("../models/ActionMessage");
+    const milestone = new ActionMessage({
+        userId,
+        role: "system",
+        content: message,
+        type: "milestone", // specialized type for UI distinction
+        timestamp: new Date()
+    });
+    await milestone.save();
+    if (io) io.emit('chat_update', { userId });
 };
 // ===========================================
 // RESTART BROWSER ENGINE (Manual Recovery)
@@ -1048,3 +1213,24 @@ exports.restartBrowser = async (req, res) => {
         res.status(500).json({ success: false, message: "Internal error during restart." });
     }
 };
+
+// ===========================================
+// DYNAMIC CAPABILITIES / SUGGESTIONS
+// ===========================================
+exports.getSuggestions = async (req, res) => {
+    try {
+        // In a fully dynamic system, this could query active Integrations or Tools.
+        // Returning the actual capabilities the Action Agent possesses.
+        const capabilities = [
+            "Apply to a software engineer job on LinkedIn",
+            "Search for current startup funding news",
+            "Extract details from Wikipedia about AI",
+            "Summarize the latest tech trends"
+        ];
+        res.json({ success: true, suggestions: capabilities });
+    } catch (error) {
+        console.error("Get Suggestions Error:", error);
+        res.json({ success: false, suggestions: [] });
+    }
+};
+
