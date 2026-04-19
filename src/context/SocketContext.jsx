@@ -60,8 +60,13 @@ export const SocketProvider = ({ children }) => {
             });
         }
 
-        // Handle User Mapping updates
-        if (user && socket.current) {
+        // Handle User Mapping and Token updates
+        if (user && token && socket.current) {
+            // Update auth token dynamically if it changed
+            socket.current.auth = { token: token.token || token };
+            if (!socket.current.connected) {
+                socket.current.connect();
+            }
             socket.current.emit("join-room", user._id);
         }
 
@@ -209,7 +214,8 @@ export const SocketProvider = ({ children }) => {
             callUser,
             leaveCall,
             answerCall,
-            isCalling
+            isCalling,
+            socket: socket.current
         }}>
             {children}
         </SocketContext.Provider>

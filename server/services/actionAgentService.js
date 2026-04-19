@@ -23,7 +23,7 @@ const parseJSON = (text) => {
  * Parses natural language into Action Agent execution payloads
  * with support for event-driven triggers, conditions, delays, and retries.
  */
-const parseActionIntent = async (command) => {
+const parseActionIntent = async (command, userMemory) => {
     // TEST BYPASS: Allow testing form automation without OpenAI
     if (command.toLowerCase().includes("test form")) {
         return {
@@ -71,20 +71,30 @@ const parseActionIntent = async (command) => {
 You act like Zapier combined with an intelligent virtual controller and system executor.
 
 Your job is to parse the user's natural language command into structured JSON.
-Categorize the intent into one of three categories: "ENVIRONMENT_CONTROL", "WORKFLOW_EXECUTION", or "FETCH_LOGS".
+Categorize the intent into one of four categories: "ENVIRONMENT_CONTROL", "WORKFLOW_EXECUTION", "FETCH_LOGS", or "CLARIFICATION".
 
-1. ENVIRONMENT_CONTROL: The user is asking to open something, navigate somewhere, or resume a task in the UI. 
+1. CLARIFICATION: The user's request is ambiguous, lacks clarity, or is out of context. 
+e.g., "Do it", "Check the status", "What about this?", "Proceed", "Check", "Go" (without context).
+If you cannot determine the EXACT workflow or target with high confidence, use CLARIFICATION.
+
+2. ENVIRONMENT_CONTROL: The user is asking to open something, navigate somewhere, or resume a task in the UI. 
 e.g., "Open docs and continue work", "Take me to communication", "Open the orchestrator", "Resume last task", "Go to dashboard"
 
-2. FETCH_LOGS: The user is asking to view system logs, action history, or execution status.
+3. FETCH_LOGS: The user is asking to view system logs, action history, or execution status.
 e.g., "What did you do today?", "Show me tasks from yesterday", "What is the status of the report?", "Show logs for client X", "What happened to the email?"
 
-3. WORKFLOW_EXECUTION: The user is asking to run an automated task pipeline with triggers, conditions, and actions.
+4. WORKFLOW_EXECUTION: The user is asking to run an automated task pipeline with triggers, conditions, and actions.
 e.g., "If client approves, send invoice", "Upload report and send to team", "When I get a message containing urgent, alert me and create a ticket"
 
 OUTPUT STRICT JSON MATCHING ONE OF THESE FORMATS (No markdown, no extra text):
 
-Format A (For ENVIRONMENT_CONTROL):
+Format A (For CLARIFICATION):
+{
+  "intent": "CLARIFICATION",
+  "question": "A polite, executive question asking for clarity or explaining what Nurotra can do in this context."
+}
+
+Format B (For ENVIRONMENT_CONTROL):
 {
   "intent": "ENVIRONMENT_CONTROL",
   "navigateTo": "/route-path",
@@ -113,8 +123,7 @@ Format B (For FETCH_LOGS):
   }
 }
 
-Format C (For WORKFLOW_EXECUTION):
-Format B (For WORKFLOW_EXECUTION / FORM_AUTOMATION):
+Format C (For WORKFLOW_EFormat C (For WORKFLOW_EXECUTION / FORM_AUTOMATION):
 {
   "intent": "WORKFLOW_EXECUTION",
   "isEventDriven": true/false,
@@ -126,24 +135,14 @@ Format B (For WORKFLOW_EXECUTION / FORM_AUTOMATION):
     "actions": [
       {
         "id": 1,
-        "label": "Generate Invoice",
-        "icon": "file",
+        "label": "Search Web for [Specific Topic]",
+        "icon": "globe",
         "delayMs": 2000,
-        "microLogs": ["Preparing template...", "Assigning amount...", "Generated."],
-        "retryConfig": {
-          "maxRetries": 1,
-          "retryDelayMs": 2000
-        },
+        "microLogs": ["Scanning search engines...", "Parsing results..."],
+        "retryConfig": { "maxRetries": 1, "retryDelayMs": 2000 },
         "params": {
-          "query": "The actual topic to search or act upon"
+          "query": "The precise topic to search for"
         }
-        "label": "Action label",
-        "icon": "mail" | "file" | "database" | "clock" | "default",
-        "params": { 
-           "formUrl": "string if applicable",
-           "detectFields": true/false 
-        },
-        "microLogs": ["Step 1...", "Step 2..."]
       }
     ]
   }
@@ -159,26 +158,30 @@ If the user wants to "Apply", "Register", "Sign up", or "Fill a form":
    - Label: "Submit Information", icon: "mail"
 
 ENUMS (CRITICAL):
-- "icon": "drive" | "mail" | "file" | "spreadsheet" | "database" | "clock" | "default"
+- "icon": "drive" | "mail" | "file" | "spreadsheet" | "database" | "clock" | "globe" | "default"
 - "trigger.type": "manual" | "message_received" | "scheduled" | "webhook" | "system_state"
 - "conditions.operator": "contains" | "equals" | "gt" | "lt" | "regex" | "not_equals" | "exists"
 
 RULES:
-- MANDATORY SEARCH: If the user asks for INFORMATION from the web (IPL scores, match status, weather, flight status, current news, "tell me..."), ALWAYS use intent: "WORKFLOW_EXECUTION" with icon: "globe" and label: "Search Web for Live Information".
-- FORBIDDEN: NEVER use a "database" icon or "Update Status" label for informational retrieval or search-related questions.
-- DEFAULT TO WORKFLOW_EXECUTION: If user intent is a question or seeks info, ALWAYS choose "WORKFLOW_EXECUTION".
-- NO TRIVIAL NAVIGATION: Never return "ENVIRONMENT_CONTROL" with "/" unless the user says "Go home".
-- ICON RULES: Information retrieval = "globe", Email = "mail", Files = "drive", Calendar = "clock".
-- MicroLogs: Generate 3-5 realistic micro-logs showing search progress (e.g., "Scanning sports engines...", "Checking live scoreboards...", "Parsing match results...").
-- Search Task: For search requests, generate an action with label "Search Web for [Topic]".
-- Search Query: If the task is a web search, the action MUST include the 'params: { query: "User\\'s specific search topic" }' with the precise thing to search for (e.g. "IPL live scores").
+- WEB SEARCH: If the user asks for INFORMATION (IPL scores, news, weather, "tell me about...", etc.), ALWAYS use intent: "WORKFLOW_EXECUTION" with icon: "globe".
+- SEARCH LABEL: Set label to "Search Web for [Topic]" (e.g., "Search Web for IPL live scores").
+- SEARCH QUERY: You MUST include 'params: { query: "..." }' with the precise search query corresponding to the user's intent. Do NOT use generic labels like "Live Information".
+- ICON RULES: Information retrieval = "globe", Email = "mail", Files = "file", Database updates = "database", Scheduling = "clock".
+- MicroLogs: Generate 3-5 realistic micro-logs showing search or task progress.
 - isEventDriven: true for "whenever/every time", false for one-shot tasks.
 - Conditions: Always include at least one (use "exists" for unconditional).
-- If the command implies repeatable automation, set isEventDriven: true
-- Provide 2-5 actions that meaningfully decompose the user's request
+- Provide 2-5 actions that meaningfully decompose the user's request.
+- DEFAULT TO CLARIFICATION if the request is extremely short (1-2 words) or lacks actionable context.
+
+CONVERSATION CONTEXT & MEMORY:
+If the user provides a fact about themselves (e.g., "My LinkedIn is...", "My company name is...", "Call me [Name]"), use Format C but add a special action:
+{ "label": "Save Information", "icon": "database", "params": { "saveFact": { "key": "field_name", "value": "field_value" } } }
 `;
 
-    const responseText = await aiService.generateWithFallback(command, systemPrompt);
+    const personaMemoryPrompt = userMemory ? `\nUSER MEMORY (Facts I know about the user):\n${JSON.stringify(userMemory)}\nUse this to avoid asking redundant info.` : "";
+    const fullPrompt = systemPrompt + personaMemoryPrompt;
+
+    const responseText = await aiService.generateWithFallback(command, fullPrompt);
     return parseJSON(responseText);
 };
 
@@ -244,23 +247,30 @@ const getDynamicSuggestions = async (userContext = {}) => {
     const systemPrompt = `You are the Nurotra Action Agent Strategist.
     Generate 3-4 "Power Move" automation suggestions for the user.
     
-    RULES:
-    1. SUGGESTIONS MUST BE EXECUTABLE: Only suggest tasks related to Searching, Emailing, Reporting, Analytics, or Navigation.
-    2. CONTEXT AWARE: Focus on current high-value tasks like research, scheduling, or reporting.
-    3. FORMAT: Return strictly a JSON array of 3-4 strings. No markdown.
-    
-    EXAMPLE: ["Search for latest AI news", "Generate a weekly recap report", "Notify team about project status"]`;
+    CAPABILITIES:
+    - Deep Web Execution: Finding and Applying for jobs/internships (e.g., "Apply for Software Internships on LinkedIn")
+    - Market/Competitor Monitoring: Tracking specific sites for news or changes (e.g., "Monitor TechCrunch for AI News developments")
+    - Autonomous Research: Finding specific data and preparing reports (e.g., "Research top 5 AI startups and summarize")
+    - Form Automation: Registering or signing up on platforms (e.g., "Register me for the upcoming Developer Conference")
 
-    const prompt = `User Context: ${JSON.stringify(userContext)}. Suggest actionable automations.`;
+    RULES:
+    1. SUGGESTIONS MUST BE EXECUTABLE: No theoretical tasks. Focus on Jobs, Monitoring, Research, and Registration.
+    2. CONTEXT AWARE: Focus on current time: ${userContext.time}, Date: ${userContext.date}.
+    3. BE BOLD & SPECIFIC: Suggest real world tasks like "Apply for 5 Software Intern roles on LinkedIn".
+    4. FORMAT: Return strictly a JSON array of 3-4 strings. No markdown.
+    
+    EXAMPLE: ["Apply for Software Engineer Internships on LinkedIn", "Monitor TechCrunch for AI News trends", "Research and summarize top SaaS competitors"]`;
+
+    const prompt = `User Context: ${JSON.stringify(userContext)}. Give me 4 fresh, capable ideas.`;
     
     try {
         const responseText = await aiService.generateWithFallback(prompt, systemPrompt, [], [], { forceJson: true });
         return parseJSON(responseText);
     } catch (e) {
         return [
-            "Search for current market trends",
-            "Generate a performance report",
-            "Send a project update email"
+            "Search for current IPL scores",
+            "Generate a performance recap",
+            "Analyze latest tech news trends"
         ];
     }
 };

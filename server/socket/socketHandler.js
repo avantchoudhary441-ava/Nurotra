@@ -4,6 +4,9 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
 module.exports = (io) => {
+    // Inject IO into services that need room-based broadcasting
+    browserAgentService.setIO(io);
+
     // Authentication Middleware for Socket.io
     io.use(async (socket, next) => {
         try {

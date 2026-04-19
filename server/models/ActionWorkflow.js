@@ -6,7 +6,7 @@ const ActionStepSchema = new mongoose.Schema({
     icon: { type: String, default: "default" },
     status: { 
         type: String, 
-        enum: ["pending", "running", "completed", "failed", "intervention", "delayed", "retrying"],
+        enum: ["pending", "running", "completed", "failed", "intervention", "delayed", "retrying", "paused", "stopped"],
         default: "pending" 
     },
     microLogs: [{ type: String }],
@@ -25,7 +25,7 @@ const ActionStepSchema = new mongoose.Schema({
         retryDelayMs: { type: Number, default: 2000 }
     },
     // --- Action Parameters (e.g., search query, email recipient) ---
-    params: { type: mongoose.Schema.Types.Mixed, default: {} }
+    params: { type: mongoose.Schema.Types.Mixed, default: {} },
     // --- NEW: Autonomous Execution ---
     isReversible: { type: Boolean, default: true },
     missingData: [{
@@ -41,6 +41,7 @@ const ExecutionLogSchema = new mongoose.Schema({
     stepLabel: { type: String },
     status: { type: String },
     message: { type: String },
+    evidenceUrl: { type: String }, // Link to proof screenshot
     timestamp: { type: Date, default: Date.now },
     level: { type: String, enum: ["info", "warn", "error", "success"], default: "info" }
 });
@@ -63,7 +64,7 @@ const ActionWorkflowSchema = new mongoose.Schema({
     type: { type: String, enum: ["active", "scheduled", "event_driven"], default: "active" },
     status: { 
         type: String, 
-        enum: ["waiting", "running", "completed", "failed", "intervention", "delayed", "retrying"],
+        enum: ["waiting", "running", "completed", "failed", "intervention", "delayed", "retrying", "paused", "stopped"],
         default: "running"
     },
     scheduledTime: { type: String },

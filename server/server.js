@@ -68,7 +68,29 @@ const passport = require("./config/passport");
 app.use(passport.initialize());
 
 // Database Connection
-connectDB();
+connectDB().then(() => {
+    // STARTUP RECOVERY: Clear any tasks stuck in 'running' after a crash/restart
+    const ActionWorkflow = require("./models/ActionWorkflow");
+    ActionWorkflow.updateMany(
+        { status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } },
+        { $set: { status: "failed", activeMicroLog: "System restarted. Task terminated for stability." } }
+    ).then(res => {
+        if (res.modifiedCount > 0) {
+            console.log(`\n[RECOVERY] Reset ${res.modifiedCount} stuck Action Agent tasks on startup.`);
+        }
+    }).catch(err => console.error("[RECOVERY] Failed to reset tasks:", err.message));
+});
+
+// GLOBAL CRASH PREVENTION
+process.on('uncaughtException', (err) => {
+    console.error(`\n[CRITICAL] Uncaught Exception: ${err.message}`);
+    console.error(err.stack);
+    // Keep server alive but log error
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error(`\n[CRITICAL] Unhandled Rejection at: ${promise}, reason: ${reason}`);
+});
 
 // Routes
 app.use("/api/auth", require("./routes/authRoutes"));
@@ -116,6 +138,12 @@ const io = require('socket.io')(server, {
 // Attach Socket Handler
 require("./socket/socketHandler")(io);
 app.set("socketio", io);
+
+// Middleware to attach io to req
+app.use((req, res, next) => {
+    req.io = io;
+    next();
+});
 
 
 // Serve static assets in production

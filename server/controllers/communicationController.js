@@ -51,15 +51,6 @@ const chat = async (req, res) => {
     }
 };
 
-const getCampaigns = async (req, res) => {
-    try {
-        const userId = req.user?._id;
-        const campaigns = await BulkCampaign.find({ userId }).sort({ createdAt: -1 });
-        res.json({ success: true, campaigns });
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-    }
-};
 
 const getContacts = async (req, res) => {
     try {
@@ -130,13 +121,16 @@ const getAnalytics = async (req, res) => {
         res.json({ success: true, analytics });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 /**
  * List Meetings
  * GET /api/communication/meetings
  */
 const getMeetings = async (req, res) => {
     try {
-        const meetings = await Meeting.find({ userId: req.user._id })
+        const meetings = await MeetingModel.find({ userId: req.user._id })
             .sort({ startTime: 1 });
         res.json({ success: true, meetings });
     } catch (error) {
@@ -217,5 +211,9 @@ module.exports = {
     getRules,
     toggleRule,
     deleteRule,
-    getAnalytics
+    getAnalytics,
+    getMeetings,
+    syncMeetings,
+    getCampaignDetail,
+    handleWebhook
 };

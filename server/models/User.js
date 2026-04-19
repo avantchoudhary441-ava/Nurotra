@@ -55,7 +55,14 @@ const UserSchema = new mongoose.Schema({
         text: String,
         createdAt: { type: Date, default: Date.now },
         adminName: String
-    }]
+    }],
+    
+    // Agent Memory & Personalization
+    personaMemory: {
+        type: Map,
+        of: String,
+        default: {}
+    }
 });
 
 // Encrypt password before save
