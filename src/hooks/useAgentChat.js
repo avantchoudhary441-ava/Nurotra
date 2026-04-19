@@ -57,7 +57,7 @@ export function useAgentChat(initialGreeting = "Hello! I'm your Communication Ag
       const userData = localStorage.getItem('nurotra_user');
       const token = userData ? JSON.parse(userData).token : null;
       
-      const response = await fetch('http://localhost:5000/api/communication/chat', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

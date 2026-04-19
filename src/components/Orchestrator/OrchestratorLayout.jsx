@@ -16,7 +16,7 @@ const OrchestratorLayout = () => {
   const fetchHistory = async () => {
     if (!user || !user.token) return;
     try {
-      const res = await fetch('http://localhost:5000/api/orchestrator/history', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/orchestrator/history', {
         headers: { 'Authorization': `Bearer ${user.token}` }
       });
       if (res.ok) {

@@ -179,7 +179,7 @@ const CommunicationAgentPage = () => {
         if (!token) return;
 
         // 1. Fetch History (§2.6)
-        const historyRes = await fetch('http://localhost:5000/api/communication/history?limit=10', {
+        const historyRes = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/history?limit=10', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -196,7 +196,7 @@ const CommunicationAgentPage = () => {
         }
 
         // 2. Fetch Direct Digest Analytic (§2.3)
-        const digestRes = await fetch('http://localhost:5000/api/communication/digest', {
+        const digestRes = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/digest', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (digestRes.ok) {
@@ -207,7 +207,7 @@ const CommunicationAgentPage = () => {
         }
 
         // 3. Scan for Failures (§2.7)
-        const chatRes = await fetch('http://localhost:5000/api/communication/chat', {
+        const chatRes = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/chat', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt: "Do I have any failed messages?" })
@@ -230,7 +230,7 @@ const CommunicationAgentPage = () => {
         }
 
         // 4. Fetch Meetings Loop
-        const meetingsRes = await fetch('http://localhost:5000/api/communication/meetings', {
+        const meetingsRes = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/meetings', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (meetingsRes.ok) {
@@ -241,7 +241,7 @@ const CommunicationAgentPage = () => {
         }
 
         // 5. Fetch Bulk Campaigns
-        const campaignsRes = await fetch('http://localhost:5000/api/communication/campaigns', {
+        const campaignsRes = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/campaigns', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (campaignsRes.ok) {
@@ -291,12 +291,12 @@ const CommunicationAgentPage = () => {
           onClick={async () => {
             setMeetingSyncing(true);
             const token = localStorage.getItem('token');
-            await fetch('http://localhost:5000/api/communication/meetings/sync', {
+            await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/meetings/sync', {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${token}` }
             });
             // Re-fetch
-            const res = await fetch('http://localhost:5000/api/communication/meetings', {
+            const res = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/meetings', {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -376,7 +376,7 @@ const CommunicationAgentPage = () => {
           className="btn-sync"
           onClick={async () => {
             const token = localStorage.getItem('token');
-            const res = await fetch('http://localhost:5000/api/communication/campaigns', {
+            const res = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/campaigns', {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {

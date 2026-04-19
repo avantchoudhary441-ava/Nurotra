@@ -60,7 +60,7 @@ const SyncMonitor = () => {
 
         // Socket Integration with Auth Handshake
         const socketUrl = window.location.origin.includes('localhost') 
-            ? 'http://localhost:5000' 
+            ? (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '' 
             : window.location.origin.replace('//www.', '//'); 
         
         const token = localStorage.getItem('token');
