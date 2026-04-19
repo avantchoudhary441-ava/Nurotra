@@ -291,7 +291,7 @@ const ActionAgentPage = () => {
         try {
             const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
             const res = await fetch(`${API_BASE_URL}/api/action-agent/logs/${id}`, {
-                headers: { `Authorization": `Bearer ${token}` }
+                headers: { "Authorization": `Bearer ${token}` }
             });
             const data = await res.json();
             if (data.success) {
@@ -369,7 +369,7 @@ const ActionAgentPage = () => {
             const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
             await fetch(`${API_BASE_URL}/api/action-agent/stop/${taskId}`, { 
                 method: 'POST',
-                headers: { `Authorization": `Bearer ${token}` }
+                headers: { "Authorization": `Bearer ${token}` }
             });
             fetchTasks();
             fetchChat();
@@ -385,7 +385,7 @@ const ActionAgentPage = () => {
             const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
             await fetch(`${API_BASE_URL}/api/action-agent/pause/${taskId}`, { 
                 method: 'POST',
-                headers: { `Authorization": `Bearer ${token}` }
+                headers: { "Authorization": `Bearer ${token}` }
             });
             fetchTasks();
             fetchChat();
