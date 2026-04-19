@@ -46,9 +46,16 @@ exports.executeCommand = async (req, res) => {
         });
         await userMsg.save();
 
+        // Fetch last 5 messages for context to handle follow-up queries
+        const recentMessages = await ActionMessage.find({ 
+            userId, 
+            type: { $in: ['text', 'browser_result', 'result', 'clarification'] } 
+        }).sort({ timestamp: -1 }).limit(6);
+        const chatHistory = recentMessages.reverse().slice(0, 5); // Exclude the current message we just saved if it's the 6th, and keep the previous context.
+
         // 2. Analyze Intent using NLP
         const user = req.user ? await User.findById(req.user._id) : await User.findById(DEV_USER_ID);
-        const parsedData = await actionAgentService.parseActionIntent(command, user ? user.personaMemory : {});
+        const parsedData = await actionAgentService.parseActionIntent(command, user ? user.personaMemory : {}, chatHistory);
 
         if (parsedData.intent === "CLARIFICATION") {
             await new ActionMessage({

@@ -87,7 +87,7 @@ const ActionAgentPage = () => {
 
     const fetchTasks = async (customToken) => {
         try {
-            const token = customToken || localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = customToken || userObj.token;
             const activeRes = await fetch(`${API_BASE_URL}/api/action-agent/active-tasks`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -106,7 +106,7 @@ const ActionAgentPage = () => {
 
     const fetchChat = async (customToken) => {
         try {
-            const token = customToken || localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = customToken || userObj.token;
             const res = await fetch(`${API_BASE_URL}/api/action-agent/chat`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -121,7 +121,7 @@ const ActionAgentPage = () => {
 
     const fetchSuggestions = async (customToken) => {
         try {
-            const token = customToken || localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = customToken || userObj.token;
             const res = await fetch(`${API_BASE_URL}/api/action-agent/suggestions`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -141,7 +141,7 @@ const ActionAgentPage = () => {
 
     const fetchHistory = async (customToken) => {
         try {
-            const token = customToken || localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = customToken || userObj.token;
             const res = await fetch(`${API_BASE_URL}/api/action-agent/history`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -194,7 +194,7 @@ const ActionAgentPage = () => {
     }, [globalSocket, user]);
 
     useEffect(() => {
-        const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+        const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
         fetchChat(token);
         fetchTasks(token);
         fetchSuggestions(token);
@@ -289,7 +289,7 @@ const ActionAgentPage = () => {
     const loadWorkflow = async (id) => {
         setActiveWorkflowId(id);
         try {
-            const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
             const res = await fetch(`${API_BASE_URL}/api/action-agent/logs/${id}`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -306,7 +306,7 @@ const ActionAgentPage = () => {
     const handleNewChat = async (silent = false) => {
         if (!silent && !window.confirm("Start a new session? Current progress will be archived.")) return;
         try {
-            const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
             await fetch(`${API_BASE_URL}/api/action-agent/chat`, { 
                 method: "DELETE",
                 headers: { "Authorization": `Bearer ${token}` }
@@ -328,7 +328,7 @@ const ActionAgentPage = () => {
         setIsConnecting(true); // Wake up monitor
 
         try {
-            const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
             const response = await fetch(`${API_BASE_URL}/api/action-agent/execute`, {
                 method: "POST",
                 headers: { 
@@ -366,7 +366,7 @@ const ActionAgentPage = () => {
         const taskId = activeTasks[0]?._id;
         if (!taskId) return;
         try {
-            const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
             await fetch(`${API_BASE_URL}/api/action-agent/stop/${taskId}`, { 
                 method: 'POST',
                 headers: { "Authorization": `Bearer ${token}` }
@@ -382,7 +382,7 @@ const ActionAgentPage = () => {
         const taskId = activeTasks[0]?._id;
         if (!taskId) return;
         try {
-            const token = localStorage.getItem('token') || localStorage.getItem('nurotra_token');
+            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
             await fetch(`${API_BASE_URL}/api/action-agent/pause/${taskId}`, { 
                 method: 'POST',
                 headers: { "Authorization": `Bearer ${token}` }
