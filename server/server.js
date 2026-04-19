@@ -3,11 +3,11 @@ require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
+const mongoose = require("mongoose");
 
 const helmet = require("helmet");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
-// Helmet, compression and other middleware imports...
 
 const app = express();
 app.set("trust proxy", 1);
@@ -19,6 +19,7 @@ app.use(helmet({
 app.use(compression());
 app.use(express.json({ limit: '200mb' }));
 app.use(express.urlencoded({ limit: '200mb', extended: true }));
+
 // Production CORS Configuration
 const allowedOrigins = [
     "http://localhost:5173",
@@ -29,7 +30,6 @@ const allowedOrigins = [
     "https://nurotra.vercel.app"
 ];
 
-// Add environment variables if they exist
 if (process.env.CLIENT_URL) {
     process.env.CLIENT_URL.split(',').forEach(url => allowedOrigins.push(url.trim()));
 }
@@ -41,9 +41,7 @@ const finalOrigins = [...new Set(allowedOrigins.filter(Boolean))];
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
-
         if (finalOrigins.indexOf(origin) !== -1 || finalOrigins.some(o => origin && origin.startsWith(o))) {
             callback(null, true);
         } else {
@@ -57,35 +55,13 @@ app.use(cors({
     exposedHeaders: ['Content-Disposition']
 }));
 
-// Rate Limiting
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 1000,
-    message: "Too many requests, please try again later."
-});
-// app.use("/api/", apiLimiter); // Disabled temporarily to debug network resets
 const passport = require("./config/passport");
 app.use(passport.initialize());
-
-// Database Connection
-connectDB().then(() => {
-    // STARTUP RECOVERY: Clear any tasks stuck in 'running' after a crash/restart
-    const ActionWorkflow = require("./models/ActionWorkflow");
-    ActionWorkflow.updateMany(
-        { status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } },
-        { $set: { status: "failed", activeMicroLog: "System restarted. Task terminated for stability." } }
-    ).then(res => {
-        if (res.modifiedCount > 0) {
-            console.log(`\n[RECOVERY] Reset ${res.modifiedCount} stuck Action Agent tasks on startup.`);
-        }
-    }).catch(err => console.error("[RECOVERY] Failed to reset tasks:", err.message));
-});
 
 // GLOBAL CRASH PREVENTION
 process.on('uncaughtException', (err) => {
     console.error(`\n[CRITICAL] Uncaught Exception: ${err.message}`);
     console.error(err.stack);
-    // Keep server alive but log error
 });
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -114,7 +90,6 @@ app.use("/api/resources", require("./routes/resourceRoutes"));
 app.use("/api/action-agent", require("./routes/actionAgentRoutes"));
 app.use("/api/actions", require("./routes/actionRoutes"));
 
-
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error(err.stack);
@@ -139,14 +114,11 @@ const io = require('socket.io')(server, {
 require("./socket/socketHandler")(io);
 app.set("socketio", io);
 
-// Middleware to attach io to req
 app.use((req, res, next) => {
     req.io = io;
     next();
 });
 
-
-// Serve static assets in production
 if (process.env.NODE_ENV === "production") {
     app.use(express.static(path.join(__dirname, "../dist")));
     app.get(/.*/, (req, res) => {
@@ -155,12 +127,22 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const PORT = process.env.PORT || 5000;
-
-server.timeout = 900000; // 15 Minutes for very deep AI logic
+server.timeout = 900000;
 server.headersTimeout = 910000;
 server.keepAliveTimeout = 90000;
 
-if (require.main === module) {
+// Database Connection and Server Startup
+connectDB().then(() => {
+    const ActionWorkflow = require("./models/ActionWorkflow");
+    ActionWorkflow.updateMany(
+        { status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } },
+        { $set: { status: "failed", activeMicroLog: "System restarted. Task terminated for stability." } }
+    ).then(res => {
+        if (res.modifiedCount > 0) {
+            console.log(`\n[RECOVERY] Reset ${res.modifiedCount} stuck Action Agent tasks on startup.`);
+        }
+    }).catch(err => console.error("[RECOVERY] Failed to reset tasks:", err.message));
+
     server.listen(PORT, () => {
         console.log(`\n================================================`);
         console.log(`🚀 NUROTRA BACKEND ACTIVE ON PORT ${PORT}`);
@@ -168,6 +150,6 @@ if (require.main === module) {
         console.log(`📡 OpenAI: ${process.env.OPENAI_API_KEY ? 'CONFIGURED' : 'MISSING'}`);
         console.log(`================================================\n`);
     });
-}
+});
 
 module.exports = app;
