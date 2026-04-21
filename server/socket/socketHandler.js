@@ -37,8 +37,11 @@ module.exports = (io) => {
         socket.join(`sync_${userId}`);
 
         socket.on("join-room", (roomData) => {
-            // Deprecated: Auto-joined room now, but keeping for compatibility
-            console.log(`Socket ${socket.id} joining additional room`);
+            const room = typeof roomData === 'string' ? roomData : roomData?.userId;
+            if (room) {
+                socket.join(room.toString());
+                console.log(`Socket ${socket.id} joining additional room: ${room}`);
+            }
         });
 
         // --- Test Handler (For Visibility Verification) ---

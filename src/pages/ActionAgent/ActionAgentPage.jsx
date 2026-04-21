@@ -110,7 +110,10 @@ const ActionAgentPage = () => {
 
     const fetchChat = async (customToken) => {
         try {
-            const token = customToken || (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const userData = localStorage.getItem('nurotra_user');
+            const token = customToken || (userData ? JSON.parse(userData).token : null);
+            if (!token) return;
+
             const res = await fetch("http://localhost:5000/api/action-agent/chat", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -209,8 +212,16 @@ const ActionAgentPage = () => {
             setLastPulse(Date.now());
         });
 
-        socketRef.current.on('chat_update', () => {
-            fetchChat();
+        socketRef.current.on('chat_update', (data) => {
+            if (data?.message) {
+                setChatMessages(prev => {
+                    const exists = prev.some(m => m._id === data.message._id || (m.timestamp === data.message.timestamp && m.content === data.message.content));
+                    if (exists) return prev;
+                    return [...prev, data.message];
+                });
+            } else {
+                fetchChat();
+            }
             fetchTasks();
         });
 
@@ -262,7 +273,7 @@ const ActionAgentPage = () => {
         }
 
         return () => {
-            if (socketRef.current) socketRef.current.disconnect();
+            // Do NOT disconnect global socket here
         };
     }, []);
 
@@ -672,10 +683,12 @@ const ActionAgentPage = () => {
                                     onClick={handleMonitorClick}
                                     style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'crosshair' }}
                                 />
-                            ) : isConnecting && !browserFrame ? (
-                                <div style={{ textAlign: 'center', color: '#333' }}>
-                                    <Loader2 size={30} className="spin-icon" style={{ marginBottom: 15 }} />
-                                    <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '2px' }}>Preparing your secure environment...</div>
+                            ) : (isConnecting || (activeTasks.length > 0 && activeTasks[0].status === 'running')) && !browserFrame ? (
+                                <div style={{ textAlign: 'center', color: '#444' }}>
+                                    <Loader2 size={30} className="spin-icon" style={{ marginBottom: 15, color: '#6c5ce7' }} />
+                                    <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '2px', color: '#666' }}>
+                                        {activeTasks[0]?.activeMicroLog || "Preparing your secure environment..."}
+                                    </div>
                                 </div>
                             ) : (
                                 <div style={{ opacity: 0.1, textAlign: 'center' }}>
