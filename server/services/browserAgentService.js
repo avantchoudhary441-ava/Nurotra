@@ -288,8 +288,8 @@ class BrowserAgentService {
             const memory = await NuroMemory.findOne({ userId }).lean();
             const failedDomains = memory?.browserIntelligence?.failedDomains || [];
             
-            const deepDiveKeywords = ["go deep", "find forms", "apply", "deep dive", "explore", "details", "internship", "job"];
-            const needsDeep = deepDiveKeywords.some(k => query.toLowerCase().includes(k));
+            const deepDiveKeywords = ["go deep", "find forms", "apply", "deep dive", "explore", "details", "internship", "job", "scores", "live", "news", "current", "latest", "update", "real-time"];
+            const needsDeep = deepDiveKeywords.some(k => query.toLowerCase().includes(k)) || /score|live|news|current/.test(query.toLowerCase());
 
             let plan = { action: "STAY" };
             
@@ -310,7 +310,10 @@ class BrowserAgentService {
                      
                      Respond STRICTLY in JSON format:
                      { "action": "EXPLORE", "urls": ["url1", "url2"] }
-                     Or { "action": "STAY", "reason": "No valid deep links available" }`;
+                     
+                     CRITICAL: If the current Search Results Snippets do NOT contain the final answer (e.g. they only describe the site), you MUST choose EXPLORE with the most relevant URLs. Do NOT stay on the search page if the data is missing.
+                     
+                     If absolutely no relevant links exist, use: { "action": "STAY", "reason": "No valid deep links available" }`;
                      
                      const decisionRes = await generateWithFallback(decisionPrompt, "You are a web search strategist.", [], [], { forceJson: true });
                      plan = JSON.parse(decisionRes.replace(/```json|```/g, '').trim());
@@ -322,12 +325,11 @@ class BrowserAgentService {
                  console.log("[BrowserAgent] Snippet mode engaged. Fast response path.");
             }
             
-            let finalContent = pageText;
+            let collectedContent = [ { url: searchUrl, content: pageText } ];
             let finalUrl = searchUrl;
 
             if (plan.action === "EXPLORE" && plan.urls && plan.urls.length > 0) {
-                 for (let targetUrl of plan.urls) {
-                     // Sanitize URL
+                 for (let targetUrl of plan.urls.slice(0, 3)) { // Explore top 3
                      targetUrl = targetUrl.replace(/^[\[\("']+|[\]\)"']+$/g, '');
                      if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
                      
@@ -339,33 +341,35 @@ class BrowserAgentService {
                      await this.emitFrame(socket, userId, page, `Exploring: ${domainCode}...`);
                      
                      try {
-                         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-                         await page.waitForTimeout(1000); 
-                         await this.autoScrollAndStream(page, socket, userId, 2, 500);
+                         // Switch to 'load' + wait for dynamic hydration
+                         await page.goto(targetUrl, { waitUntil: 'load', timeout: 25000 });
+                         await page.waitForTimeout(3000); 
+                         await this.autoScrollAndStream(page, socket, userId, 3, 600);
                          
                          const innerText = await page.innerText('body');
-                         
-                         // Form/Data Quality Assessment
-                         if (innerText.length > 300 && !innerText.includes("Access Denied") && !innerText.includes("captcha")) {
-                             finalContent = innerText;
+                         const isHighQuality = innerText.length > 1500 && !innerText.includes("JavaScript") && !innerText.includes("Access Denied");
+
+                         if (isHighQuality && !innerText.includes("captcha")) {
+                             collectedContent.push({ url: targetUrl, content: innerText });
                              finalUrl = page.url();
-                             await this.logExecutionStep(userId, `Valuable data extracted from ${domainCode}.`, "success", socket);
-                             // Reinforce Memory
+                             await this.logExecutionStep(userId, `Data extracted from ${domainCode}.`, "success", socket);
                              this.updateBrowserMemory(userId, domainCode, true, "Success");
-                             break; // Exit loop early! Data acquired.
                          } else {
-                             await this.logExecutionStep(userId, `Limited data on ${domainCode}. Checking alternatives...`, "warn", socket);
-                             this.updateBrowserMemory(userId, domainCode, false, "Limited or blocked data");
+                             await this.logExecutionStep(userId, `Limited data on ${domainCode}. checking next source...`, "warn", socket);
                          }
                      } catch (navErr) {
                          console.error(`[BrowserAgent] Deep navigation failed for ${targetUrl}:`, navErr.message);
-                         await this.logExecutionStep(userId, `Failed to load ${domainCode}. Trying next...`, "error", socket);
-                         this.updateBrowserMemory(userId, domainCode, false, "Navigation timeout or crash");
+                         await this.logExecutionStep(userId, `Failed to load ${domainCode}. Skipping...`, "error", socket);
                      }
                  }
             } else {
                  await this.emitFrame(socket, userId, page, "Snippet extraction mode engaged. Writing report...");
             }
+
+            // Synthesize all collected content
+            const finalContent = collectedContent
+                .map(c => `[[ SOURCE: ${c.url} ]]\n${c.content.substring(0, 10000)}`)
+                .join("\n\n" + "=".repeat(30) + "\n\n");
 
             // --- QUOTA BREATHER ---
             // Small delay to prevent hitting RPM limits when making back-to-back calls
@@ -382,9 +386,11 @@ class BrowserAgentService {
             1. EXTRACT REAL DATA: Pull out actual numbers, scores, dates, names, facts, statistics that are visible in the content. For example if the user asked for "IPL live scores", find and present the actual team names and scores (e.g., "• **Mumbai Indians**: 178/4 (20 overs) vs **Chennai Super Kings**: 162/8 (20 overs)").
             2. NEVER list or describe websites. Do NOT say "ESPN provides..." or "Cricbuzz offers...". The user wants the DATA, not a directory of sources.
             3. If actual data IS present in the snippets (scores, names, facts), extract and present it beautifully with bullet points.
-            4. If the actual data is genuinely NOT in the content (e.g., no scores visible), say so gracefully: "The exact live scores aren't available in the current search results. Would you like me to go deep into a sports site to fetch them?"
-            5. NEVER hallucinate or invent data. Only use what's actually in the CONTENT below.
-            6. NEVER tell the user to visit a website themselves. Offer to do it for them.
+            4. If the actual data is genuinely NOT in the content, say "I couldn't find the exact live status on ${finalUrl} after exploring." and state clearly what part of your request is still outstanding.
+            5. NEVER ask 'Would you like me to go deep?' or 'Should I check another source?'. If you are here, you have already tried. Summarize the best information discovered.
+            6. NEVER hallucinate or invent data. Only use what's actually in the CONTENT below.
+            7. NEVER tell the user to visit a website themselves.
+            8. DATA PRIORITY: For 'latest status', look for dates, times, and match progress. present it as "Status as of [Time]: [Details]".
             
             FORMAT:
             - Use bullet points (•) for data items

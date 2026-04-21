@@ -77,7 +77,7 @@ exports.executeCommand = async (req, res) => {
             }
             await activeTask.save();
 
-            if (req.io) req.io.emit('chat_update', { userId });
+            if (req.io) req.io.to(userId.toString()).emit('chat_update', { userId });
             console.log(`[DEBUG] Resuming active task ${activeTask._id} for user ${userId}`);
 
             // Trigger resumption in the background
@@ -105,14 +105,22 @@ exports.executeCommand = async (req, res) => {
         await userMsg.save();
         console.log(`[DEBUG] User message saved: ${userMsg._id}`);
 
-        // 2. Analyze Intent using NLP
+        // 2. Fetch Recent Chat History for Contextual Continuity
+        const chatHistory = await ActionMessage.find({ userId })
+            .sort({ timestamp: -1 })
+            .limit(5)
+            .lean();
+        // Reverse to maintain chronological order for the LLM
+        const orderedHistory = chatHistory.reverse();
+
+        // 3. Analyze Intent using NLP
         const user = req.user ? await User.findById(req.user._id) : await User.findById(DEV_USER_ID);
-        console.log(`[DEBUG] Analyzing intent for user ${user?._id || 'Unknown'}: "${command}"`);
-        let parsedData = await actionAgentService.parseActionIntent(command, user ? user.personaMemory : {});
+        console.log(`[DEBUG] Analyzing intent for user ${user?._id || 'Unknown'}: "${command}" (History count: ${orderedHistory.length})`);
+        let parsedData = await actionAgentService.parseActionIntent(command, user ? user.personaMemory : {}, orderedHistory);
         console.log(`[DEBUG] NLP Intent: ${parsedData.intent}`);
 
         // FORCED CONTINUITY INTERCEPTOR: If user wants to go deep, force intent to FOLLOW_UP
-        const continuityKeywords = ["go deep", "analyze further", "explore more", "tell me more", "expand on", "analyze more", "go deeper"];
+        const continuityKeywords = ["go deep", "analyze further", "explore more", "tell me more", "expand on", "analyze more", "go deeper", "yes", "do it", "yup", "go for it", "ok", "okay", "proceed"];
         const isContinuityRequest = continuityKeywords.some(key => command.toLowerCase().includes(key));
         
         if (isContinuityRequest && parsedData.intent === "CLARIFICATION") {
@@ -143,7 +151,7 @@ exports.executeCommand = async (req, res) => {
                 });
                 await interventionWorkflow.save();
 
-                if (req.io) req.io.emit('chat_update', { userId });
+                if (req.io) req.io.to(userId.toString()).emit('chat_update', { userId });
                 return res.json({ success: true, message: "Awaiting resume upload...", workflowId: interventionWorkflow._id });
             }
         }
@@ -156,7 +164,7 @@ exports.executeCommand = async (req, res) => {
                 type: "clarification"
             }).save();
 
-            if (req.io) req.io.emit('chat_update', { userId });
+            if (req.io) req.io.to(userId.toString()).emit('chat_update', { userId });
 
             return res.json({
                 success: true,
@@ -224,7 +232,7 @@ exports.executeCommand = async (req, res) => {
 
             // Create a new workflow based on the "Deep Dive" into the previous findings
             const followUpCommand = `Deep dive into the previous findings about ${lastTask.title}. Specifically: ${command}`;
-            const followUpData = await actionAgentService.parseActionIntent(followUpCommand, user ? user.personaMemory : {});
+            const followUpData = await actionAgentService.parseActionIntent(followUpCommand, user ? user.personaMemory : {}, orderedHistory);
             
             // Inject previous findings as a 'context' parameter into the first action
             if (followUpData.intent === "WORKFLOW_EXECUTION" && followUpData.workflow.actions.length > 0) {
@@ -430,7 +438,7 @@ exports.executeCommand = async (req, res) => {
             }).save();
             
             // Notify frontend
-            if (req.io) req.io.emit('chat_update', { userId });
+            if (req.io) req.io.to(userId.toString()).emit('chat_update', { userId });
 
             // Begin background simulation
             simulateExecution(workflowId, workflowData.actions, req.io, { socketId });
@@ -1042,7 +1050,7 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
                     type: "text",
                     timestamp: new Date()
                 }).save();
-                if (io) io.emit('chat_update');
+                if (io) io.to(wf.userId.toString()).emit('chat_update');
                 
                 // User requirement: Auto-pause for high-impact tasks
                 wf.status = "paused";
@@ -1207,7 +1215,7 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
             
             if (sysLogId) await systemLoggerService.concludeLog(sysLogId, wf.status === "failed" ? "Failed" : "Completed", "Process finalized.");
             
-            await new ActionMessage({
+            const finalActionMsg = await new ActionMessage({
                 userId: wf.userId,
                 role: "agent",
                 content: finalSummary,
@@ -1216,7 +1224,11 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
                 timestamp: new Date()
             }).save();
             
-            if (io) io.emit('chat_update', { userId: wf.userId });
+            if (io) {
+                setTimeout(() => {
+                    io.to(wf.userId.toString()).emit('chat_update', { userId: wf.userId, message: finalActionMsg });
+                }, 500);
+            }
 
             // 5. Send Professional Execution Summary via Email
             try {
@@ -1252,7 +1264,7 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
                     type: "text",
                     timestamp: new Date()
                 }).save();
-                if (io) io.emit('chat_update');
+                if (io) io.to(wf.userId.toString()).emit('chat_update');
             }
         } catch (e) {
             console.error(e);
@@ -1368,12 +1380,12 @@ const addLog = (wf, stepIndex, step, level, message, io = null, evidenceUrl = nu
             content: message,
             type: "text",
             timestamp: new Date()
-        }).save().then(() => {
-            io.emit('chat_update', { userId: wf.userId });
+        }).save().then((savedMsg) => {
+            if (io) io.to(wf.userId.toString()).emit('chat_update', { userId: wf.userId, message: savedMsg });
         });
     }
 
-    if (io) io.emit('task_update', { userId: wf.userId, workflowId: wf._id });
+    if (io) io.to(wf.userId.toString()).emit('task_update', { userId: wf.userId, workflowId: wf._id });
 };
 
 /**
@@ -1388,8 +1400,8 @@ const addMilestone = async (userId, message, io = null) => {
         type: "milestone", // specialized type for UI distinction
         timestamp: new Date()
     });
-    await milestone.save();
-    if (io) io.emit('chat_update', { userId });
+    const savedMilestone = await milestone.save();
+    if (io) io.to(userId.toString()).emit('chat_update', { userId, message: savedMilestone });
 };
 // ===========================================
 // RESTART BROWSER ENGINE (Manual Recovery)
