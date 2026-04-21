@@ -23,7 +23,7 @@ const parseJSON = (text) => {
  * Parses natural language into Action Agent execution payloads
  * with support for event-driven triggers, conditions, delays, and retries.
  */
-const parseActionIntent = async (command, userMemory) => {
+const parseActionIntent = async (command, userMemory, chatHistory = []) => {
     // TEST BYPASS: Allow testing form automation without OpenAI
     if (command.toLowerCase().includes("test form")) {
         return {
@@ -179,7 +179,13 @@ If the user provides a fact about themselves (e.g., "My LinkedIn is...", "My com
 `;
 
     const personaMemoryPrompt = userMemory ? `\nUSER MEMORY (Facts I know about the user):\n${JSON.stringify(userMemory)}\nUse this to avoid asking redundant info.` : "";
-    const fullPrompt = systemPrompt + personaMemoryPrompt;
+    
+    // Inject recent chat interactions to resolve contextual ambiguity ("yup", "do it again", "find it", "tell me more")
+    const chatContextPrompt = chatHistory && chatHistory.length > 0 
+        ? `\nRECENT CONVERSATION CONTEXT:\n${chatHistory.map(m => `[${m.role.toUpperCase()}]: ${m.content}`).join('\n')}\n(Use the above context to resolve ambiguous references like 'it', 'yes', or 'find that'. If the user says 'yes', assume they want you to execute what the agent just proposed.)`
+        : "";
+
+    const fullPrompt = systemPrompt + personaMemoryPrompt + chatContextPrompt;
 
     const responseText = await aiService.generateWithFallback(command, fullPrompt);
     return parseJSON(responseText);

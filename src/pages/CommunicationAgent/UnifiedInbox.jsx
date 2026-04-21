@@ -16,7 +16,7 @@ const UnifiedInbox = ({ onReply }) => {
       if (!storedUser) throw new Error("Not authenticated");
       const token = JSON.parse(storedUser).token;
       
-      const res = await fetch('http://localhost:5000/api/communication/history?limit=50', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/communication/history?limit=50', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       

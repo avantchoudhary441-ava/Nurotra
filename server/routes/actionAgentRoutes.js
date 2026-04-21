@@ -1,6 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const actionAgentController = require("../controllers/actionAgentController");
+const { protect } = require("../middleware/authMiddleware");
+
+// Apply protect middleware to all action agent routes to ensure correct userId attribution
+router.use(protect);
 
 // --- Core execution ---
 router.post("/execute", actionAgentController.executeCommand);

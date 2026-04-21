@@ -286,8 +286,17 @@ class BrowserAgentService {
                 
                 try {
                     await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-                    await page.waitForTimeout(1000); 
+                    await page.waitForTimeout(2000); 
                     
+                    // Auto-clear common cookie consent banners obstructing innerText
+                    await page.evaluate(() => {
+                        const buttons = Array.from(document.querySelectorAll('button, a', 'div[role="button"]'));
+                        const acceptBtn = buttons.find(b => /(accept all|agree|allow all|got it|accept cookies)/i.test(b.innerText || b.textContent));
+                        if (acceptBtn) acceptBtn.click();
+                    }).catch(() => {});
+                    
+                    await page.waitForTimeout(1500);
+
                     // Trigger the visual scrolling effect to scan the page
                     await this.autoScrollAndStream(page, socket, userId);
 
@@ -315,14 +324,14 @@ class BrowserAgentService {
             TASK: As the Nurotra Professional Assistant, provide the final results of your investigation based EXCLUSIVELY on the provided content.
             
             TONE & PERSONALITY:
-            - FOLLOW-UP CONNECTION: Frame this as a continuation of your initial acknowledgment. Use phrases like "I've successfully gathered those details for you..." or "As promised, here is the breakdown...".
+            - FOLLOW-UP CONNECTION: Frame this as a continuation of your task.
             - BUSINESS GRACE: Maintain respectful, elegant, and simple language.
             - INTEGRATED NARRATIVE: Weave findings together naturally. 
-            - PROACTIVE ASSISTANCE: NEVER tell the user to visit a website or check another platform themselves. Instead, offer to do it on their behalf (e.g., "If you want, I can visit [Website Name] or [Platform] on your behalf for further insights. Just let me know and I will execute it.").
+            - NO ASKING FOR PERMISSION: Never ask the user "Would you like me to explore further?" or tell them you couldn't do it. Just provide the BEST possible definitive output based on the extraction.
             
             CONTENT REQUIREMENTS & ABSOLUTE ACCURACY:
-            - AUTHENTIC DATA ONLY: NEVER hallucinate, invent, or use placeholder names like "Team A" or "Team B". You MUST extract and use only the REAL team names, scores, and facts from the CONTENT below.
-            - NO GUESSING: If the actual data is barely mentioned or missing, simply state gracefully that the exact information is not currently detailed in the immediate sources, rather than making things up.
+            - AUTHENTIC DATA ONLY: Extract and use only the REAL team names, scores, and facts from the CONTENT below. Do not guess.
+            - DECISIVENESS: Synthesize the closest relevant data available into a definitive result. Do not ask the user for permission to do more work.
             - VISUAL CLARITY: Use clean bullet points (•) for data density. Bold keys where appropriate (**Team Name**: Detail).
             - COMPREHENSIVENESS: Include scores, dates, teams, and next schedules if applicable.
             

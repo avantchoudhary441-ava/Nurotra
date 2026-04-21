@@ -435,7 +435,7 @@ const OrchestratorChat = ({ activeChatId, setActiveChatId, onChatCreated }) => {
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
                           <span style={{ color: '#fff' }}>{executionResult.document?.name || executionResult.fileName || 'Untitled Document'}</span>
                           <button 
-                            onClick={() => window.open(`http://localhost:5000/api/workspace/download/${executionResult.document?._id || executionResult.id}`, '_blank')}
+                            onClick={() => window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/workspace/download/${executionResult.document?._id || executionResult.id}`, '_blank')}
                             style={{ background: '#10e3b2', color: '#000', padding: '6px 16px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: '600' }}
                           >
                             Download
