@@ -127,7 +127,28 @@ Format B (For FETCH_LOGS):
   }
 }
 
-Format C (For WORKFLOW_EFormat C (For WORKFLOW_EXECUTION / FORM_AUTOMATION):
+Format D (For FOLLOW_UP):
+{
+  "intent": "FOLLOW_UP",
+  "context": "Context description of what to continue",
+  "workflow": {
+    "title": "Deep Dive: [Previous Task Title]",
+    "actions": [
+      {
+        "id": 1,
+        "label": "Deep Dive Research: [Topic]",
+        "icon": "globe",
+        "params": { 
+          "query": "Extended search query", 
+          "goDeep": true, 
+          "previousFindings": "Brief summary of what we know" 
+        }
+      }
+    ]
+  }
+}
+
+Format C (For WORKFLOW_EXECUTION / FORM_AUTOMATION):
 {
   "intent": "WORKFLOW_EXECUTION",
   "isEventDriven": true/false,

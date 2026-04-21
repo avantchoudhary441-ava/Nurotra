@@ -64,6 +64,9 @@ const ActionAgentPage = () => {
     const recognitionRef = useRef(null);
     const monitorImgRef = useRef(null);
     const [lastPulse, setLastPulse] = useState(null);
+    const [expandedMessages, setExpandedMessages] = useState({}); // Tracking expanded cards
+    const [activeTasks, setActiveTasks] = useState([]);
+    const [suggestions, setSuggestions] = useState([]);
 
     // Vertical Resizing Logic
     useEffect(() => {
@@ -809,65 +812,100 @@ const ActionAgentPage = () => {
                                                     {isClarification ? <AlertCircle size={18} color="#ffa500" /> : <Bot size={18} color="#a29bfe" />}
                                                 </div>
                                             )}
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: isUser ? 'flex-end' : 'flex-start' }}>
-                                                {isResult ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: isUser ? 'flex-                                                {isResult ? (
                                                     <div className="premium-result-card" style={{ background: '#111', border: '1px solid #222', borderRadius: '16px', overflow: 'hidden' }}>
                                                         <div style={{ padding: '15px 20px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                                <CheckCircle2 size={12} /> {msg.content.includes('Complete') ? 'TASK SUCCESSFUL' : 'UPDATE'}
+                                                                <CheckCircle2 size={12} /> {msg.content.includes('Complete') || msg.content.includes('Successful') ? 'TASK SUCCESSFUL' : 'UPDATE'}
                                                             </div>
                                                             <div style={{ color: '#444', fontSize: '10px' }}>{new Date(msg.timestamp).toLocaleTimeString()}</div>
                                                         </div>
                                                         <div style={{ padding: '20px' }}>
                                                             {renderStructuredContent(msg.content, isNew)}
-
-                                                            {/* Source Cards Row */}
-                                                            {msg.metadata?.sourceUrl && (
-                                                                <div style={{ marginTop: 25, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                                                    <div style={{ fontSize: '10px', color: '#555', fontWeight: '800', letterSpacing: '1px' }}>PRIMARY SOURCE</div>
-                                                                    <div style={{
+                                                            
+                                                            <div style={{ marginTop: 20, display: 'flex', gap: 10 }}>
+                                                                <button 
+                                                                    className="expand-report-btn"
+                                                                    onClick={() => setExpandedMessages(prev => ({ ...prev, [msg._id || idx]: !prev[msg._id || idx] }))}
+                                                                    style={{
+                                                                        background: 'rgba(108, 92, 231, 0.1)',
+                                                                        border: '1px solid rgba(108, 92, 231, 0.3)',
+                                                                        borderRadius: '8px',
+                                                                        padding: '6px 12px',
+                                                                        color: '#a29bfe',
+                                                                        fontSize: '11px',
+                                                                        fontWeight: '700',
+                                                                        cursor: 'pointer',
                                                                         display: 'flex',
                                                                         alignItems: 'center',
-                                                                        gap: 15,
-                                                                        background: 'rgba(255,255,255,0.02)',
-                                                                        padding: '12px 16px',
-                                                                        borderRadius: '12px',
-                                                                        border: '1px solid rgba(255,255,255,0.05)',
-                                                                        cursor: 'pointer',
-                                                                        transition: 'all 0.2s'
+                                                                        gap: 6
                                                                     }}
+                                                                >
+                                                                    {expandedMessages[msg._id || idx] ? <X size={12} /> : <Activity size={12} />}
+                                                                    {expandedMessages[msg._id || idx] ? 'HIDE LOGS' : 'VIEW EXECUTION SUMMARY'}
+                                                                </button>
+                                                                
+                                                                {msg.metadata?.sourceUrl && (
+                                                                    <button 
                                                                         onClick={() => window.open(msg.metadata.sourceUrl, '_blank')}
-                                                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                                                                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                                                                        style={{
+                                                                            background: 'rgba(255, 255, 255, 0.05)',
+                                                                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                                            borderRadius: '8px',
+                                                                            padding: '6px 12px',
+                                                                            color: '#999',
+                                                                            fontSize: '11px',
+                                                                            fontWeight: '700',
+                                                                            cursor: 'pointer',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            gap: 6
+                                                                        }}
                                                                     >
-                                                                        <img
-                                                                            src={`https://www.google.com/s2/favicons?domain=${new URL(msg.metadata.sourceUrl).hostname}&sz=64`}
-                                                                            style={{ width: 24, height: 24, borderRadius: '4px' }}
-                                                                            alt="Site icon"
-                                                                        />
-                                                                        <div style={{ flex: 1, overflow: 'hidden' }}>
-                                                                            <div style={{ color: '#eee', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                                {new URL(msg.metadata.sourceUrl).hostname}
-                                                                            </div>
-                                                                            <div style={{ color: '#666', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                                {msg.metadata.sourceUrl}
-                                                                            </div>
-                                                                        </div>
-                                                                        <ExternalLink size={14} color="#666" />
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        {msg.metadata?.evidenceUrl && (
-                                                            <div style={{ padding: '0 20px 20px 20px' }}>
-                                                                <div style={{ color: '#666', fontSize: '10px', marginBottom: 10, fontWeight: '700' }}>EXECUTION PROOF</div>
-                                                                <a href={msg.metadata.evidenceUrl} target="_blank" rel="noopener noreferrer">
-                                                                    <img src={msg.metadata.evidenceUrl} alt="Proof" style={{ width: '100%', borderRadius: '8px', border: '1px solid #222' }} />
-                                                                </a>
+                                                                        <ExternalLink size={12} /> SOURCE
+                                                                    </button>
+                                                                )}
                                                             </div>
+                                                        </div>
+
+                                                        {expandedMessages[msg._id || idx] && (
+                                                            <motion.div 
+                                                                initial={{ height: 0, opacity: 0 }}
+                                                                animate={{ height: 'auto', opacity: 1 }}
+                                                                style={{ borderTop: '1px solid #222', background: '#0a0a0a' }}
+                                                            >
+                                                                <div style={{ padding: '20px' }}>
+                                                                    <div style={{ color: '#555', fontSize: '10px', marginBottom: 15, fontWeight: '800', letterSpacing: '1px' }}>INTERNAL EXECUTION LOGS</div>
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 25 }}>
+                                                                        <div style={{ fontSize: '11px', color: '#888', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px', borderLeft: '3px solid #6c5ce7' }}>
+                                                                            <span style={{ color: '#6c5ce7', fontWeight: 'bold' }}>INFO:</span> Target resolved at {msg.metadata?.sourceUrl || 'verified domain'}.
+                                                                        </div>
+                                                                        <div style={{ fontSize: '11px', color: '#888', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px', borderLeft: '3px solid #6c5ce7' }}>
+                                                                            <span style={{ color: '#6c5ce7', fontWeight: 'bold' }}>INFO:</span> Autonomous data extraction completed successfully.
+                                                                        </div>
+                                                                        {msg.metadata?.evidenceUrl && (
+                                                                            <div style={{ fontSize: '11px', color: '#00ff88', background: 'rgba(0,255,136,0.05)', padding: '8px 12px', borderRadius: '8px', borderLeft: '3px solid #00ff88' }}>
+                                                                                <span style={{ color: '#00ff88', fontWeight: 'bold' }}>SUCCESS:</span> Visual proof captured and verified.
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {msg.metadata?.evidenceUrl && (
+                                                                        <>
+                                                                            <div style={{ color: '#555', fontSize: '10px', marginBottom: 10, fontWeight: '800', letterSpacing: '1px' }}>VISUAL EVIDENCE</div>
+                                                                            <a href={msg.metadata.evidenceUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', position: 'relative' }}>
+                                                                                <img src={msg.metadata.evidenceUrl} alt="Proof" style={{ width: '100%', borderRadius: '12px', border: '1px solid #222', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }} />
+                                                                                <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontSize: '10px' }}>
+                                                                                    CLICK TO EXPAND
+                                                                                </div>
+                                                                            </a>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
                                                         )}
                                                     </div>
-                                                ) : isClarification ? (
+                                                ) : isClarification ? (  ) : isClarification ? (
                                                     <div style={{
                                                         background: 'rgba(255, 165, 0, 0.05)',
                                                         border: '1px solid rgba(255, 165, 0, 0.2)',

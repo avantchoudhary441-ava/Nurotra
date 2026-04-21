@@ -378,11 +378,16 @@ class BrowserAgentService {
             
             TASK: Extract and present the ACTUAL DATA the user asked for from the content below.
             
+            const extractionPrompt = `You are an expert Data Extraction Engine.
+            Task: ${query}
+            
+            Current URL: ${finalUrl}
+            
             CRITICAL RULES:
             1. EXTRACT REAL DATA: Pull out actual numbers, scores, dates, names, facts, statistics that are visible in the content. For example if the user asked for "IPL live scores", find and present the actual team names and scores (e.g., "• **Mumbai Indians**: 178/4 (20 overs) vs **Chennai Super Kings**: 162/8 (20 overs)").
             2. NEVER list or describe websites. Do NOT say "ESPN provides..." or "Cricbuzz offers...". The user wants the DATA, not a directory of sources.
             3. If actual data IS present in the snippets (scores, names, facts), extract and present it beautifully with bullet points.
-            4. If the actual data is genuinely NOT in the content (e.g., no scores visible), say so gracefully: "The exact live scores aren't available in the current search results. Would you like me to go deep into a sports site to fetch them?"
+            4. If the actual data is genuinely NOT in the content (e.g., no scores visible), say so gracefully.
             5. NEVER hallucinate or invent data. Only use what's actually in the CONTENT below.
             6. NEVER tell the user to visit a website themselves. Offer to do it for them.
             
@@ -397,8 +402,21 @@ class BrowserAgentService {
 
             const finalResult = await generateWithFallback(extractionPrompt, "You are the Nurotra Professional Strategic Assistant. Your voice is graceful, simple, and respectful.", [], [], { forceJson: false });
             
+            // CAPTURE FINAL PROOF
+            let evidenceUrl = null;
+            try {
+                evidenceUrl = await this.captureStepProof(page, userId, `Final results for: ${query}`);
+            } catch (err) {
+                console.error("[BrowserAgent] Final proof capture failed:", err.message);
+            }
+
             if (!skipSave) {
-                this.safeSaveMessage(userId, "agent", finalResult, "browser_result", { query, sourceUrl: finalUrl, provider: currentProvider });
+                this.safeSaveMessage(userId, "agent", finalResult, "browser_result", { 
+                    query, 
+                    sourceUrl: finalUrl, 
+                    evidenceUrl,
+                    provider: currentProvider 
+                });
             }
 
             console.log(`[BrowserAgent] [${userId}] Search completed.`);
@@ -506,14 +524,21 @@ class BrowserAgentService {
                     completed = true;
                     const msg = decision.replace("COMPLETE", "").trim();
                     
+                    // CAPTURE FINAL PROOF
+                    let evidenceUrl = null;
+                    try {
+                        evidenceUrl = await this.captureStepProof(page, userId, `Task execution proof for: ${taskDescription}`);
+                    } catch (err) {
+                        console.error("[BrowserAgent] Task proof capture failed:", err.message);
+                    }
+
                     // Save result to chat history
-                    await new ActionMessage({
-                        userId,
-                        role: "agent",
-                        content: msg,
-                        type: "browser_result",
-                        metadata: { platform, taskDescription }
-                    }).save();
+                    await this.safeSaveMessage(userId, "agent", msg, "browser_result", { 
+                        platform, 
+                        taskDescription,
+                        evidenceUrl,
+                        sourceUrl: page.url()
+                    });
 
                     return { success: true, message: msg };
                 } else if (decision.startsWith("FAIL")) {
