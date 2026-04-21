@@ -4158,3 +4158,64 @@
     border-color: rgba(0, 210, 255, 0.2);
     background: rgba(0, 210, 255, 0.05);
 }
+@charset " UTF-8\;
+
+/* --- INTERVENTION COMPONENTS --- */
+.intervention-url-input::placeholder {
+ color: rgba(255, 255, 255, 0.2);
+}
+
+.intervention-url-input:focus {
+ border-color: #6c5ce7 !important;
+ box-shadow: 0 0 10px rgba(108, 92, 231, 0.1);
+}
+
+/* --- LINK ICON TOOLTIP --- */
+.link-icon-btn {
+ position: relative;
+}
+
+.link-icon-btn .icon-tooltip {
+ position: absolute;
+ bottom: 150%;
+ left: 50%;
+ transform: translateX(-50%) translateY(10px);
+ background: #1a1a1a;
+ border: 1px solid #333;
+ padding: 8px 12px;
+ border-radius: 8px;
+ color: #eee;
+ font-size: 11px;
+ white-space: nowrap;
+ opacity: 0;
+ pointer-events: none;
+ transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+ z-index: 1000;
+}
+
+.link-icon-btn:hover .icon-tooltip {
+ opacity: 1;
+ transform: translateX(-50%) translateY(0);
+}
+
+.link-icon-btn .icon-tooltip::after {
+ content: \\;
+ position: absolute;
+ top: 100%;
+ left: 50%;
+ margin-left: -5px;
+ border-width: 5px;
+ border-style: solid;
+ border-color: #333 transparent transparent transparent;
+}
+
+/* Spin Animation for Loaders */
+@keyframes spin {
+ from { transform: rotate(0deg); }
+ to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+ animation: spin 1s linear infinite;
+}

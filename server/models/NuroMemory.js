@@ -94,6 +94,13 @@ const nuroMemorySchema = new mongoose.Schema({
     // Read-only AI Memory reflections
     aiLearnings: [String],
 
+    // --- BROWSER INTELLIGENCE (Self-Learning Web Agent) ---
+    browserIntelligence: {
+        failedDomains: [String], // Domains that blocked bot or had no data
+        successfulDomains: [String], // Domains that yielded great deep-dive data
+        lastUpdated: { type: Date, default: Date.now }
+    },
+
     // --- SAFETY & TRUST PILLARS ---
     trustSnapshot: {
         compositeScore: { type: Number, default: 70 },

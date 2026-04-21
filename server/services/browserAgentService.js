@@ -14,6 +14,8 @@ const Integration = require("../models/Integration");
 const ActionMessage = require("../models/ActionMessage");
 const ActionWorkflow = require("../models/ActionWorkflow");
 const { generateWithFallback } = require("./aiService");
+const agentResourceService = require("./agentResourceService");
+const NuroMemory = require("../models/NuroMemory");
 
 class BrowserAgentService {
     constructor() {
@@ -67,7 +69,12 @@ class BrowserAgentService {
             type,
             metadata,
             timestamp: new Date()
-        }).save().catch(err => {
+        }).save().then(() => {
+            // Push real-time update to frontend so result appears instantly
+            if (this.io) {
+                this.io.to(userId.toString()).emit('chat_update', { userId });
+            }
+        }).catch(err => {
             console.error(`[BrowserAgent] Non-blocking DB save failed for ${userId}:`, err.message);
         });
     }
@@ -75,27 +82,64 @@ class BrowserAgentService {
     /**
      * Log a granular execution step to the active workflow for the user.
      */
-    async logExecutionStep(userId, message, status = "info", socket = null) {
+    async logExecutionStep(userId, message, status = "info", socket = null, screenshot = false) {
         try {
-            // Find the most recent running workflow for this user
             const wf = await ActionWorkflow.findOne({ userId, status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } }).sort({ startTime: -1 });
             if (!wf) return;
 
+            let evidenceUrl = null;
+            if (screenshot) {
+                const page = this.activePages.get(userId.toString());
+                if (page) {
+                    evidenceUrl = await this.captureStepProof(userId, wf._id);
+                }
+            }
+
             wf.executionLogs.push({
-                stepLabel: "Browser Agent",
-                status,
+                stepLabel: message,
+                status: status === "error" ? "failed" : "completed",
                 message,
                 timestamp: new Date(),
-                level: status
+                level: status,
+                evidenceUrl: evidenceUrl || undefined
             });
             wf.activeMicroLog = message;
             await wf.save();
 
+            const logData = { userId, workflowId: wf._id, message, level: status, evidenceUrl, timestamp: new Date() };
             if (socket) {
-                socket.emit("task_update", { userId, workflowId: wf._id });
+                socket.emit("execution_log", logData);
+            } else if (this.io) {
+                this.io.to(userId.toString()).emit("execution_log", logData);
             }
         } catch (err) {
             console.error(`[BrowserAgent] Failed to log step for ${userId}:`, err.message);
+        }
+    }
+
+    /**
+     * Capture a discrete screenshot during the task for inclusion in the log.
+     */
+    async captureStepProof(userId, workflowId) {
+        try {
+            const page = this.activePages.get(userId.toString());
+            if (!page) return null;
+            
+            const screenshot = await page.screenshot({ type: 'jpeg', quality: 60 });
+            const { cloudinary } = require("../config/cloudinary");
+
+            return new Promise((resolve) => {
+                cloudinary.uploader.upload_stream({
+                    folder: 'nurotra_proofs',
+                    public_id: `step_${workflowId}_${Date.now()}`,
+                    resource_type: 'image'
+                }, (error, result) => {
+                    if (error) resolve(null);
+                    else resolve(result.secure_url);
+                }).end(screenshot);
+            });
+        } catch (e) {
+            return null;
         }
     }
 
@@ -221,7 +265,7 @@ class BrowserAgentService {
                 await page.waitForTimeout(1500); 
             }
 
-            // --- DEEP SEARCH LOGIC ---
+            // --- DEEP SEARCH LOGIC (Multi-Site & Self Learning) ---
             await this.emitFrame(socket, userId, page, `Reviewing the findings for "${query}"...`);
             
             // 1. Get Snippets & Links
@@ -240,103 +284,113 @@ class BrowserAgentService {
                 return results.slice(0, 5); // Top 5 relevant links
             });
 
-            // 2. AI Decision: Snippet enough or Visit?
-            let decision = "STAY"; 
-            try {
-                const decisionPrompt = `User Question: "${query}"
-                
-                Search Results Snippets:
-                ${pageText.substring(0, 4000)}
-                
-                Available Links to Explore:
-                ${links.map((l, i) => `[${i}] ${l.title} - ${l.url}`).join('\n')}
-                
-                Based on the snippets, choose the most efficient path:
-                1. STAY [Summarized Answer]: Use this if the snippets or info-cards clearly show the definitive answer (e.g. "Scores are 145/2", "The winner was X"). Do NOT visit a site if the SERP snippet is sufficient.
-                2. VISIT [URL]: Use this only if the snippets are vague, missing crucial data, or you need deep details that aren't visible on the search results page.
-                3. NONE: Use this if absolutely nothing relevant is found.
-                
-                Respond with ONLY the command (STAY [text] or VISIT [url] or NONE). Be lazy but smart: prefer STAY if possible.`;
+            // 2. Memory Context & Fast-Track Logic
+            const memory = await NuroMemory.findOne({ userId }).lean();
+            const failedDomains = memory?.browserIntelligence?.failedDomains || [];
+            
+            const deepDiveKeywords = ["go deep", "find forms", "apply", "deep dive", "explore", "details", "internship", "job"];
+            const needsDeep = deepDiveKeywords.some(k => query.toLowerCase().includes(k));
 
-                decision = await generateWithFallback(decisionPrompt, "You are a web search strategist.", [], [], { forceJson: false });
-                console.log(`[BrowserAgent] Search Decision: ${decision}`);
-            } catch (err) {
-                console.error(`[BrowserAgent] AI Decision failed (likely quota limit). Defaulting to STAY fallback: ${err.message}`);
-                await this.emitFrame(socket, userId, page, "AI limit reached. Optimizing and using available snippets directly...");
-                decision = "STAY"; // Absolute fallback to keep the workflow moving
-            }
-
-            let finalContent = pageText;
-            let finalUrl = page.url();
-
-            if (decision.startsWith("VISIT")) {
-                let targetUrl = decision.replace("VISIT", "").trim();
-                
-                // Sanitize: Remove common AI wrappers like [ ], " ", ( )
-                targetUrl = targetUrl.replace(/^[\[\("']+|[\]\)"']+$/g, '');
-                
-                // Validate protocol
-                if (!targetUrl.startsWith('http')) {
-                    targetUrl = 'https://' + targetUrl;
-                }
-
-                console.log(`[BrowserAgent] Deep-diving into: ${targetUrl}`);
-                await this.logExecutionStep(userId, `Opening: ${targetUrl.split('/')[2]} for more details`, "info", socket);
-                await this.emitFrame(socket, userId, page, `Opening: ${targetUrl.split('/')[2]} for more details...`);
-                
+            let plan = { action: "STAY" };
+            
+            if (needsDeep || links.length === 0) {
                 try {
-                    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-                    await page.waitForTimeout(2000); 
-                    
-                    // Auto-clear common cookie consent banners obstructing innerText
-                    await page.evaluate(() => {
-                        const buttons = Array.from(document.querySelectorAll('button, a', 'div[role="button"]'));
-                        const acceptBtn = buttons.find(b => /(accept all|agree|allow all|got it|accept cookies)/i.test(b.innerText || b.textContent));
-                        if (acceptBtn) acceptBtn.click();
-                    }).catch(() => {});
-                    
-                    await page.waitForTimeout(1500);
-
-                    // Trigger the visual scrolling effect to scan the page
-                    await this.autoScrollAndStream(page, socket, userId);
-
-                    finalContent = await page.innerText('body');
-                    finalUrl = page.url();
-                    await this.logExecutionStep(userId, "Deep page data extracted.", "success", socket);
-                    await this.emitFrame(socket, userId, page, "Data extraction complete.");
-                } catch (navErr) {
-                    console.error(`[BrowserAgent] Deep navigation failed: ${navErr.message}. Falling back to snippets.`);
-                    await this.emitFrame(socket, userId, page, "Site blocked/timed out. Falling back to search snippets...");
+                     const decisionPrompt = `User Question: "${query}"
+                     
+                     Search Results Snippets:
+                     ${pageText.substring(0, 3000)}
+                     
+                     Available Links to Explore:
+                     ${links.map((l, i) => `[${i}] ${l.title} - ${l.url}`).join('\n')}
+                     
+                     BLACKLISTED DOMAINS: ${JSON.stringify(failedDomains)}. Do NOT visit these.
+                     
+                     The user explicitly requires a deep dive or forms to be found.
+                     Select 1 to 3 URLs that are most likely to contain the targeted data for exploration.
+                     
+                     Respond STRICTLY in JSON format:
+                     { "action": "EXPLORE", "urls": ["url1", "url2"] }
+                     Or { "action": "STAY", "reason": "No valid deep links available" }`;
+                     
+                     const decisionRes = await generateWithFallback(decisionPrompt, "You are a web search strategist.", [], [], { forceJson: true });
+                     plan = JSON.parse(decisionRes.replace(/```json|```/g, '').trim());
+                     console.log(`[BrowserAgent] Search Plan:`, plan);
+                } catch (e) {
+                     console.log("[BrowserAgent] AI Decision failed, defaulting to STAY.", e.message);
                 }
-            } else if (decision.startsWith("STAY")) {
-                console.log("[BrowserAgent] Snippet extraction mode active.");
+            } else {
+                 console.log("[BrowserAgent] Snippet mode engaged. Fast response path.");
+            }
+            
+            let finalContent = pageText;
+            let finalUrl = searchUrl;
+
+            if (plan.action === "EXPLORE" && plan.urls && plan.urls.length > 0) {
+                 for (let targetUrl of plan.urls) {
+                     // Sanitize URL
+                     targetUrl = targetUrl.replace(/^[\[\("']+|[\]\)"']+$/g, '');
+                     if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
+                     
+                     let domainCode = "Unknown";
+                     try { domainCode = new URL(targetUrl).hostname; } catch (e) {}
+
+                     console.log(`[BrowserAgent] Deep-diving into: ${targetUrl}`);
+                     await this.logExecutionStep(userId, `Exploring: ${domainCode}`, "info", socket);
+                     await this.emitFrame(socket, userId, page, `Exploring: ${domainCode}...`);
+                     
+                     try {
+                         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+                         await page.waitForTimeout(1000); 
+                         await this.autoScrollAndStream(page, socket, userId, 2, 500);
+                         
+                         const innerText = await page.innerText('body');
+                         
+                         // Form/Data Quality Assessment
+                         if (innerText.length > 300 && !innerText.includes("Access Denied") && !innerText.includes("captcha")) {
+                             finalContent = innerText;
+                             finalUrl = page.url();
+                             await this.logExecutionStep(userId, `Valuable data extracted from ${domainCode}.`, "success", socket);
+                             // Reinforce Memory
+                             this.updateBrowserMemory(userId, domainCode, true, "Success");
+                             break; // Exit loop early! Data acquired.
+                         } else {
+                             await this.logExecutionStep(userId, `Limited data on ${domainCode}. Checking alternatives...`, "warn", socket);
+                             this.updateBrowserMemory(userId, domainCode, false, "Limited or blocked data");
+                         }
+                     } catch (navErr) {
+                         console.error(`[BrowserAgent] Deep navigation failed for ${targetUrl}:`, navErr.message);
+                         await this.logExecutionStep(userId, `Failed to load ${domainCode}. Trying next...`, "error", socket);
+                         this.updateBrowserMemory(userId, domainCode, false, "Navigation timeout or crash");
+                     }
+                 }
+            } else {
+                 await this.emitFrame(socket, userId, page, "Snippet extraction mode engaged. Writing report...");
             }
 
             // --- QUOTA BREATHER ---
             // Small delay to prevent hitting RPM limits when making back-to-back calls
             await new Promise(r => setTimeout(r, 1500)); 
 
-            // 3. Final Extraction: Business Grace & Conversational Follow-up
+            // 3. Final Extraction: Data-first, Business Grace
             await this.logExecutionStep(userId, "Completing professional strategic report...", "info", socket);
             const extractionPrompt = `User Question: "${query}"
             Current URL: ${finalUrl}
             
-            TASK: As the Nurotra Professional Assistant, provide the final results of your investigation based EXCLUSIVELY on the provided content.
+            TASK: Extract and present the ACTUAL DATA the user asked for from the content below.
             
-            TONE & PERSONALITY:
-            - FOLLOW-UP CONNECTION: Frame this as a continuation of your task.
-            - BUSINESS GRACE: Maintain respectful, elegant, and simple language.
-            - INTEGRATED NARRATIVE: Weave findings together naturally. 
-            - NO ASKING FOR PERMISSION: Never ask the user "Would you like me to explore further?" or tell them you couldn't do it. Just provide the BEST possible definitive output based on the extraction.
+            CRITICAL RULES:
+            1. EXTRACT REAL DATA: Pull out actual numbers, scores, dates, names, facts, statistics that are visible in the content. For example if the user asked for "IPL live scores", find and present the actual team names and scores (e.g., "• **Mumbai Indians**: 178/4 (20 overs) vs **Chennai Super Kings**: 162/8 (20 overs)").
+            2. NEVER list or describe websites. Do NOT say "ESPN provides..." or "Cricbuzz offers...". The user wants the DATA, not a directory of sources.
+            3. If actual data IS present in the snippets (scores, names, facts), extract and present it beautifully with bullet points.
+            4. If the actual data is genuinely NOT in the content (e.g., no scores visible), say so gracefully: "The exact live scores aren't available in the current search results. Would you like me to go deep into a sports site to fetch them?"
+            5. NEVER hallucinate or invent data. Only use what's actually in the CONTENT below.
+            6. NEVER tell the user to visit a website themselves. Offer to do it for them.
             
-            CONTENT REQUIREMENTS & ABSOLUTE ACCURACY:
-            - AUTHENTIC DATA ONLY: Extract and use only the REAL team names, scores, and facts from the CONTENT below. Do not guess.
-            - DECISIVENESS: Synthesize the closest relevant data available into a definitive result. Do not ask the user for permission to do more work.
-            - VISUAL CLARITY: Use clean bullet points (•) for data density. Bold keys where appropriate (**Team Name**: Detail).
-            - COMPREHENSIVENESS: Include scores, dates, teams, and next schedules if applicable.
-            
-            SOURCE BRANDING:
-            - At the end, add: "Source: ${finalUrl}"
+            FORMAT:
+            - Use bullet points (•) for data items
+            - Bold key names (**Team**: Score)
+            - Keep it concise and data-dense
+            - End with: "Source: ${finalUrl}"
             
             CONTENT TO ANALYZE:
             ${finalContent.substring(0, 10000)}`;
@@ -377,6 +431,8 @@ class BrowserAgentService {
 
             // Logic for specific platforms would go here
             // For now, we use a generic AI-driven loop
+            this.io = socket?.server || socket; // Set the IO instance for this session
+            const socketId = options.socketId || null;
             
             let completed = false;
             let steps = 0;
@@ -384,7 +440,7 @@ class BrowserAgentService {
 
             while (!completed && steps < maxSteps) {
                 const snapshot = await this.getSnapshot(page);
-                await this.emitFrame(socket, userId, page, `Executing step ${steps + 1}: Analyzing dashboard...`);
+                await this.emitFrame(socket, userId, page, `Executing step ${steps + 1}: Analyzing dashboard...`, socketId);
 
                 const decisionPrompt = `You are controlling a browser to perform this task: "${taskDescription}" on "${platform}".
                 Current URL: ${page.url()}
@@ -395,10 +451,11 @@ class BrowserAgentService {
                 2. CLICK [selector]
                 3. TYPE [selector] [text]
                 4. WAIT [ms]
-                5. COMPLETE [success message]
-                6. FAIL [error message]
+                5. INTERVENE [A question for the user asking for missing data/files]
+                6. COMPLETE [success message]
+                7. FAIL [error message]
                 
-                Respond with ONLY the command.`;
+                Respond with ONLY the command. If you find a form that requires data you don't have (like a phone number, specific file, or SSN), use INTERVENE to ask the user.`;
 
                 const decision = await generateWithFallback(decisionPrompt, "You are a browser automation controller.");
                 console.log(`[BrowserAgent] Decision: ${decision}`);
@@ -427,6 +484,24 @@ class BrowserAgentService {
                     const ms = parseInt(decision.replace("WAIT", "").trim());
                     await this.logExecutionStep(userId, `Waiting for ${ms}ms`, "info", socket);
                     await page.waitForTimeout(ms);
+                } else if (decision.startsWith("INTERVENE")) {
+                    const question = decision.replace("INTERVENE", "").trim();
+                    await this.logExecutionStep(userId, `Waiting for user: ${question}`, "warn", socket);
+                    
+                    // Update workflow status to intervention
+                    const wf = await ActionWorkflow.findOne({ userId, status: "running" }).sort({ startTime: -1 });
+                    if (wf) {
+                        wf.status = "intervention";
+                        wf.activeMicroLog = question;
+                        await wf.save();
+                    }
+
+                    // Save the question into chat
+                    await this.safeSaveMessage(userId, "agent", `I need your help: ${question}`, "clarification");
+                    
+                    if (this.io) this.io.to(userId.toString()).emit("chat_update", { userId });
+                    
+                    return { success: true, status: "intervention", message: question };
                 } else if (decision.startsWith("COMPLETE")) {
                     completed = true;
                     const msg = decision.replace("COMPLETE", "").trim();
@@ -466,8 +541,122 @@ class BrowserAgentService {
             return { success: true, message: `Task paused/incomplete. REASON: ${failAdvice}`, data: { advice: failAdvice } };
         } catch (error) {
             console.error("[BrowserAgent] Task failed:", error.message);
+            
+            // --- SELF-HEALING LOOP ---
+            const recovery = await this.troubleshoot(page, userId, socket, error);
+            if (recovery.success) {
+                return await this.executeTask(userId, platform, taskDescription, socket, { ...options, retryCount: (options.retryCount || 0) + 1 });
+            }
+
             await page.close();
-            return { success: false, message: `Execution Error: ${error.message}. TIP: Ensure you are logged in or provide more specific selectors.` };
+            return { success: false, message: `Execution Error: ${error.message}. TIP: ${recovery.advice || "Ensure you are logged in or provide more specific selectors."}` };
+        }
+    }
+
+    /**
+     * Autonomously troubleshoot an execution error.
+     * Takes a screenshot, analyzes the DOM, and suggests a fix or workaround.
+     */
+    async troubleshoot(page, userId, socket, error) {
+        if (!page) return { success: false };
+        
+        try {
+            await this.logExecutionStep(userId, `[Self-Healing] Troubleshooting execution error: ${error.message.substring(0, 50)}...`, "warn", socket, true);
+            const snapshot = await this.getSnapshot(page);
+            
+            const troubleshootPrompt = `The Action Agent hit an error: "${error.message}".
+            Current URL: ${page.url()}
+            Visible Content: ${snapshot.text.substring(0, 3000)}
+            
+            As the Self-Healing Engine, analyze why this failed (e.g., target element not visible, page changed, or session expired).
+            Respond with STRICT JSON:
+            {
+              "canFix": boolean,
+              "action": "REFRESH" | "WAIT" | "GO_BACK" | "CLICK_PARENT" | "NONE",
+              "advice": "1-sentence tip for the user",
+              "reasoning": "Why it failed"
+            }`;
+
+            const res = await generateWithFallback(troubleshootPrompt, "You are a high-precision browser troubleshooting engine.");
+            const decision = JSON.parse(res.replace(/```json|```/g, '').trim());
+
+            if (decision.canFix && decision.action !== "NONE") {
+                await this.logExecutionStep(userId, `[Self-Healing] Attempting recovery: ${decision.action}...`, "info", socket);
+                if (decision.action === "REFRESH") await page.reload({ waitUntil: 'domcontentloaded' });
+                if (decision.action === "WAIT") await page.waitForTimeout(5000);
+                if (decision.action === "GO_BACK") await page.goBack();
+                
+                return { success: true };
+            }
+
+            return { success: false, advice: decision.advice };
+        } catch (e) {
+            return { success: false };
+        }
+    }
+
+    /**
+     * Specialized LLM solver for MCQs, quizzes, and complex form structures.
+     * Scrapes question blocks and uses user profile data for grounded answers.
+     */
+    async solveFormIntelligently(page, userId, socket) {
+        try {
+            await this.logExecutionStep(userId, "Engaging High-Intelligence Solver for form/quiz items...", "info", socket);
+            
+            // 1. Scrape form elements with context
+            const formElements = await page.evaluate(() => {
+                const elements = [];
+                // Target: Labels, Inputs, Selects, Radio Groups
+                const containers = document.querySelectorAll('div, form, section');
+                containers.forEach(container => {
+                    const label = container.innerText.split('\n')[0].substring(0, 100);
+                    const inputs = Array.from(container.querySelectorAll('input, select, textarea, [role="radio"]'));
+                    if (inputs.length > 0) {
+                        elements.push({
+                            context: label,
+                            options: inputs.map((inp, idx) => ({
+                                type: inp.type || inp.getAttribute('role'),
+                                id: inp.id || inp.name || `el_${idx}`,
+                                value: inp.value,
+                                text: inp.labels?.[0]?.innerText || inp.parentElement?.innerText || ""
+                            }))
+                        });
+                    }
+                });
+                return elements.filter(e => e.context.trim() && e.options.length > 0).slice(0, 15);
+            });
+
+            // 2. Fetch User Profile for Grounding
+            const profile = await agentResourceService.getMasterProfile(userId);
+            const userContext = profile ? JSON.stringify(profile.data) : "No specific user data available. Use general knowledge.";
+
+            // 3. Ask LLM to solve the batch
+            const solverPrompt = `You are a professional quiz and form solver. 
+            User Context: ${userContext}
+            Form Elements: ${JSON.stringify(formElements)}
+            
+            Provide the correct values or option indices to select.
+            Respond with STRICT JSON array of actions:
+            [{ "context": "...", "type": "TYPE" | "CLICK", "selector": "id_or_name", "value": "..." }]
+            `;
+
+            const actionsText = await generateWithFallback(solverPrompt, "You are a high-intelligence precision solver.");
+            const actions = JSON.parse(actionsText.replace(/```json|```/g, '').trim());
+
+            for (const action of actions) {
+                await this.logExecutionStep(userId, `Filling: ${action.context}...`, "info", socket);
+                if (action.type === "CLICK") {
+                    await page.click(`[id="${action.selector}"], [name="${action.selector}"], :text("${action.value}")`).catch(() => {});
+                } else if (action.type === "TYPE") {
+                    await page.fill(`[id="${action.selector}"], [name="${action.selector}"]`, action.value).catch(() => {});
+                }
+                await page.waitForTimeout(500);
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error("[BrowserAgent] Intelligent solver failed:", error);
+            return { success: false };
         }
     }
 
@@ -533,29 +722,43 @@ class BrowserAgentService {
     /**
      * Stream a screenshot to the frontend via Socket.io
      */
-    async emitFrame(socket, userId, page, statusMessage) {
-        const io = this.io || socket?.server; // Fallback to provided socket if global io not set
+    async emitFrame(socket, userId, page, statusMessage, directSocketId = null) {
+        const io = this.io || socket?.server || (socket?.emit ? null : socket); 
         if (!io) return;
         
         try {
-            // Check for blocks every few frames
-            if (Math.random() > 0.7) {
+            // Check for blocks intermittently
+            if (Math.random() > 0.8) {
                 this.checkBlock(userId, page, socket);
             }
 
             const screenshot = await page.screenshot({ type: 'jpeg', quality: 50 });
             const base64 = screenshot.toString('base64');
+            const timestamp = new Date();
             
-            // Broadcast to the user's room so all tabs are synced
+            // 1. Broadcast to everyone in the user's room (Multi-tab sync)
             io.to(userId.toString()).emit("browser_frame", {
                 userId,
                 frame: `data:image/jpeg;base64,${base64}`,
                 status: statusMessage,
                 url: page.url(),
-                timestamp: new Date()
+                timestamp,
+                isHeartbeat: statusMessage === "HEARTBEAT"
             });
+
+            // 2. Direct-to-Socket Target (Fail-safe for active tab)
+            if (directSocketId) {
+                io.to(directSocketId).emit("browser_frame", {
+                    userId,
+                    frame: `data:image/jpeg;base64,${base64}`,
+                    status: statusMessage,
+                    url: page.url(),
+                    timestamp,
+                    isHeartbeat: statusMessage === "HEARTBEAT"
+                });
+            }
         } catch (e) {
-            console.warn("[BrowserAgent] Failed to emit frame:", e.message);
+            // Silence errors during rapid navigation
         }
     }
 
@@ -592,6 +795,39 @@ class BrowserAgentService {
         } catch (e) {
             console.error("[BrowserAgent] Failed to capture proof:", e.message);
             return null;
+        }
+    }
+    /**
+     * Helper to silently update NuroMemory Website Heuristics
+     */
+    async updateBrowserMemory(userId, domain, success, reason) {
+        try {
+            let memory = await NuroMemory.findOne({ userId });
+            if (!memory) return;
+            
+            if (!memory.browserIntelligence) {
+                memory.browserIntelligence = { failedDomains: [], successfulDomains: [] };
+            }
+            
+            if (success) {
+                memory.browserIntelligence.failedDomains = memory.browserIntelligence.failedDomains.filter(d => !d.includes(domain));
+                if (!memory.browserIntelligence.successfulDomains.includes(domain)) {
+                    memory.browserIntelligence.successfulDomains.push(domain);
+                }
+            } else {
+                memory.browserIntelligence.successfulDomains = memory.browserIntelligence.successfulDomains.filter(d => !d.includes(domain));
+                if (!memory.browserIntelligence.failedDomains.includes(domain)) {
+                    memory.browserIntelligence.failedDomains.push(domain);
+                }
+            }
+            memory.browserIntelligence.lastUpdated = Date.now();
+            
+            memory.browserIntelligence.failedDomains = [...new Set(memory.browserIntelligence.failedDomains)].slice(-20);
+            memory.browserIntelligence.successfulDomains = [...new Set(memory.browserIntelligence.successfulDomains)].slice(-20);
+            
+            await memory.save();
+        } catch (e) {
+            console.error("[BrowserAgent] Memory update failed:", e.message);
         }
     }
 }

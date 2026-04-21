@@ -51,9 +51,15 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-socket-id'],
     exposedHeaders: ['Content-Disposition']
 }));
+
+// REQUEST MONITOR (Debug)
+app.use((req, res, next) => {
+    console.log(`[Request] ${new Date().toISOString().split('T')[1].split('.')[0]} | ${req.method} ${req.url} | From: ${req.headers.origin || 'Unknown'}`);
+    next();
+});
 
 const passport = require("./config/passport");
 app.use(passport.initialize());

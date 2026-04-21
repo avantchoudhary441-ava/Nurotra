@@ -5,6 +5,9 @@ const ActionWorkflow = require("../models/ActionWorkflow");
 const EventRule = require("../models/EventRule");
 const ActionMessage = require("../models/ActionMessage");
 const User = require("../models/User");
+const Document = require("../models/Document");
+const Resource = require("../models/Resource");
+const agentResourceService = require("../services/agentResourceService");
 const systemLoggerService = require("../services/systemLoggerService");
 const browserAgentService = require("../services/browserAgentService");
 const { executeStep, mapStepToExecutor } = require("../services/actionExecutionService");
@@ -22,22 +25,77 @@ exports.executeCommand = async (req, res) => {
             return res.status(400).json({ success: false, message: "Command is required." });
         }
 
-        const userIdFilter = req.user ? { userId: req.user._id } : { userId: DEV_USER_ID };
+        const socketId = req.headers['x-socket-id'];
+
+        // 1. Check for Active Intervention or Running Tasks
+        const userId = req.user ? req.user._id : DEV_USER_ID;
+        const userIdFilter = { userId };
         
-        // Prevent concurrent executions for active tasks
-        if (mongoose.connection.readyState === 1) {
-            const runningTask = await ActionWorkflow.findOne({ 
-                ...userIdFilter, 
-                status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] },
-                type: { $ne: 'scheduled' }
+        const activeTask = await ActionWorkflow.findOne({ 
+            ...userIdFilter, 
+            status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] },
+            type: { $ne: 'scheduled' }
+        });
+
+        // 2. Resume Intervention if it exists
+        if (activeTask && activeTask.status === "intervention") {
+            const userMsg = new ActionMessage({
+                userId,
+                role: "user",
+                content: command,
+                type: "text"
             });
-            if (runningTask) {
-                return res.status(400).json({ success: false, message: "Please wait until the current task is fully executed before starting a new one." });
+            await userMsg.save();
+
+            // Check if this is a resume ingestion intervention
+            const resumeMatch = command.match(/I've uploaded my resume: ([a-f0-9]{24})/i);
+            if (resumeMatch) {
+                const documentId = resumeMatch[1];
+                const doc = await Document.findById(documentId);
+                if (doc) {
+                    await agentResourceService.ingestResume(userId, doc.content, documentId);
+                    
+                    // Add confirmation message
+                    await new ActionMessage({
+                        userId,
+                        role: "agent",
+                        content: "I have successfully saved your resume details to my Resource Engine. I'll use these to assist you with high precision for all future tasks.",
+                        type: "text"
+                    }).save();
+                }
             }
+
+            // Store the response in the active micro log and resume
+            activeTask.activeMicroLog = `Resuming with user input: "${command}"`;
+            activeTask.status = "running";
+            
+            // Inject the answer into the current step's resultData for the executor to see
+            const currentStep = activeTask.steps.find(s => s.status === "intervention") || activeTask.steps[0];
+            if (currentStep) {
+                currentStep.status = "running";
+                currentStep.resultData = { ...currentStep.resultData, interventionResponse: command };
+            }
+            await activeTask.save();
+
+            if (req.io) req.io.emit('chat_update', { userId });
+            console.log(`[DEBUG] Resuming active task ${activeTask._id} for user ${userId}`);
+
+            // Trigger resumption in the background
+            simulateExecution(activeTask._id, activeTask.steps, req.io, { socketId });
+
+            return res.json({ 
+                success: true, 
+                message: "Resuming task with your provided details...",
+                workflowId: activeTask._id 
+            });
+        }
+
+        // 3. Block if another task is actually running (not intervention)
+        if (activeTask && activeTask.status !== "intervention") {
+            return res.status(400).json({ success: false, message: "A task is already in progress. Please wait for it to finish or pause it before starting a new one." });
         }
 
         // 1. Save User Message
-        const userId = req.user ? req.user._id : DEV_USER_ID;
         const userMsg = new ActionMessage({
             userId,
             role: "user",
@@ -45,17 +103,50 @@ exports.executeCommand = async (req, res) => {
             type: "text"
         });
         await userMsg.save();
-
-        // Fetch last 5 messages for context to handle follow-up queries
-        const recentMessages = await ActionMessage.find({ 
-            userId, 
-            type: { $in: ['text', 'browser_result', 'result', 'clarification'] } 
-        }).sort({ timestamp: -1 }).limit(6);
-        const chatHistory = recentMessages.reverse().slice(0, 5); // Exclude the current message we just saved if it's the 6th, and keep the previous context.
+        console.log(`[DEBUG] User message saved: ${userMsg._id}`);
 
         // 2. Analyze Intent using NLP
         const user = req.user ? await User.findById(req.user._id) : await User.findById(DEV_USER_ID);
-        const parsedData = await actionAgentService.parseActionIntent(command, user ? user.personaMemory : {}, chatHistory);
+        console.log(`[DEBUG] Analyzing intent for user ${user?._id || 'Unknown'}: "${command}"`);
+        let parsedData = await actionAgentService.parseActionIntent(command, user ? user.personaMemory : {});
+        console.log(`[DEBUG] NLP Intent: ${parsedData.intent}`);
+
+        // FORCED CONTINUITY INTERCEPTOR: If user wants to go deep, force intent to FOLLOW_UP
+        const continuityKeywords = ["go deep", "analyze further", "explore more", "tell me more", "expand on", "analyze more", "go deeper"];
+        const isContinuityRequest = continuityKeywords.some(key => command.toLowerCase().includes(key));
+        
+        if (isContinuityRequest && parsedData.intent === "CLARIFICATION") {
+            console.log("[Controller] Forced continuity intercepted for command:", command);
+            parsedData.intent = "FOLLOW_UP";
+        }
+
+        // RESUME GUARD: For job applications, ensure we have a master profile
+        if (parsedData.intent === "BROWSER_TASK" && (command.toLowerCase().includes("apply") || command.toLowerCase().includes("job") || command.toLowerCase().includes("internship"))) {
+            const masterProfile = await agentResourceService.getMasterProfile(userId);
+            if (!masterProfile) {
+                const interventionMsg = new ActionMessage({
+                    userId,
+                    role: "agent",
+                    content: "I'd love to help you with that! Since this is your first time applying, please upload your resume so I can save your skills and details. This will allow me to fill forms accurately and assist you in the future.",
+                    type: "intervention",
+                    metadata: { subtype: 'resume_upload' }
+                });
+                await interventionMsg.save();
+                
+                // Create a placeholder workflow in 'intervention' status
+                const interventionWorkflow = new ActionWorkflow({
+                    userId,
+                    title: `Job Application: ${command}`,
+                    status: "intervention",
+                    intent: "application_flow",
+                    steps: [{ title: "Upload Resume", status: "intervention" }]
+                });
+                await interventionWorkflow.save();
+
+                if (req.io) req.io.emit('chat_update', { userId });
+                return res.json({ success: true, message: "Awaiting resume upload...", workflowId: interventionWorkflow._id });
+            }
+        }
 
         if (parsedData.intent === "CLARIFICATION") {
             await new ActionMessage({
@@ -116,6 +207,43 @@ exports.executeCommand = async (req, res) => {
             });
         }
 
+        if (parsedData.intent === "FOLLOW_UP") {
+            // Find the most recently completed or stopped task to get context
+            const lastTask = await ActionWorkflow.findOne({
+                userId,
+                status: { $in: ["completed", "stopped"] }
+            }).sort({ endTime: -1 });
+
+            if (!lastTask) {
+                return res.json({
+                    success: true,
+                    intent: "CLARIFICATION",
+                    question: "I'd love to go deeper, but I don't see a recent task in our history to continue from. What specifically would you like me to explore?"
+                });
+            }
+
+            // Create a new workflow based on the "Deep Dive" into the previous findings
+            const followUpCommand = `Deep dive into the previous findings about ${lastTask.title}. Specifically: ${command}`;
+            const followUpData = await actionAgentService.parseActionIntent(followUpCommand, user ? user.personaMemory : {});
+            
+            // Inject previous findings as a 'context' parameter into the first action
+            if (followUpData.intent === "WORKFLOW_EXECUTION" && followUpData.workflow.actions.length > 0) {
+                followUpData.workflow.actions[0].params = {
+                    ...followUpData.workflow.actions[0].params,
+                    previousFindings: lastTask.executionLogs.map(l => l.message).join("\n")
+                };
+                
+                // Switch back to WORKFLOW_EXECUTION flow
+                parsedData.intent = "WORKFLOW_EXECUTION";
+                parsedData.workflow = followUpData.workflow;
+            } else {
+                return res.json({
+                    success: true,
+                    intent: "CLARIFICATION",
+                    question: "I understand you want to go deeper. Could you specify which part of the previous results I should focus on?"
+                });
+            }
+        }
         if (parsedData.intent === "WORKFLOW_EXECUTION") {
             const workflowData = parsedData.workflow;
             const isEventDriven = parsedData.isEventDriven || false;
@@ -305,7 +433,7 @@ exports.executeCommand = async (req, res) => {
             if (req.io) req.io.emit('chat_update', { userId });
 
             // Begin background simulation
-            simulateExecution(workflowId, workflowData.actions, req.io);
+            simulateExecution(workflowId, workflowData.actions, req.io, { socketId });
 
             return res.json({
                 success: true,
@@ -799,7 +927,8 @@ const buildMockWorkflow = (workflowData, isEventDriven) => ({
 // ===========================================
 // ASYNC EXECUTION ENGINE (with Background & Intervention Handling)
 // ===========================================
-const simulateExecution = async (workflowId, actionDefs, io = null) => {
+const simulateExecution = async (workflowId, actionDefs, io = null, options = {}) => {
+    const { socketId } = options;
     const { executeStep, validateStep } = require("../services/actionExecutionService");
 
     try {
@@ -960,7 +1089,7 @@ const simulateExecution = async (workflowId, actionDefs, io = null) => {
                         await addMilestone(wf.userId, `⚙️ Syncing data with ${step.params?.platform || 'platform'}...`, io);
                     }
 
-                    result = await executeStep(step, { ...context, socket: io }); // Pass io as socket for real-time frames
+                    result = await executeStep(step, { ...context, socket: io, socketId }); // Pass io as socket for real-time frames
                     success = true;
 
                     // --- ODE HANDOFF: Store result for next step ---
@@ -1088,6 +1217,16 @@ const simulateExecution = async (workflowId, actionDefs, io = null) => {
             }).save();
             
             if (io) io.emit('chat_update', { userId: wf.userId });
+
+            // 5. Send Professional Execution Summary via Email
+            try {
+                const user = await User.findById(wf.userId);
+                if (user && user.email) {
+                    await sendExecutionSummary(user.email, wf, finalSummary, resultSections, context.evidenceUrl);
+                }
+            } catch (emailErr) {
+                console.warn("[Email Summary] Failed to send report:", emailErr.message);
+            }
         }
     } catch (err) {
         console.error("Async Execution Failed:", err);
@@ -1119,6 +1258,58 @@ const simulateExecution = async (workflowId, actionDefs, io = null) => {
             console.error(e);
         }
     }
+};
+
+/**
+ * Sends a rich, professional execution summary to the user's email.
+ */
+const sendExecutionSummary = async (email, wf, summary, sections, evidenceUrl) => {
+    const sendEmail = require("../utils/sendEmail");
+    const subject = `📊 Execution Report: ${wf.title}`;
+    
+    const sectionHtml = sections.map(s => `
+        <div style="margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px; border-left: 4px solid #6c5ce7;">
+            <div style="font-size: 14px; font-weight: bold; color: #333; margin-bottom: 8px;">${s.split(':\n')[0]}</div>
+            <div style="font-size: 13px; color: #555; line-height: 1.5;">${s.split(':\n')[1] || ''}</div>
+        </div>
+    `).join('');
+
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 12px; overflow: hidden;">
+            <div style="background: #000; padding: 30px; text-align: center;">
+                <h1 style="color: #fff; margin: 0; font-size: 24px; letter-spacing: 1px;">NUROTRA</h1>
+                <p style="color: #a29bfe; margin: 10px 0 0 0; font-size: 12px; text-transform: uppercase;">Action Agent Execution Summary</p>
+            </div>
+            <div style="padding: 30px;">
+                <h2 style="color: #333; font-size: 18px; margin-top: 0;">Task Objective: ${wf.title}</h2>
+                <div style="font-size: 14px; color: #666; margin-bottom: 20px;">Completed on ${new Date().toLocaleString()}</div>
+                
+                ${sectionHtml}
+
+                ${evidenceUrl ? `
+                <div style="margin-top: 30px;">
+                    <div style="font-size: 12px; font-weight: bold; color: #888; margin-bottom: 10px; text-transform: uppercase;">Execution Proof</div>
+                    <img src="${evidenceUrl}" style="width: 100%; border-radius: 8px; border: 1px solid #eee;" alt="Report Screenshot" />
+                </div>
+                ` : ''}
+
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center;">
+                    <a href="https://nurotra.online/action-agent" style="background: #6c5ce7; color: #fff; padding: 12px 24px; border-radius: 30px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">View full Activity Feed</a>
+                </div>
+            </div>
+            <div style="background: #f4f4f4; padding: 20px; text-align: center; font-size: 11px; color: #999;">
+                This report was generated autonomously by Nurotra Action Agent.<br>
+                © 2026 Nurotra AI Labs. Professional Stealth Mode Active.
+            </div>
+        </div>
+    `;
+
+    await sendEmail({
+        email,
+        subject,
+        message: summary, // Text fallback
+        html
+    });
 };
 
 /**

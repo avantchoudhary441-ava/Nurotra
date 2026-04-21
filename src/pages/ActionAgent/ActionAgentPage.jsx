@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import { API_BASE_URL } from '../../config';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, Sparkles, Globe, User, ShieldAlert, AlertCircle, RefreshCw, X, Paperclip, CheckCircle2, AlertTriangle, Play, Pause, Activity, Terminal, Menu, Bot, Plus, Mic, MicOff } from 'lucide-react';
 import './ActionAgent.css';
@@ -56,13 +55,15 @@ const ActionAgentPage = () => {
     const [leftPaneWidth, setLeftPaneWidth] = useState(40); // Percentage
     const [isResizing, setIsResizing] = useState(false);
     const [userName, setUserName] = useState('there');
-    const monitorImgRef = useRef(null);
     const socketRef = useRef(null);
     const containerRef = useRef(null);
+    const fileInputRef = useRef(null);
     const [topPaneHeight, setTopPaneHeight] = useState(60); // Percentage
     const [isResizingVert, setIsResizingVert] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef(null);
+    const monitorImgRef = useRef(null);
+    const [lastPulse, setLastPulse] = useState(null);
 
     // Vertical Resizing Logic
     useEffect(() => {
@@ -87,8 +88,8 @@ const ActionAgentPage = () => {
 
     const fetchTasks = async (customToken) => {
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = customToken || userObj.token;
-            const activeRes = await fetch(`${API_BASE_URL}/api/action-agent/active-tasks`, {
+            const token = customToken || (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const activeRes = await fetch("http://localhost:5000/api/action-agent/active-tasks", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             const activeData = await activeRes.json();
@@ -106,8 +107,8 @@ const ActionAgentPage = () => {
 
     const fetchChat = async (customToken) => {
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = customToken || userObj.token;
-            const res = await fetch(`${API_BASE_URL}/api/action-agent/chat`, {
+            const token = customToken || (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const res = await fetch("http://localhost:5000/api/action-agent/chat", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             const data = await res.json();
@@ -121,8 +122,8 @@ const ActionAgentPage = () => {
 
     const fetchSuggestions = async (customToken) => {
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = customToken || userObj.token;
-            const res = await fetch(`${API_BASE_URL}/api/action-agent/suggestions`, {
+            const token = customToken || (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const res = await fetch("http://localhost:5000/api/action-agent/suggestions", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             const data = await res.json();
@@ -141,8 +142,8 @@ const ActionAgentPage = () => {
 
     const fetchHistory = async (customToken) => {
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = customToken || userObj.token;
-            const res = await fetch(`${API_BASE_URL}/api/action-agent/history`, {
+            const token = customToken || (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const res = await fetch("http://localhost:5000/api/action-agent/history", {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             const data = await res.json();
@@ -158,12 +159,24 @@ const ActionAgentPage = () => {
         if (!globalSocket) return;
         socketRef.current = globalSocket;
 
+        // Explicitly join the execution room for this user to ensure monitor sync
+        if (user?._id) {
+            socketRef.current.emit('join-room', user._id);
+        }
+
         socketRef.current.on('browser_frame', (data) => {
             setBrowserFrame(data);
             setMonitorLoadingStart(null);
             setShowMonitorTroubleshoot(false);
             setMonitorVisible(true);
-            setIsConnecting(false); // Woke up!
+            setIsConnecting(false);
+
+            // Move to running state if we were connecting
+            setIsConnecting(false);
+            setMonitorLoadingStart(null);
+            
+            // Pulse the activity indicator to show it's alive
+            setLastPulse(Date.now());
         });
 
         socketRef.current.on('browser_block', (data) => {
@@ -175,6 +188,22 @@ const ActionAgentPage = () => {
             if (data.userId === user?._id) {
                 fetchTasks();
             }
+        });
+
+        socketRef.current.on('execution_log', (data) => {
+            // Move to running state if we were connecting
+            setIsConnecting(false);
+            setMonitorLoadingStart(null);
+            
+            // Update the live feed with the latest granular log
+            setExecutionLogs(prev => {
+                const updated = [...prev, {
+                    ...data,
+                    _id: data._id || 'log_' + Date.now()
+                }].slice(-50); // Keep last 50 for performance
+                return updated;
+            });
+            setLastPulse(Date.now());
         });
 
         socketRef.current.on('chat_update', () => {
@@ -194,7 +223,7 @@ const ActionAgentPage = () => {
     }, [globalSocket, user]);
 
     useEffect(() => {
-        const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
+        const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
         fetchChat(token);
         fetchTasks(token);
         fetchSuggestions(token);
@@ -245,7 +274,7 @@ const ActionAgentPage = () => {
             }
         };
         const handleMouseUp = () => setIsResizing(false);
-        
+
         if (isResizing) {
             window.addEventListener('mousemove', handleMouseMove);
             window.addEventListener('mouseup', handleMouseUp);
@@ -289,8 +318,8 @@ const ActionAgentPage = () => {
     const loadWorkflow = async (id) => {
         setActiveWorkflowId(id);
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
-            const res = await fetch(`${API_BASE_URL}/api/action-agent/logs/${id}`, {
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const res = await fetch(`http://localhost:5000/api/action-agent/logs/${id}`, {
                 headers: { "Authorization": `Bearer ${token}` }
             });
             const data = await res.json();
@@ -306,8 +335,8 @@ const ActionAgentPage = () => {
     const handleNewChat = async (silent = false) => {
         if (!silent && !window.confirm("Start a new session? Current progress will be archived.")) return;
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
-            await fetch(`${API_BASE_URL}/api/action-agent/chat`, { 
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            await fetch("http://localhost:5000/api/action-agent/chat", {
                 method: "DELETE",
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -328,12 +357,13 @@ const ActionAgentPage = () => {
         setIsConnecting(true); // Wake up monitor
 
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
-            const response = await fetch(`${API_BASE_URL}/api/action-agent/execute`, {
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const response = await fetch("http://localhost:5000/api/action-agent/execute", {
                 method: "POST",
-                headers: { 
+                headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
+                    "Authorization": `Bearer ${token}`,
+                    "x-socket-id": socketRef.current?.id || ""
                 },
                 body: JSON.stringify({ command: text })
             });
@@ -366,8 +396,8 @@ const ActionAgentPage = () => {
         const taskId = activeTasks[0]?._id;
         if (!taskId) return;
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
-            await fetch(`${API_BASE_URL}/api/action-agent/stop/${taskId}`, { 
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            await fetch(`http://localhost:5000/api/action-agent/stop/${taskId}`, {
                 method: 'POST',
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -382,8 +412,8 @@ const ActionAgentPage = () => {
         const taskId = activeTasks[0]?._id;
         if (!taskId) return;
         try {
-            const userObj = JSON.parse(localStorage.getItem('nurotra_user') || '{}'); const token = userObj.token;
-            await fetch(`${API_BASE_URL}/api/action-agent/pause/${taskId}`, { 
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            await fetch(`http://localhost:5000/api/action-agent/pause/${taskId}`, {
                 method: 'POST',
                 headers: { "Authorization": `Bearer ${token}` }
             });
@@ -410,6 +440,68 @@ const ActionAgentPage = () => {
     const handleQuickAction = (actionText) => {
         setCommandInput(actionText);
         sendCommand(actionText);
+    };
+
+    const handleInterventionLink = async (workflowId, link) => {
+        if (!link.trim()) return;
+        setIsLoading(true);
+        try {
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const res = await fetch("http://localhost:5000/api/action-agent/execute", {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`,
+                    "x-socket-id": socketRef.current?.id
+                },
+                body: JSON.stringify({ command: link, isIntervention: true })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setCommandInput('');
+            }
+        } catch (error) {
+            console.error("Intervention Link Error:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsLoading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('purpose', 'resume_ingestion');
+
+        try {
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const res = await fetch("http://localhost:5000/api/upload", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` },
+                body: formData
+            });
+            const data = await res.json();
+            
+            if (data.documentId) {
+                // Resume the task with the document ID
+                await fetch("http://localhost:5000/api/action-agent/execute", {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json", 
+                        "Authorization": `Bearer ${token}`,
+                        "x-socket-id": socketRef.current?.id
+                    },
+                    body: JSON.stringify({ command: `I've uploaded my resume: ${data.documentId}`, isIntervention: true })
+                });
+            }
+        } catch (error) {
+            console.error("File Ingestion Error:", error);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // Smart renderer for structured AI output — muted, human-designed
@@ -494,7 +586,7 @@ const ActionAgentPage = () => {
     };
 
     return (
-        <div 
+        <div
             className="action-workspace-container"
             style={{ userSelect: (isResizing || isResizingVert) ? 'none' : 'auto' }}
         >
@@ -503,10 +595,10 @@ const ActionAgentPage = () => {
                 <div className="history-header">
                     <Activity size={14} /> Session History
                 </div>
-                
+
                 {/* --- Sidebar Actions --- */}
                 <div style={{ padding: '16px 12px 10px 12px' }}>
-                    <button 
+                    <button
                         onClick={() => { handleNewChat(); setIsSidebarOpen(false); }}
                         style={{
                             width: '100%',
@@ -536,8 +628,8 @@ const ActionAgentPage = () => {
                         <div style={{ padding: 20, textAlign: 'center', opacity: 0.3, fontSize: 11 }}>No past sessions found</div>
                     ) : (
                         pastWorkflows.map(wf => (
-                            <div 
-                                key={wf._id} 
+                            <div
+                                key={wf._id}
                                 className={`history-item ${activeWorkflowId === wf._id ? 'active' : ''}`}
                                 onClick={() => loadWorkflow(wf._id)}
                             >
@@ -551,58 +643,101 @@ const ActionAgentPage = () => {
 
             {/* --- SPLIT LAYOUT CONTENT --- */}
             <div ref={containerRef} className="action-split-layout">
-                
+
                 {/* --- LEFT SIDE: EXECUTION STAGE --- */}
-                <div 
+                <div
                     className="action-left-pane-split"
                     style={{ width: `${leftPaneWidth}%`, display: 'flex' }}
                 >
-                        {/* Upper Half: Execution Monitor */}
-                        <div className="execution-monitor-section" style={{ height: `${topPaneHeight}%`, flex: 'none' }}>
-                            <div className="terminal-header">
-                                <Activity size={12} /> Active Task Monitor
-                                {(activeTasks.length > 0 || isConnecting) && (
-                                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: '9px', color: '#00ff88' }}>
-                                        <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 1.5s infinite' }} />
-                                        LIVE FEED
-                                    </div>
-                                )}
-                            </div>
-                            <div style={{ flex: 1, backgroundColor: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {browserFrame ? (
-                                    <img
-                                        ref={monitorImgRef}
-                                        src={browserFrame.frame}
-                                        alt="Browser View"
-                                        onClick={handleMonitorClick}
-                                        style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'crosshair' }}
-                                    />
-                                ) : isConnecting && !browserFrame ? (
-                                    <div style={{ textAlign: 'center', color: '#333' }}>
-                                        <Loader2 size={30} className="spin-icon" style={{ marginBottom: 15 }} />
-                                        <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '2px' }}>Preparing your secure environment...</div>
-                                    </div>
-                                ) : (
-                                    <div style={{ opacity: 0.1, textAlign: 'center' }}>
-                                        <Globe size={48} />
-                                        <div style={{ fontSize: '12px', marginTop: 10 }}>Standby</div>
-                                    </div>
-                                )}
-                            </div>
+                    {/* Upper Half: Execution Monitor */}
+                    <div className="execution-monitor-section" style={{ height: `${topPaneHeight}%`, flex: 'none' }}>
+                        <div className="terminal-header">
+                            <Activity size={12} /> Active Task Monitor
+                            {(activeTasks.length > 0 || isConnecting) && (
+                                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: '9px', color: '#00ff88' }}>
+                                    <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 1.5s infinite' }} />
+                                    LIVE FEED
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ flex: 1, backgroundColor: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {browserFrame ? (
+                                <img
+                                    ref={monitorImgRef}
+                                    src={browserFrame.frame}
+                                    alt="Browser View"
+                                    onClick={handleMonitorClick}
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'crosshair' }}
+                                />
+                            ) : isConnecting && !browserFrame ? (
+                                <div style={{ textAlign: 'center', color: '#333' }}>
+                                    <Loader2 size={30} className="spin-icon" style={{ marginBottom: 15 }} />
+                                    <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '2px' }}>Preparing your secure environment...</div>
+                                </div>
+                            ) : (
+                                <div style={{ opacity: 0.1, textAlign: 'center' }}>
+                                    <Globe size={48} />
+                                    <div style={{ fontSize: '12px', marginTop: 10 }}>Standby</div>
+                                </div>
+                            )}
                         </div>
 
-                        {/* --- VERTICAL DIVIDER --- */}
-                        <div 
-                            className="pane-divider-vert"
-                            onMouseDown={() => setIsResizingVert(true)}
-                        />
+                        {/* Success Celebration Overlay */}
+                        <AnimatePresence>
+                            {activeTasks[0]?.status === 'completed' && !activeTasks[0]?.isAcknowledged && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 1.1 }}
+                                    style={{
+                                        position: 'absolute',
+                                        bottom: 20,
+                                        left: 20,
+                                        right: 20,
+                                        zIndex: 100,
+                                        background: 'linear-gradient(135deg, #111 0%, #000 100%)',
+                                        border: '1px solid #00ff88',
+                                        padding: '20px 25px',
+                                        borderRadius: '16px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 20,
+                                        boxShadow: '0 20px 50px rgba(0,0,0,0.8), 0 0 20px rgba(0,255,136,0.1)'
+                                    }}
+                                >
+                                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(0,255,136,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <CheckCircle2 size={20} color="#00ff88" />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: 2 }}>Task Complete</div>
+                                        <div style={{ color: '#888', fontSize: '11px' }}>Results and evidence delivered to chat.</div>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            socketRef.current.emit('acknowledge_task', { workflowId: activeTasks[0]._id });
+                                            fetchTasks();
+                                        }}
+                                        style={{ background: '#fff', color: '#000', border: 'none', padding: '8px 18px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                                    >
+                                        View Report
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
 
-                        {/* Lower Half: Micro-logs Terminal */}
-                        <div className="micro-logs-section" style={{ flex: 1 }}>
-                            <div className="terminal-header">
-                                <Terminal size={12} /> Task Activity Feed
-                            </div>
-                            <div className="terminal-body" ref={logsEndRef}>
+                    {/* --- VERTICAL DIVIDER --- */}
+                    <div
+                        className="pane-divider-vert"
+                        onMouseDown={() => setIsResizingVert(true)}
+                    />
+
+                    {/* Lower Half: Micro-logs Terminal */}
+                    <div className="micro-logs-section" style={{ flex: 1 }}>
+                        <div className="terminal-header">
+                            <Terminal size={12} /> Task Activity Feed
+                        </div>
+                        <div className="terminal-body" ref={logsEndRef}>
                             {activeTasks.length > 0 && activeTasks[0].executionLogs?.map((log, i) => (
                                 <div key={i} style={{ marginBottom: 4, opacity: 0.8 }}>
                                     <span style={{ color: '#333' }}>[{new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
@@ -623,7 +758,7 @@ const ActionAgentPage = () => {
                 </div>
 
                 {/* --- DRAGGABLE RESIZER --- */}
-                <div 
+                <div
                     className="pane-divider"
                     style={{ display: 'flex' }}
                     onMouseDown={() => setIsResizing(true)}
@@ -663,7 +798,7 @@ const ActionAgentPage = () => {
                                     const isNew = (Date.now() - new Date(msg.timestamp).getTime()) < 5000;
 
                                     return (
-                                        <motion.div 
+                                        <motion.div
                                             key={msg._id || idx}
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
@@ -685,21 +820,58 @@ const ActionAgentPage = () => {
                                                         </div>
                                                         <div style={{ padding: '20px' }}>
                                                             {renderStructuredContent(msg.content, isNew)}
+
+                                                            {/* Source Cards Row */}
+                                                            {msg.metadata?.sourceUrl && (
+                                                                <div style={{ marginTop: 25, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                                                    <div style={{ fontSize: '10px', color: '#555', fontWeight: '800', letterSpacing: '1px' }}>PRIMARY SOURCE</div>
+                                                                    <div style={{
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: 15,
+                                                                        background: 'rgba(255,255,255,0.02)',
+                                                                        padding: '12px 16px',
+                                                                        borderRadius: '12px',
+                                                                        border: '1px solid rgba(255,255,255,0.05)',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s'
+                                                                    }}
+                                                                        onClick={() => window.open(msg.metadata.sourceUrl, '_blank')}
+                                                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                                                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                                                                    >
+                                                                        <img
+                                                                            src={`https://www.google.com/s2/favicons?domain=${new URL(msg.metadata.sourceUrl).hostname}&sz=64`}
+                                                                            style={{ width: 24, height: 24, borderRadius: '4px' }}
+                                                                            alt="Site icon"
+                                                                        />
+                                                                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                                            <div style={{ color: '#eee', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                                {new URL(msg.metadata.sourceUrl).hostname}
+                                                                            </div>
+                                                                            <div style={{ color: '#666', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                                {msg.metadata.sourceUrl}
+                                                                            </div>
+                                                                        </div>
+                                                                        <ExternalLink size={14} color="#666" />
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         {msg.metadata?.evidenceUrl && (
                                                             <div style={{ padding: '0 20px 20px 20px' }}>
-                                                                 <div style={{ color: '#666', fontSize: '10px', marginBottom: 10, fontWeight: '700' }}>EXECUTION PROOF</div>
-                                                                 <a href={msg.metadata.evidenceUrl} target="_blank" rel="noopener noreferrer">
-                                                                     <img src={msg.metadata.evidenceUrl} alt="Proof" style={{ width: '100%', borderRadius: '8px', border: '1px solid #222' }} />
-                                                                 </a>
+                                                                <div style={{ color: '#666', fontSize: '10px', marginBottom: 10, fontWeight: '700' }}>EXECUTION PROOF</div>
+                                                                <a href={msg.metadata.evidenceUrl} target="_blank" rel="noopener noreferrer">
+                                                                    <img src={msg.metadata.evidenceUrl} alt="Proof" style={{ width: '100%', borderRadius: '8px', border: '1px solid #222' }} />
+                                                                </a>
                                                             </div>
                                                         )}
                                                     </div>
                                                 ) : isClarification ? (
-                                                    <div style={{ 
-                                                        background: 'rgba(255, 165, 0, 0.05)', 
-                                                        border: '1px solid rgba(255, 165, 0, 0.2)', 
-                                                        padding: '16px 20px', 
+                                                    <div style={{
+                                                        background: 'rgba(255, 165, 0, 0.05)',
+                                                        border: '1px solid rgba(255, 165, 0, 0.2)',
+                                                        padding: '16px 20px',
                                                         borderRadius: '16px 16px 16px 4px',
                                                         color: '#fff',
                                                         fontSize: '15px',
@@ -710,6 +882,100 @@ const ActionAgentPage = () => {
                                                             <Sparkles size={12} /> Need more clarity
                                                         </div>
                                                         {msg.content}
+                                                    </div>
+                                                ) : msg.type === 'intervention' ? (
+                                                    <div style={{
+                                                        background: 'rgba(108, 92, 231, 0.05)',
+                                                        border: '1px solid rgba(108, 92, 231, 0.2)',
+                                                        padding: '16px 20px',
+                                                        borderRadius: '16px 16px 16px 4px',
+                                                        color: '#fff',
+                                                        fontSize: '15px',
+                                                        lineHeight: '1.6',
+                                                        maxWidth: '600px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: 15
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a29bfe', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                            <Sparkles size={12} /> {msg.metadata?.subtype === 'resume_upload' ? 'Action Required: Resume Missing' : 'Action Required: Link Needed'}
+                                                        </div>
+                                                        <div style={{ opacity: 0.9 }}>{msg.content}</div>
+                                                        
+                                                        {msg.metadata?.subtype === 'resume_upload' && (
+                                                            <div style={{ marginTop: 5 }}>
+                                                                <input 
+                                                                    type="file" 
+                                                                    ref={fileInputRef} 
+                                                                    onChange={handleFileUpload} 
+                                                                    style={{ display: 'none' }} 
+                                                                    accept=".pdf,.doc,.docx"
+                                                                />
+                                                                <button 
+                                                                    onClick={() => fileInputRef.current?.click()}
+                                                                    disabled={isLoading}
+                                                                    style={{ 
+                                                                        width: '100%', 
+                                                                        padding: '12px', 
+                                                                        background: 'rgba(108, 92, 231, 0.2)', 
+                                                                        border: '1px solid #6c5ce7', 
+                                                                        borderRadius: '12px', 
+                                                                        color: '#a29bfe', 
+                                                                        fontSize: '13px', 
+                                                                        fontWeight: '600', 
+                                                                        cursor: 'pointer',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        gap: 10
+                                                                    }}
+                                                                >
+                                                                    {isLoading ? <Loader2 size={16} className="spin-icon" /> : <Paperclip size={16} />}
+                                                                    UPLOAD RESUME (.PDF, .DOCX)
+                                                                </button>
+                                                            </div>
+                                                        )}
+
+                                                        {msg.metadata?.subtype === 'link_request' && (
+                                                            <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="Paste the URL here..."
+                                                                    className="intervention-url-input"
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') handleInterventionLink(msg.workflowId, e.target.value);
+                                                                    }}
+                                                                    style={{
+                                                                        flex: 1,
+                                                                        background: 'rgba(0,0,0,0.3)',
+                                                                        border: '1px solid rgba(108, 92, 231, 0.3)',
+                                                                        borderRadius: '10px',
+                                                                        padding: '10px 15px',
+                                                                        color: '#fff',
+                                                                        fontSize: '13px',
+                                                                        outline: 'none'
+                                                                    }}
+                                                                />
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        const input = e.currentTarget.previousSibling;
+                                                                        handleInterventionLink(msg.workflowId, input.value);
+                                                                    }}
+                                                                    style={{
+                                                                        background: '#6c5ce7',
+                                                                        color: '#fff',
+                                                                        border: 'none',
+                                                                        borderRadius: '10px',
+                                                                        padding: '0 20px',
+                                                                        fontSize: '12px',
+                                                                        fontWeight: '600',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                >
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : isMilestone ? (
                                                     <div style={{
@@ -729,10 +995,10 @@ const ActionAgentPage = () => {
                                                         {msg.content}
                                                     </div>
                                                 ) : (
-                                                    <div style={{ 
-                                                        color: isUser ? '#fff' : '#ccc', 
-                                                        fontSize: '15px', 
-                                                        lineHeight: '1.6', 
+                                                    <div style={{
+                                                        color: isUser ? '#fff' : '#ccc',
+                                                        fontSize: '15px',
+                                                        lineHeight: '1.6',
                                                         backgroundColor: isUser ? '#181818' : 'transparent',
                                                         padding: isUser ? '12px 20px' : '0',
                                                         borderRadius: '16px 4px 16px 16px',
@@ -781,21 +1047,21 @@ const ActionAgentPage = () => {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#111', borderRadius: '24px', padding: '8px 8px 8px 16px', border: '1px solid #222', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
                                 <div style={{ display: 'flex', gap: 10 }}>
                                     <Sparkles size={18} color="#6c5ce7" style={{ opacity: 0.5 }} />
-                                    <button 
+                                    <button
                                         onClick={toggleListening}
-                                        style={{ 
-                                            background: 'none', 
-                                            border: 'none', 
-                                            color: isListening ? '#ff4757' : '#666', 
-                                            cursor: 'pointer', 
-                                            display: 'flex', 
-                                            alignItems: 'center', 
+                                        style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color: isListening ? '#ff4757' : '#666',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
                                             padding: 0,
                                             position: 'relative'
                                         }}
                                     >
                                         {isListening && (
-                                            <motion.div 
+                                            <motion.div
                                                 layoutId="mic-pulse"
                                                 initial={{ scale: 0.8, opacity: 0.5 }}
                                                 animate={{ scale: 1.5, opacity: 0 }}
@@ -805,11 +1071,34 @@ const ActionAgentPage = () => {
                                         )}
                                         {isListening ? <MicOff size={18} /> : <Mic size={18} />}
                                     </button>
-                                    <button style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}>
+                                    <button 
+                                        onClick={() => fileInputRef.current?.click()}
+                                        title="Attach file for ingestion"
+                                        style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
+                                    >
                                         <Paperclip size={18} />
                                     </button>
+                                    <button 
+                                        className="link-icon-btn"
+                                        style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0, position: 'relative' }}
+                                        title="Attach URL for processing"
+                                        onClick={() => {
+                                            const url = prompt("Enter the URL of the form, quiz, or task you want me to solve:");
+                                            if (url && url.trim()) {
+                                                const command = `Please go to ${url.trim()} and fill out the form or solve the quiz using my profile data.`;
+                                                setCommandInput(command);
+                                                // We can't directly call sendCommand here because it relies on the state which hasn't updated yet.
+                                                // Instead, we manually trigger the API call or simulate the form submission if possible.
+                                                // Easiest is to just set it and let the user hit enter, OR we can call the handler directly.
+                                                handleQuickAction(command);
+                                            }
+                                        }}
+                                    >
+                                        <Globe size={18} />
+                                        <div className="icon-tooltip">Direct Link Mode: Attach a URL for specific form filling or research.</div>
+                                    </button>
                                 </div>
-                                <input 
+                                <input
                                     type="text"
                                     placeholder={isLoading ? "Nurotra is thinking..." : isConnecting ? "Waiting for engine..." : `Message Nurotra...`}
                                     style={{ flex: 1, background: 'none', border: 'none', color: '#fff', outline: 'none', padding: '10px 0', fontSize: '15px' }}
@@ -818,19 +1107,19 @@ const ActionAgentPage = () => {
                                     onKeyDown={(e) => e.key === 'Enter' && sendCommand()}
                                     disabled={isLoading}
                                 />
-                                
+
                                 {activeTasks.length > 0 && activeTasks[0].status !== 'completed' && (
                                     <div className="execution-controls">
-                                        <button 
+                                        <button
                                             onClick={pauseAgent}
-                                            className="control-btn pause" 
+                                            className="control-btn pause"
                                             title={activeTasks[0].status === 'paused' ? "Resume" : "Pause"}
                                         >
                                             {activeTasks[0].status === 'paused' ? <Play size={14} fill="currentColor" /> : <Pause size={14} fill="currentColor" />}
                                         </button>
-                                        <button 
+                                        <button
                                             onClick={stopAgent}
-                                            className="control-btn stop" 
+                                            className="control-btn stop"
                                             title="Stop Execution"
                                         >
                                             <X size={16} strokeWidth={3} />
@@ -838,7 +1127,7 @@ const ActionAgentPage = () => {
                                     </div>
                                 )}
 
-                                <button 
+                                <button
                                     onClick={sendCommand}
                                     disabled={!commandInput.trim() || isLoading}
                                     style={{ background: commandInput.trim() ? '#fff' : '#222', color: '#000', border: 'none', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' }}

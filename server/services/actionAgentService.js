@@ -81,7 +81,11 @@ If you cannot determine the EXACT workflow or target with high confidence, use C
 e.g., "Open docs and continue work", "Take me to communication", "Open the orchestrator", "Resume last task", "Go to dashboard"
 
 3. FETCH_LOGS: The user is asking to view system logs, action history, or execution status.
-e.g., "What did you do today?", "Show me tasks from yesterday", "What is the status of the report?", "Show logs for client X", "What happened to the email?"
+    e.g., "What did you do today?", "Show me tasks from yesterday", "What is the status of the report?", "Show logs for client X", "What happened to the email?"
+
+5. FOLLOW_UP: User wants to continue or dive deeper into the findings of the PREVIOUS task. 
+              Triggers: "go deep", "analyze further", "tell me more about [X]", "explore [X] more", "yes go for it" (if following a suggestion), "why was that?".
+              This intent is for CONTINUITY and maintaining context from the last result.
 
 4. WORKFLOW_EXECUTION: The user is asking to run an automated task pipeline with triggers, conditions, and actions.
 e.g., "If client approves, send invoice", "Upload report and send to team", "When I get a message containing urgent, alert me and create a ticket"
