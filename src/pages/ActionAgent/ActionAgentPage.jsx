@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Sparkles, Globe, User, ShieldAlert, AlertCircle, RefreshCw, X, Paperclip, CheckCircle2, AlertTriangle, Play, Pause, Activity, Terminal, Menu, Bot, Plus, Mic, MicOff } from 'lucide-react';
+import { Send, Loader2, Sparkles, Globe, User, ShieldAlert, AlertCircle, RefreshCw, X, Paperclip, CheckCircle2, AlertTriangle, Play, Pause, Activity, Terminal, Menu, Bot, Plus, Mic, MicOff, ExternalLink } from 'lucide-react';
 import './ActionAgent.css';
 
 // --- Typewriter Animation Component ---
@@ -65,8 +65,7 @@ const ActionAgentPage = () => {
     const monitorImgRef = useRef(null);
     const [lastPulse, setLastPulse] = useState(null);
     const [expandedMessages, setExpandedMessages] = useState({}); // Tracking expanded cards
-    const [activeTasks, setActiveTasks] = useState([]);
-    const [suggestions, setSuggestions] = useState([]);
+    const [executionLogs, setExecutionLogs] = useState([]); // Live activity logs
 
     // Vertical Resizing Logic
     useEffect(() => {
@@ -362,7 +361,8 @@ const ActionAgentPage = () => {
         }
     };
 
-    const sendCommand = async (inputStr) => {
+    const sendCommand = async (inputStr, e = null) => {
+        if (e && e.preventDefault) e.preventDefault();
         const text = typeof inputStr === 'string' ? inputStr : commandInput;
         if (!text.trim()) return;
 
@@ -664,9 +664,18 @@ const ActionAgentPage = () => {
                     style={{ width: `${leftPaneWidth}%`, display: 'flex' }}
                 >
                     {/* Upper Half: Execution Monitor */}
-                    <div className="execution-monitor-section" style={{ height: `${topPaneHeight}%`, flex: 'none' }}>
+                    <div className={`execution-monitor-section ${activeTasks[0]?.metadata?.continuation ? 'deep-dive' : ''}`} style={{ height: `${topPaneHeight}%`, flex: 'none' }}>
                         <div className="terminal-header">
-                            <Activity size={12} /> Active Task Monitor
+                            <Activity size={12} /> 
+                            <span style={{ marginLeft: 8 }}>
+                                {activeTasks[0]?.title || "Active Task Monitor"}
+                            </span>
+                            {activeTasks[0]?.metadata?.continuation && (
+                                <div className="context-badge" style={{ marginLeft: 12, marginBottom: 0 }}>
+                                    <div className="pulse-dot" />
+                                    CONTEXT MAINTAINED
+                                </div>
+                            )}
                             {(activeTasks.length > 0 || isConnecting) && (
                                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: '9px', color: '#00ff88' }}>
                                     <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#00ff88', boxShadow: '0 0 10px #00ff88', animation: 'pulse 1.5s infinite' }} />
@@ -732,6 +741,8 @@ const ActionAgentPage = () => {
                                         onClick={() => {
                                             socketRef.current.emit('acknowledge_task', { workflowId: activeTasks[0]._id });
                                             fetchTasks();
+                                            // Scroll to chat bottom where the result is
+                                            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                                         }}
                                         style={{ background: '#fff', color: '#000', border: 'none', padding: '8px 18px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
                                     >
@@ -825,100 +836,73 @@ const ActionAgentPage = () => {
                                                     {isClarification ? <AlertCircle size={18} color="#ffa500" /> : <Bot size={18} color="#a29bfe" />}
                                                 </div>
                                             )}
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: isUser ? 'flex-                                                {isResult ? (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+                                                {isResult ? (
                                                     <div className="premium-result-card" style={{ background: '#111', border: '1px solid #222', borderRadius: '16px', overflow: 'hidden' }}>
                                                         <div style={{ padding: '15px 20px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                            <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                                <CheckCircle2 size={12} /> {msg.content.includes('Complete') || msg.content.includes('Successful') ? 'TASK SUCCESSFUL' : 'UPDATE'}
+                                                            <div style={{ color: msg.metadata?.continuation ? '#00d2ff' : '#00ff88', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                {msg.metadata?.continuation ? <Sparkles size={12} /> : <CheckCircle2 size={12} />} 
+                                                                {msg.metadata?.continuation ? 'REFINED INTELLIGENCE' : (msg.content.includes('Complete') || msg.content.includes('Successful') ? 'TASK SUCCESSFUL' : 'UPDATE')}
                                                             </div>
                                                             <div style={{ color: '#444', fontSize: '10px' }}>{new Date(msg.timestamp).toLocaleTimeString()}</div>
                                                         </div>
                                                         <div style={{ padding: '20px' }}>
                                                             {renderStructuredContent(msg.content, isNew)}
                                                             
-                                                            <div style={{ marginTop: 20, display: 'flex', gap: 10 }}>
-                                                                <button 
-                                                                    className="expand-report-btn"
-                                                                    onClick={() => setExpandedMessages(prev => ({ ...prev, [msg._id || idx]: !prev[msg._id || idx] }))}
-                                                                    style={{
-                                                                        background: 'rgba(108, 92, 231, 0.1)',
-                                                                        border: '1px solid rgba(108, 92, 231, 0.3)',
-                                                                        borderRadius: '8px',
-                                                                        padding: '6px 12px',
-                                                                        color: '#a29bfe',
-                                                                        fontSize: '11px',
-                                                                        fontWeight: '700',
-                                                                        cursor: 'pointer',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        gap: 6
-                                                                    }}
-                                                                >
-                                                                    {expandedMessages[msg._id || idx] ? <X size={12} /> : <Activity size={12} />}
-                                                                    {expandedMessages[msg._id || idx] ? 'HIDE LOGS' : 'VIEW EXECUTION SUMMARY'}
-                                                                </button>
-                                                                
-                                                                {msg.metadata?.sourceUrl && (
-                                                                    <button 
-                                                                        onClick={() => window.open(msg.metadata.sourceUrl, '_blank')}
+                                                            {/* Dynamic Source Branding Row (Directly embedded) */}
+                                                            {msg.metadata?.sourceUrl && (
+                                                                <div style={{ marginTop: 30, borderTop: '1px solid #222', paddingTop: 20 }}>
+                                                                    <div style={{ color: '#555', fontSize: '10px', marginBottom: 12, fontWeight: '800', letterSpacing: '1px' }}>VERIFIED ORIGIN</div>
+                                                                    <div 
                                                                         style={{
-                                                                            background: 'rgba(255, 255, 255, 0.05)',
-                                                                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                                                                            borderRadius: '8px',
-                                                                            padding: '6px 12px',
-                                                                            color: '#999',
-                                                                            fontSize: '11px',
-                                                                            fontWeight: '700',
-                                                                            cursor: 'pointer',
-                                                                            display: 'flex',
+                                                                            display: 'inline-flex',
                                                                             alignItems: 'center',
-                                                                            gap: 6
+                                                                            gap: 12,
+                                                                            background: 'rgba(255,255,255,0.03)',
+                                                                            padding: '10px 16px',
+                                                                            borderRadius: '50px',
+                                                                            border: '1px solid rgba(255,255,255,0.1)',
+                                                                            cursor: 'pointer'
                                                                         }}
+                                                                        onClick={() => window.open(msg.metadata.sourceUrl, '_blank')}
                                                                     >
-                                                                        <ExternalLink size={12} /> SOURCE
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-
-                                                        {expandedMessages[msg._id || idx] && (
-                                                            <motion.div 
-                                                                initial={{ height: 0, opacity: 0 }}
-                                                                animate={{ height: 'auto', opacity: 1 }}
-                                                                style={{ borderTop: '1px solid #222', background: '#0a0a0a' }}
-                                                            >
-                                                                <div style={{ padding: '20px' }}>
-                                                                    <div style={{ color: '#555', fontSize: '10px', marginBottom: 15, fontWeight: '800', letterSpacing: '1px' }}>INTERNAL EXECUTION LOGS</div>
-                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 25 }}>
-                                                                        <div style={{ fontSize: '11px', color: '#888', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px', borderLeft: '3px solid #6c5ce7' }}>
-                                                                            <span style={{ color: '#6c5ce7', fontWeight: 'bold' }}>INFO:</span> Target resolved at {msg.metadata?.sourceUrl || 'verified domain'}.
+                                                                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                                                            <img 
+                                                                                src={`https://www.google.com/s2/favicons?domain=${(() => {
+                                                                                    try {
+                                                                                        return new URL(msg.metadata.sourceUrl.replace(/[\[\]\(\)]/g, '')).hostname;
+                                                                                    } catch(e) { return 'google.com'; }
+                                                                                })()}&sz=64`} 
+                                                                                style={{ width: 18, height: 18 }}
+                                                                                alt="favicon"
+                                                                            />
                                                                         </div>
-                                                                        <div style={{ fontSize: '11px', color: '#888', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px', borderLeft: '3px solid #6c5ce7' }}>
-                                                                            <span style={{ color: '#6c5ce7', fontWeight: 'bold' }}>INFO:</span> Autonomous data extraction completed successfully.
+                                                                        <div style={{ color: '#eee', fontSize: '12px', fontWeight: '600' }}>
+                                                                            {(() => {
+                                                                                try {
+                                                                                    return new URL(msg.metadata.sourceUrl.replace(/[\[\]\(\)]/g, '')).hostname.replace('www.', '');
+                                                                                } catch(e) { return 'Source'; }
+                                                                            })()}
                                                                         </div>
-                                                                        {msg.metadata?.evidenceUrl && (
-                                                                            <div style={{ fontSize: '11px', color: '#00ff88', background: 'rgba(0,255,136,0.05)', padding: '8px 12px', borderRadius: '8px', borderLeft: '3px solid #00ff88' }}>
-                                                                                <span style={{ color: '#00ff88', fontWeight: 'bold' }}>SUCCESS:</span> Visual proof captured and verified.
-                                                                            </div>
-                                                                        )}
+                                                                        <ExternalLink size={12} color="#666" style={{ marginLeft: 4 }} />
                                                                     </div>
-
-                                                                    {msg.metadata?.evidenceUrl && (
-                                                                        <>
-                                                                            <div style={{ color: '#555', fontSize: '10px', marginBottom: 10, fontWeight: '800', letterSpacing: '1px' }}>VISUAL EVIDENCE</div>
-                                                                            <a href={msg.metadata.evidenceUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', position: 'relative' }}>
-                                                                                <img src={msg.metadata.evidenceUrl} alt="Proof" style={{ width: '100%', borderRadius: '12px', border: '1px solid #222', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }} />
-                                                                                <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontSize: '10px' }}>
-                                                                                    CLICK TO EXPAND
-                                                                                </div>
-                                                                            </a>
-                                                                        </>
-                                                                    )}
                                                                 </div>
-                                                            </motion.div>
-                                                        )}
+                                                            )}
+
+                                                            {msg.metadata?.evidenceUrl && (
+                                                                <div style={{ marginTop: 20 }}>
+                                                                    <div style={{ color: '#555', fontSize: '10px', marginBottom: 10, fontWeight: '800', letterSpacing: '1px' }}>VISUAL EVIDENCE</div>
+                                                                    <a href={msg.metadata.evidenceUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', position: 'relative' }}>
+                                                                        <img src={msg.metadata.evidenceUrl} alt="Proof" style={{ width: '100%', borderRadius: '12px', border: '1px solid #222', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }} />
+                                                                        <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontSize: '10px' }}>
+                                                                            CLICK TO EXPAND
+                                                                        </div>
+                                                                    </a>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                ) : isClarification ? (  ) : isClarification ? (
+                                                ) : isClarification ? (
                                                     <div style={{
                                                         background: 'rgba(255, 165, 0, 0.05)',
                                                         border: '1px solid rgba(255, 165, 0, 0.2)',
@@ -994,7 +978,10 @@ const ActionAgentPage = () => {
                                                                     placeholder="Paste the URL here..."
                                                                     className="intervention-url-input"
                                                                     onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter') handleInterventionLink(msg.workflowId, e.target.value);
+                                                                        if (e.key === 'Enter') {
+                                                                            e.preventDefault();
+                                                                            handleInterventionLink(msg.workflowId, e.target.value);
+                                                                        }
                                                                     }}
                                                                     style={{
                                                                         flex: 1,
@@ -1155,7 +1142,12 @@ const ActionAgentPage = () => {
                                     style={{ flex: 1, background: 'none', border: 'none', color: '#fff', outline: 'none', padding: '10px 0', fontSize: '15px' }}
                                     value={commandInput}
                                     onChange={(e) => setCommandInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && sendCommand()}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            sendCommand();
+                                        }
+                                    }}
                                     disabled={isLoading}
                                 />
 
@@ -1179,7 +1171,7 @@ const ActionAgentPage = () => {
                                 )}
 
                                 <button
-                                    onClick={sendCommand}
+                                    onClick={(e) => sendCommand(null, e)}
                                     disabled={!commandInput.trim() || isLoading}
                                     style={{ background: commandInput.trim() ? '#fff' : '#222', color: '#000', border: 'none', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' }}
                                 >

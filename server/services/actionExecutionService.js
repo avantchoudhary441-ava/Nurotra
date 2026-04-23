@@ -418,9 +418,10 @@ const stepExecutors = {
         }
         
         const socket = context.socket;
+        const reuseSession = context.workflowMetadata?.reuseSession || false;
         
-        console.log(`[ActionExec] WEB SEARCH: Query resolved to: "${query}" (Original Label: "${step.label}")`);
-        const result = await browserAgentService.searchInfo(context.userId, query, socket, true); 
+        console.log(`[ActionExec] WEB SEARCH: Query resolved to: "${query}" (Original Label: "${step.label}") [Reuse Session: ${reuseSession}]`);
+        const result = await browserAgentService.searchInfo(context.userId, query, socket, true, { reuseSession }); 
         
         // Convert answer to readable text if it's JSON
         let cleanAnswer = result.answer;
@@ -441,7 +442,8 @@ const stepExecutors = {
               answer: cleanAnswer, 
               query_used: query,
               extractedText: cleanAnswer // Standardized field for summary scraper
-            }
+            },
+            metadata: result.metadata
         };
     },
 
@@ -454,7 +456,8 @@ const stepExecutors = {
         return {
             success: true,
             message: result.message,
-            data: result.data
+            data: result.data,
+            metadata: result.metadata
         };
     },
 

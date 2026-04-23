@@ -196,8 +196,8 @@ RULES:
 - isEventDriven: true for "whenever/every time", false for one-shot tasks.
 - Conditions: Always include at least one (use "exists" for unconditional).
 - Provide 2-5 actions that meaningfully decompose the user's request.
-- DEFAULT TO CLARIFICATION only if the request is extremely short (1-2 words) AND lacks context in the RECENT CONVERSATION CONTEXT.
 - CONTEXTUAL PRIORITY: If a user says "latest status" or "do it", and the history shows we were talking about IPL or a specific report, do NOT ask for clarification. Assume the context from history and generate the WORKFLOW_EXECUTION or FOLLOW_UP intent.
+- FOLLOW-UP SPECIFICITY: If a user provides a specific topic in a follow-up (e.g. "tell me more about Pittsburgh startup funding"), ALWAYS return intent: "WORKFLOW_EXECUTION" or "FOLLOW_UP" with a full search workflow. Do NOT use CLARIFICATION if a specific noun/topic is provided.
 - SEARCH QUERY: If context is resolved from history (e.g. user says "latest status" after "IPL"), ensure the search query includes the context (e.g. "IPL latest news/status").
 
 CONVERSATION CONTEXT & MEMORY:
