@@ -214,7 +214,12 @@ const ActionAgentPage = () => {
         socketRef.current.on('chat_update', (data) => {
             if (data?.message) {
                 setChatMessages(prev => {
-                    const exists = prev.some(m => m._id === data.message._id || (m.timestamp === data.message.timestamp && m.content === data.message.content));
+                    // Normalize _id to string to prevent ObjectId vs string mismatch
+                    const incomingId = data.message._id?.toString();
+                    const exists = prev.some(m =>
+                        m._id?.toString() === incomingId ||
+                        (m.timestamp === data.message.timestamp && m.content === data.message.content)
+                    );
                     if (exists) return prev;
                     return [...prev, data.message];
                 });
@@ -518,71 +523,86 @@ const ActionAgentPage = () => {
         }
     };
 
-    // Smart renderer for structured AI output — muted, human-designed
+    // Render inline markdown: **bold** and plain text mixed
+    const renderInline = (text) => {
+        const parts = text.split(/(\*\*[^*]+\*\*)/g);
+        return parts.map((part, i) => {
+            if (part.startsWith('**') && part.endsWith('**')) {
+                return <strong key={i} style={{ color: '#e8e8e8', fontWeight: '600' }}>{part.slice(2, -2)}</strong>;
+            }
+            return <span key={i}>{part}</span>;
+        });
+    };
+
+    // Smart prose renderer — handles markdown naturally without forcing structure
     const renderStructuredContent = (text, animate = false) => {
         if (!text) return null;
-        const lines = text.split('\n');
-        return lines.map((line, i) => {
-            const trimmed = line.trim();
-            if (!trimmed) return <div key={i} style={{ height: 6 }} />;
 
-            // Headlines (ALL CAPS or Task Complete)
-            const isHeadline = (trimmed === trimmed.toUpperCase() && trimmed.length > 4 && !/^[•\-\*⚠]/.test(trimmed) && !trimmed.includes(':'))
-                || trimmed.startsWith('✅') || trimmed.startsWith('📌');
+        // Split into paragraphs first (double newline = paragraph break)
+        const paragraphs = text.split(/\n{2,}/);
 
-            if (isHeadline) {
+        return paragraphs.map((para, pIdx) => {
+            const lines = para.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length === 0) return null;
+
+            // Check if this paragraph is a bullet list
+            const isBulletBlock = lines.every(l => /^[•\-\*]/.test(l));
+
+            // Check if it's a section header (✅ 📌 ⚠️ or ALL CAPS short line)
+            const isHeader = lines.length === 1 && (
+                lines[0].startsWith('✅') ||
+                lines[0].startsWith('📌') ||
+                lines[0].startsWith('⚠') ||
+                (lines[0] === lines[0].toUpperCase() && lines[0].length > 3 && lines[0].length < 60 && !/[a-z]/.test(lines[0]))
+            );
+
+            // Check if it's a "Source:" line
+            const isSource = lines.length === 1 && /^source:/i.test(lines[0]);
+
+            if (isSource) {
                 return (
-                    <div key={i} style={{ fontWeight: '600', fontSize: '13px', color: '#d0d0d0', marginBottom: 6, marginTop: i > 0 ? 12 : 0 }}>
-                        {animate ? <TypewriterText text={trimmed} speed={10} /> : trimmed}
+                    <div key={pIdx} style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #1e1e1e', fontSize: '11px', color: '#444', letterSpacing: '0.3px' }}>
+                        {renderInline(lines[0])}
                     </div>
                 );
             }
 
-            // Warning
-            if (trimmed.startsWith('⚠')) {
-                return <div key={i} style={{ color: '#b8986a', fontSize: '12px', marginBottom: 4 }}>
-                    {animate ? <TypewriterText text={trimmed} speed={10} /> : trimmed}
-                </div>;
-            }
-
-            // Bullet points
-            if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('  •')) {
-                const content = trimmed.replace(/^[•\-\*]\s*|^\s+•\s*/, '');
+            if (isHeader) {
                 return (
-                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 4, paddingLeft: trimmed.startsWith('  ') ? 12 : 0 }}>
-                        <span style={{ color: '#555', fontSize: '12px', lineHeight: '1.5', flexShrink: 0, marginTop: 1 }}>—</span>
-                        <span style={{ fontSize: '13px', color: '#bbb', lineHeight: '1.5' }}>
-                            {animate ? <TypewriterText text={content} speed={15} /> : content}
-                        </span>
+                    <div key={pIdx} style={{ fontWeight: '700', fontSize: '13px', color: '#d0d0d0', marginTop: pIdx > 0 ? 18 : 0, marginBottom: 8, letterSpacing: '0.2px' }}>
+                        {animate ? <TypewriterText text={lines[0]} speed={10} /> : lines[0]}
                     </div>
                 );
             }
 
-            // Key: Value pair
-            if (trimmed.includes(':') && !trimmed.startsWith('Source')) {
-                const colonIdx = trimmed.indexOf(':');
-                const key = trimmed.substring(0, colonIdx).trim();
-                const value = trimmed.substring(colonIdx + 1).trim();
-                if (key && value) {
-                    return (
-                        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                            <span style={{ color: '#666', fontWeight: '500', fontSize: '11px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{key}</span>
-                            <span style={{ color: '#e0e0e0', fontSize: '13px' }}>
-                                {animate ? <TypewriterText text={value} speed={15} /> : value}
-                            </span>
-                        </div>
-                    );
-                }
+            if (isBulletBlock) {
+                return (
+                    <div key={pIdx} style={{ marginBottom: 10 }}>
+                        {lines.map((line, lIdx) => {
+                            const content = line.replace(/^[•\-\*]\s*/, '');
+                            return (
+                                <div key={lIdx} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 5 }}>
+                                    <span style={{ color: '#3d3d3d', fontSize: '14px', lineHeight: '1.5', flexShrink: 0, marginTop: 1 }}>–</span>
+                                    <span style={{ fontSize: '14px', color: '#c0c0c0', lineHeight: '1.65' }}>
+                                        {animate ? <TypewriterText text={content} speed={12} /> : renderInline(content)}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
             }
 
-            // Default
+            // Default: render as flowing prose paragraph
+            const fullPara = lines.join(' ');
             return (
-                <div key={i} style={{ fontSize: '13px', color: '#aaa', lineHeight: '1.6', marginBottom: 2 }}>
-                    {animate ? <TypewriterText text={trimmed} speed={10} /> : trimmed}
-                </div>
+                <p key={pIdx} style={{ fontSize: '14px', color: '#b8b8b8', lineHeight: '1.75', marginBottom: 14, marginTop: 0 }}>
+                    {animate ? <TypewriterText text={fullPara} speed={8} /> : renderInline(fullPara)}
+                </p>
             );
         });
     };
+
 
     // --- Interactive Browser Click Handlers ---
     const handleMonitorClick = (e) => {
