@@ -129,13 +129,15 @@ exports.executeCommand = async (req, res) => {
         }
 
         // RESUME GUARD: For job applications, ensure we have a master profile
-        if (parsedData.intent === "BROWSER_TASK" && (command.toLowerCase().includes("apply") || command.toLowerCase().includes("job") || command.toLowerCase().includes("internship"))) {
+        const isJobTask = command.toLowerCase().match(/apply|job|internship|resume|career|vacancy/i);
+        if (parsedData.intent === "WORKFLOW_EXECUTION" && isJobTask) {
             const masterProfile = await agentResourceService.getMasterProfile(userId);
             if (!masterProfile) {
+                console.log(`[Controller] Blocking job task for user ${userId} - Missing master profile.`);
                 const interventionMsg = new ActionMessage({
                     userId,
                     role: "agent",
-                    content: "I'd love to help you with that! Since this is your first time applying, please upload your resume so I can save your skills and details. This will allow me to fill forms accurately and assist you in the future.",
+                    content: "I'm ready to help you apply! However, I don't have your resume details in my Resource Engine yet. Please upload your resume so I can accurately fill forms and represent your skills.",
                     type: "intervention",
                     metadata: { subtype: 'resume_upload' }
                 });
@@ -147,7 +149,7 @@ exports.executeCommand = async (req, res) => {
                     title: `Job Application: ${command}`,
                     status: "intervention",
                     intent: "application_flow",
-                    steps: [{ title: "Upload Resume", status: "intervention" }]
+                    steps: [{ title: "Upload Resume & Parse Profile", status: "intervention" }]
                 });
                 await interventionWorkflow.save();
 
@@ -226,29 +228,51 @@ exports.executeCommand = async (req, res) => {
                 return res.json({
                     success: true,
                     intent: "CLARIFICATION",
-                    question: "I'd love to go deeper, but I don't see a recent task in our history to continue from. What specifically would you like me to explore?"
+                    question: "I'm ready to dive deeper, but I don't see a recent search or task in this session to continue from. What would you like me to research for you?"
                 });
             }
 
-            // Create a new workflow based on the "Deep Dive" into the previous findings
-            const followUpCommand = `Deep dive into the previous findings about ${lastTask.title}. Specifically: ${command}`;
-            const followUpData = await actionAgentService.parseActionIntent(followUpCommand, user ? user.personaMemory : {}, orderedHistory);
+            // Map previous findings into a new "Deep Dive" request
+            console.log(`[Controller] Continuing from task: ${lastTask.title}`);
             
-            // Inject previous findings as a 'context' parameter into the first action
-            if (followUpData.intent === "WORKFLOW_EXECUTION" && followUpData.workflow.actions.length > 0) {
-                followUpData.workflow.actions[0].params = {
-                    ...followUpData.workflow.actions[0].params,
-                    previousFindings: lastTask.executionLogs.map(l => l.message).join("\n")
-                };
-                
-                // Switch back to WORKFLOW_EXECUTION flow
+            // Optimization: Use the last successful agent result message instead of raw execution logs
+            const lastAgentMsg = await ActionMessage.findOne({ 
+                userId, 
+                role: 'agent', 
+                type: 'browser_result' 
+            }).sort({ timestamp: -1 });
+
+            const previousFindings = lastAgentMsg?.content 
+                || lastTask.executionLogs?.map(l => l.message).join("\n").substring(0, 1000) 
+                || "No findings available.";
+            
+            const followUpCommand = `Execute a new deep analysis search based on these previous findings: ${previousFindings}. Specifically address the new detailed request: ${command}. This is NOT a clarification request, it is an ACTION request.`;
+            const followUpData = await actionAgentService.parseActionIntent(followUpCommand, user?.personaMemory || [], orderedHistory);
+            
+            if (followUpData.intent === "WORKFLOW_EXECUTION" || (followUpData.intent === "FOLLOW_UP" && followUpData.workflow)) {
                 parsedData.intent = "WORKFLOW_EXECUTION";
                 parsedData.workflow = followUpData.workflow;
+                parsedData.workflow.title = `Deep Dive: ${lastTask.title}`;
+                parsedData.workflow.metadata = { 
+                    ...parsedData.workflow.metadata, 
+                    continuation: true, 
+                    reuseSession: true, // USER PREFERENCE: Continue building on current state
+                    previousTaskId: lastTask._id 
+                };
             } else {
+                const clarifyMsg = new ActionMessage({
+                    userId,
+                    role: "system",
+                    content: followUpData.question || "I understand you want more details. Could you specify which part of the previous results I should explore further?",
+                    type: "clarification"
+                });
+                await clarifyMsg.save();
+                if (req.io) req.io.to(userId.toString()).emit('chat_update', { userId });
+
                 return res.json({
                     success: true,
                     intent: "CLARIFICATION",
-                    question: "I understand you want to go deeper. Could you specify which part of the previous results I should focus on?"
+                    question: clarifyMsg.content
                 });
             }
         }
@@ -346,18 +370,6 @@ exports.executeCommand = async (req, res) => {
                 })),
                 conditionLogic: workflowData.conditionLogic || "AND",
                 conditionRawText: workflowData.conditionRawText || "",
-                steps: workflowData.actions.map(action => ({
-                    id: action.id,
-                    label: action.label,
-                    icon: action.icon || "default",
-                    status: "pending",
-                    microLogs: action.microLogs || [],
-                    delayMs: action.delayMs || 0,
-                    retryConfig: action.retryConfig || { maxRetries: 0, retryCount: 0, retryDelayMs: 2000 },
-                    requiresIntervention: false,
-                    isBulk: false,
-                    params: action.params || {}
-                })),
                 steps: workflowData.actions.map((action, idx) => {
                     // Strict parsing for irreversibility (handle strings or booleans)
                     let isRev = true;
@@ -376,7 +388,8 @@ exports.executeCommand = async (req, res) => {
                         requiresIntervention: false,
                         isBulk: false,
                         isReversible: isRev,
-                        missingData: action.missingData || []
+                        missingData: action.missingData || [],
+                        params: action.params || {}
                     };
                 }),
                 intentData: {
@@ -948,7 +961,8 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
             workflowTitle: wf.title,
             userId: wf.userId,
             userEmail: process.env.EMAIL_USER,
-            socket: io
+            socket: io,
+            collectedMetadata: {}
         };
 
         // --- INITIATE SYSTEM LOG ---
@@ -1104,6 +1118,9 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
                     context.lastResult = result;
                     if (result.data?.link) context.fileLink = result.data.link;
                     if (result.data?.fileName) context.fileName = result.data.fileName;
+                    if (result.metadata) {
+                        context.collectedMetadata = { ...context.collectedMetadata, ...result.metadata };
+                    }
 
                     // Update micro log with result
                     wf = await ActionWorkflow.findById(workflowId);
@@ -1154,6 +1171,7 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
                         if (evidenceUrl) {
                             addLog(wf, i, step, "success", "Final execution proof captured.", io, evidenceUrl);
                             context.evidenceUrl = evidenceUrl;
+                            context.collectedMetadata.evidenceUrl = evidenceUrl;
                         }
                     } catch (e) {
                         console.error("Proof capture failed:", e.message);
@@ -1220,7 +1238,10 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
                 role: "agent",
                 content: finalSummary,
                 type: "browser_result",
-                metadata: { evidenceUrl: context.evidenceUrl },
+                metadata: { 
+                    ...context.collectedMetadata,
+                    evidenceUrl: context.evidenceUrl || context.collectedMetadata.evidenceUrl 
+                },
                 timestamp: new Date()
             }).save();
             

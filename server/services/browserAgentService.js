@@ -82,10 +82,21 @@ class BrowserAgentService {
     /**
      * Log a granular execution step to the active workflow for the user.
      */
-    async logExecutionStep(userId, message, status = "info", socket = null, screenshot = false) {
+    async logExecutionStep(userId, message, status = "info", socket = null, screenshot = false, stepsCollector = null) {
         try {
             const wf = await ActionWorkflow.findOne({ userId, status: { $in: ["running", "waiting", "intervention", "delayed", "retrying"] } }).sort({ startTime: -1 });
-            if (!wf) return;
+            
+            // Add to collector for final metadata persistence
+            if (stepsCollector) {
+                stepsCollector.push({ message, type: status, timestamp: new Date() });
+            }
+
+            if (!wf) {
+                if (socket && userId) {
+                    socket.emit("execution_log", { userId, message, type: status, timestamp: new Date() });
+                }
+                return;
+            }
 
             let evidenceUrl = null;
             if (screenshot) {
@@ -120,7 +131,12 @@ class BrowserAgentService {
     /**
      * Capture a discrete screenshot during the task for inclusion in the log.
      */
-    async captureStepProof(userId, workflowId) {
+    async captureStepProof(userId, workflowId, message = '') {
+        // Fallback for when called with (page, userId, message) from searchInfo
+        if (typeof userId === 'object' && userId !== null) {
+            userId = workflowId;
+            workflowId = 'search'; 
+        }
         try {
             const page = this.activePages.get(userId.toString());
             if (!page) return null;
@@ -236,20 +252,26 @@ class BrowserAgentService {
     /**
      * Execute an informational search (e.g., Live Scores)
      */
-    async searchInfo(userId, query, socket = null, skipSave = false) {
+    async searchInfo(userId, query, socket = null, skipSave = false, options = {}) {
         let currentProvider = 'Google';
         let searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-        
+        const executionSteps = [];
+        let page = this.activePages.get(userId.toString());
         const context = await this.getContext(userId);
-        const page = await context.newPage();
-        this.activePages.set(userId.toString(), page);
+
+        if (!page || page.isClosed()) {
+            page = await context.newPage();
+            this.activePages.set(userId.toString(), page);
+        } else {
+            console.log(`[BrowserAgent] [${userId}] Reusing existing session for continuation...`);
+        }
         
         // Instant reality: Show the browser immediately
         await this.emitFrame(socket, userId, page);
         
         try {
             console.log(`[BrowserAgent] Searching for: "${query}" using ${currentProvider}`);
-            await this.logExecutionStep(userId, `Searching ${currentProvider} for: "${query}"`, "info", socket);
+            await this.logExecutionStep(userId, `Searching ${currentProvider} for: "${query}"`, "info", socket, false, executionSteps);
             await this.emitFrame(socket, userId, page, `Looking on ${currentProvider} for "${query}"...`);
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
@@ -337,7 +359,7 @@ class BrowserAgentService {
                      try { domainCode = new URL(targetUrl).hostname; } catch (e) {}
 
                      console.log(`[BrowserAgent] Deep-diving into: ${targetUrl}`);
-                     await this.logExecutionStep(userId, `Exploring: ${domainCode}`, "info", socket);
+                     await this.logExecutionStep(userId, `Exploring: ${domainCode}`, "info", socket, false, executionSteps);
                      await this.emitFrame(socket, userId, page, `Exploring: ${domainCode}...`);
                      
                      try {
@@ -352,17 +374,18 @@ class BrowserAgentService {
                          if (isHighQuality && !innerText.includes("captcha")) {
                              collectedContent.push({ url: targetUrl, content: innerText });
                              finalUrl = page.url();
-                             await this.logExecutionStep(userId, `Data extracted from ${domainCode}.`, "success", socket);
+                             await this.logExecutionStep(userId, `Critical data extracted from ${domainCode}.`, "success", socket, false, executionSteps);
                              this.updateBrowserMemory(userId, domainCode, true, "Success");
                          } else {
-                             await this.logExecutionStep(userId, `Limited data on ${domainCode}. checking next source...`, "warn", socket);
+                             await this.logExecutionStep(userId, `Limited data on ${domainCode}. checking alternative...`, "warn", socket, false, executionSteps);
                          }
                      } catch (navErr) {
                          console.error(`[BrowserAgent] Deep navigation failed for ${targetUrl}:`, navErr.message);
-                         await this.logExecutionStep(userId, `Failed to load ${domainCode}. Skipping...`, "error", socket);
+                         await this.logExecutionStep(userId, `Domain ${domainCode} unreachable. Skipping...`, "error", socket, false, executionSteps);
                      }
                  }
             } else {
+                 await this.logExecutionStep(userId, "Extracting strategic intelligence from search results.", "info", socket, false, executionSteps);
                  await this.emitFrame(socket, userId, page, "Snippet extraction mode engaged. Writing report...");
             }
 
@@ -376,21 +399,21 @@ class BrowserAgentService {
             await new Promise(r => setTimeout(r, 1500)); 
 
             // 3. Final Extraction: Data-first, Business Grace
-            await this.logExecutionStep(userId, "Completing professional strategic report...", "info", socket);
-            const extractionPrompt = `User Question: "${query}"
+            await this.logExecutionStep(userId, "Synthesizing professional strategic report...", "info", socket, executionSteps);
+            const extractionPrompt = `You are an expert Data Extraction Engine.
+            Task: ${query}
+            
             Current URL: ${finalUrl}
             
-            TASK: Extract and present the ACTUAL DATA the user asked for from the content below.
-            
             CRITICAL RULES:
-            1. EXTRACT REAL DATA: Pull out actual numbers, scores, dates, names, facts, statistics that are visible in the content. For example if the user asked for "IPL live scores", find and present the actual team names and scores (e.g., "• **Mumbai Indians**: 178/4 (20 overs) vs **Chennai Super Kings**: 162/8 (20 overs)").
-            2. NEVER list or describe websites. Do NOT say "ESPN provides..." or "Cricbuzz offers...". The user wants the DATA, not a directory of sources.
-            3. If actual data IS present in the snippets (scores, names, facts), extract and present it beautifully with bullet points.
-            4. If the actual data is genuinely NOT in the content, say "I couldn't find the exact live status on ${finalUrl} after exploring." and state clearly what part of your request is still outstanding.
-            5. NEVER ask 'Would you like me to go deep?' or 'Should I check another source?'. If you are here, you have already tried. Summarize the best information discovered.
+            1. EXTRACT REAL DATA: Pull out actual numbers, scores, dates, names, facts, statistics that are visible in the content. (e.g., "• **Mumbai Indians**: 178/4 vs **CSK**: 162/8").
+            2. NEVER list or describe websites. The user wants the DATA, not a directory of sources.
+            3. If actual data IS present, extract and present it beautifully with bullet points.
+            4. If the actual data is genuinely NOT in the content, say "I couldn't find the exact status on ${finalUrl} after exploring." and state what is still outstanding.
+            5. NEVER ask 'Would you like me to go deep?'. Summarize the best information discovered.
             6. NEVER hallucinate or invent data. Only use what's actually in the CONTENT below.
             7. NEVER tell the user to visit a website themselves.
-            8. DATA PRIORITY: For 'latest status', look for dates, times, and match progress. present it as "Status as of [Time]: [Details]".
+            8. DATA PRIORITY: For 'latest status', present it as "Status as of [Time/Date]: [Details]".
             
             FORMAT:
             - Use bullet points (•) for data items
@@ -403,17 +426,44 @@ class BrowserAgentService {
 
             const finalResult = await generateWithFallback(extractionPrompt, "You are the Nurotra Professional Strategic Assistant. Your voice is graceful, simple, and respectful.", [], [], { forceJson: false });
             
-            if (!skipSave) {
-                this.safeSaveMessage(userId, "agent", finalResult, "browser_result", { query, sourceUrl: finalUrl, provider: currentProvider });
+            // CAPTURE FINAL PROOF
+            let evidenceUrl = null;
+            try {
+                evidenceUrl = await this.captureStepProof(page, userId, `Final results for: ${query}`);
+            } catch (err) {
+                console.error("[BrowserAgent] Final proof capture failed:", err.message);
             }
 
-            console.log(`[BrowserAgent] [${userId}] Search completed.`);
-            await page.close();
-            return { success: true, answer: finalResult };
+            if (!skipSave) {
+                this.safeSaveMessage(userId, "agent", finalResult, "browser_result", { 
+                    query, 
+                    sourceUrl: finalUrl, 
+                    evidenceUrl,
+                    provider: currentProvider,
+                    executionSteps // Real steps for the UI to show
+                });
+            }
+
+            console.log(`[BrowserAgent] [${userId}] Search completed. [Persistent: ${options.reuseSession}]`);
+            if (!options.reuseSession) {
+                await page.close();
+                this.activePages.delete(userId.toString());
+            }
+            return { 
+                success: true, 
+                answer: finalResult,
+                metadata: {
+                    sourceUrl: finalUrl,
+                    evidenceUrl,
+                    executionSteps
+                }
+            };
 
         } catch (error) {
             console.error("[BrowserAgent] Search failed:", error.message);
+            // Always clean up on error to prevent hung sessions
             await page.close().catch(() => {});
+            this.activePages.delete(userId.toString());
             throw error;
         }
     }
@@ -421,15 +471,23 @@ class BrowserAgentService {
     /**
      * Perform an operational task (e.g., Update Sheet)
      */
-    async executeTask(userId, platform, taskDescription, socket = null) {
+    async executeTask(userId, platform, taskDescription, socket = null, options = {}) {
+        const executionSteps = [];
+        let page = this.activePages.get(userId.toString());
         const context = await this.getContext(userId);
-        const page = await context.newPage();
-        this.activePages.set(userId.toString(), page);
+
+        if (!page || page.isClosed()) {
+            page = await context.newPage();
+            this.activePages.set(userId.toString(), page);
+        } else {
+            console.log(`[BrowserAgent] [${userId}] Reusing existing session for task execution...`);
+        }
 
         // Immediate wake up frame
         await this.emitFrame(socket, userId, page, "Preparing Virtual Workspace...");
         
         try {
+            await this.logExecutionStep(userId, "Virtual workspace initialized.", "info", socket, false, executionSteps);
             const integration = await Integration.findOne({ userId, platform });
             if (!integration && platform !== 'custom') {
                 throw new Error(`Platform ${platform} not connected. Please connect it first.`);
@@ -512,16 +570,32 @@ class BrowserAgentService {
                     completed = true;
                     const msg = decision.replace("COMPLETE", "").trim();
                     
-                    // Save result to chat history
-                    await new ActionMessage({
-                        userId,
-                        role: "agent",
-                        content: msg,
-                        type: "browser_result",
-                        metadata: { platform, taskDescription }
-                    }).save();
+                    // CAPTURE FINAL PROOF
+                    let evidenceUrl = null;
+                    try {
+                        evidenceUrl = await this.captureStepProof(page, userId, `Task execution proof for: ${taskDescription}`);
+                    } catch (err) {
+                        console.error("[BrowserAgent] Task proof capture failed:", err.message);
+                    }
 
-                    return { success: true, message: msg };
+                    // Save result to chat history
+                    await this.safeSaveMessage(userId, "agent", msg, "browser_result", { 
+                        platform, 
+                        taskDescription,
+                        evidenceUrl,
+                        sourceUrl: page.url()
+                    });
+
+                    return { 
+                        success: true, 
+                        message: msg,
+                        metadata: {
+                            platform,
+                            taskDescription,
+                            evidenceUrl,
+                            sourceUrl: page.url()
+                        }
+                    };
                 } else if (decision.startsWith("FAIL")) {
                     throw new Error(decision.replace("FAIL", "").trim());
                 }
@@ -530,7 +604,10 @@ class BrowserAgentService {
                 await page.waitForTimeout(1000);
             }
 
-            await page.close();
+            if (!options.reuseSession) {
+                await page.close();
+                this.activePages.delete(userId.toString());
+            }
             
             const failPrompt = `The Action Agent was trying to: "${taskDescription}" on "${platform}".
             It stopped after ${steps} steps. 
@@ -544,7 +621,14 @@ class BrowserAgentService {
             Return strictly plain text helpful advice.`;
             
             const failAdvice = await generateWithFallback(failPrompt, "You are a helpful automation troubleshooter.");
-            return { success: true, message: `Task paused/incomplete. REASON: ${failAdvice}`, data: { advice: failAdvice } };
+            return { 
+                success: true, 
+                message: `Task paused/incomplete. REASON: ${failAdvice}`, 
+                data: { advice: failAdvice },
+                metadata: {
+                    sourceUrl: page.url()
+                }
+            };
         } catch (error) {
             console.error("[BrowserAgent] Task failed:", error.message);
             
@@ -554,7 +638,8 @@ class BrowserAgentService {
                 return await this.executeTask(userId, platform, taskDescription, socket, { ...options, retryCount: (options.retryCount || 0) + 1 });
             }
 
-            await page.close();
+            await page.close().catch(() => {});
+            this.activePages.delete(userId.toString());
             return { success: false, message: `Execution Error: ${error.message}. TIP: ${recovery.advice || "Ensure you are logged in or provide more specific selectors."}` };
         }
     }
