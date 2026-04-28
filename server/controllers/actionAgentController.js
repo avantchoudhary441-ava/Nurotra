@@ -1376,10 +1376,17 @@ const simulateExecution = async (workflowId, actionDefs, io = null, options = {}
                 },
                 timestamp: new Date()
             }).save();
+
+            // Serialize to plain object so _id is a string (not ObjectId)
+            // This prevents the frontend duplicate-check from silently dropping
+            // the message due to ObjectId vs string type mismatch.
+            const plainMsg = finalActionMsg.toObject();
+            plainMsg._id = plainMsg._id.toString();
+            plainMsg.userId = plainMsg.userId?.toString();
             
             if (io) {
                 setTimeout(() => {
-                    io.to(wf.userId.toString()).emit('chat_update', { userId: wf.userId, message: finalActionMsg });
+                    io.to(wf.userId.toString()).emit('chat_update', { userId: wf.userId.toString(), message: plainMsg });
                 }, 500);
             }
 
@@ -1537,7 +1544,12 @@ const addLog = (wf, stepIndex, step, level, message, io = null, evidenceUrl = nu
             type: "text",
             timestamp: new Date()
         }).save().then((savedMsg) => {
-            if (io) io.to(wf.userId.toString()).emit('chat_update', { userId: wf.userId, message: savedMsg });
+            if (io) {
+                const plainMsg = savedMsg.toObject();
+                plainMsg._id = plainMsg._id.toString();
+                plainMsg.userId = plainMsg.userId?.toString();
+                io.to(wf.userId.toString()).emit('chat_update', { userId: wf.userId.toString(), message: plainMsg });
+            }
         });
     }
     if (io) io.to(wf.userId.toString()).emit('task_update', { userId: wf.userId, workflowId: wf._id });
@@ -1556,7 +1568,12 @@ const addMilestone = async (userId, message, io = null) => {
         timestamp: new Date()
     });
     const savedMilestone = await milestone.save();
-    if (io) io.to(userId.toString()).emit('chat_update', { userId, message: savedMilestone });
+    if (io) {
+        const plainMilestone = savedMilestone.toObject();
+        plainMilestone._id = plainMilestone._id.toString();
+        plainMilestone.userId = plainMilestone.userId?.toString();
+        io.to(userId.toString()).emit('chat_update', { userId: userId.toString(), message: plainMilestone });
+    }
 };
 
 // ===========================================

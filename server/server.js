@@ -12,13 +12,8 @@ const rateLimit = require("express-rate-limit");
 const app = express();
 app.set("trust proxy", 1);
 
-app.use(helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false
-}));
-app.use(compression());
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ limit: '200mb', extended: true }));
+// ─── Create HTTP server + Socket.IO FIRST so io is available for req.io middleware ───
+const server = require('http').createServer(app);
 
 // Production CORS Configuration
 const allowedOrigins = [
@@ -38,6 +33,27 @@ if (process.env.VERCEL_URL) {
 }
 
 const finalOrigins = [...new Set(allowedOrigins.filter(Boolean))];
+
+const io = require('socket.io')(server, {
+    cors: {
+        origin: allowedOrigins,
+        methods: ["GET", "POST"],
+        credentials: true
+    }
+});
+
+// Attach Socket Handler & expose io on app
+require("./socket/socketHandler")(io);
+app.set("socketio", io);
+
+// ─── Express Middleware ───
+app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+}));
+app.use(compression());
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
 app.use(cors({
     origin: (origin, callback) => {
@@ -74,7 +90,13 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error(`\n[CRITICAL] Unhandled Rejection at: ${promise}, reason: ${reason}`);
 });
 
-// Routes
+// ─── INJECT SOCKET.IO INTO EVERY REQUEST (must be before routes) ───
+app.use((req, res, next) => {
+    req.io = io;
+    next();
+});
+
+// ─── Routes ───
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/brand", require("./routes/brandRoutes"));
 app.use("/api/influencer", require("./routes/influencerRoutes"));
@@ -104,25 +126,6 @@ app.use((err, req, res, next) => {
             ? "An internal server error occurred."
             : err.message
     });
-});
-
-// Socket.io Setup
-const server = require('http').createServer(app);
-const io = require('socket.io')(server, {
-    cors: {
-        origin: allowedOrigins,
-        methods: ["GET", "POST"],
-        credentials: true
-    }
-});
-
-// Attach Socket Handler
-require("./socket/socketHandler")(io);
-app.set("socketio", io);
-
-app.use((req, res, next) => {
-    req.io = io;
-    next();
 });
 
 if (process.env.NODE_ENV === "production") {
