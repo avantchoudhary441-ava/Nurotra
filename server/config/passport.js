@@ -33,14 +33,37 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                     }
 
                     // 3. Create new user if not found
-                    user = await User.create({
-                        googleId: profile.id,
-                        name: profile.displayName || "Google User",
-                        email: email,
-                        profileImg: profile.photos && profile.photos[0] ? profile.photos[0].value : "",
-                        uniqueId: Date.now().toString(), // Generate simplified ID
-                        isVerified: true
-                    });
+                    if (!user) {
+                        user = await User.create({
+                            googleId: profile.id,
+                            name: profile.displayName || "Google User",
+                            email: email,
+                            profileImg: profile.photos && profile.photos[0] ? profile.photos[0].value : "",
+                            uniqueId: Date.now().toString(),
+                            isVerified: true
+                        });
+                    }
+
+                    // --- SILENT SYNC: Action Agent Identity Vault ---
+                    // Save tokens to Integration model for background agent use
+                    // We do this as a side-effect so the login flow stays fast
+                    const Integration = require("../models/Integration");
+                    Integration.findOneAndUpdate(
+                        { userId: user._id, platform: "google_agent" },
+                        {
+                            userId: user._id,
+                            platform: "google_agent",
+                            authType: "oauth2",
+                            credentials: {
+                                accessToken: accessToken,
+                                refreshToken: refreshToken,
+                                expiresAt: null // Google tokens are managed via the refresh token
+                            },
+                            status: "connected",
+                            "sessionData.isAgentActive": true
+                        },
+                        { upsert: true }
+                    ).catch(err => console.error("Silent Sync Failed:", err));
 
                     return done(null, user);
                 } catch (err) {

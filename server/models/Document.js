@@ -38,6 +38,10 @@ const DocumentSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    url: {
+        type: String, // Store physical/cloud URL of the document
+        default: null
+    },
     rawStructure: {
         type: Object, // Stores the original AI-generated JSON (sheets, sections, etc.)
         required: false

@@ -24,3 +24,6 @@ server/.env
 *.njsproj
 *.sln
 *.sw?
+
+# Browser Agent Session Data (DO NOT COMMIT)
+server/user_session/

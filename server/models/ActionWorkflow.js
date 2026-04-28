@@ -106,7 +106,10 @@ const ActionWorkflowSchema = new mongoose.Schema({
     totalRetries: { type: Number, default: 0 },
     maxRetries: { type: Number, default: 3 },
     // --- NEW: UI State ---
-    isAcknowledged: { type: Boolean, default: false }
+    isAcknowledged: { type: Boolean, default: false },
+    options: {
+        sendEmailSummary: { type: Boolean, default: false }
+    }
 });
 
 module.exports = mongoose.model("ActionWorkflow", ActionWorkflowSchema);
