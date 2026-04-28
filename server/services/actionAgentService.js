@@ -11,7 +11,21 @@ const parseJSON = (text) => {
         } else if (cleanText.startsWith("```")) {
             cleanText = cleanText.replace(/^```/, "").replace(/```$/, "").trim();
         }
-        return JSON.parse(cleanText);
+        const data = JSON.parse(cleanText);
+        
+        // --- SCHEMA GUARD (Sanitize & Repair) ---
+        if (data.intent === "WORKFLOW_EXECUTION" && data.workflow && data.workflow.actions) {
+            data.workflow.actions = data.workflow.actions.map((action, index) => {
+                return {
+                    id: action.id || (index + 1), // Auto-inject ID if missing
+                    label: action.label || action.name || `Task ${index + 1}`, // Auto-inject Label
+                    icon: action.icon || "default",
+                    params: action.params || {},
+                    microLogs: action.microLogs || ["Initializing process..."]
+                };
+            });
+        }
+        return data;
     } catch (e) {
         console.error("Action Agent JSON Parse error:", e);
         throw new Error("Failed to parse AI intent.");
@@ -148,39 +162,55 @@ Format D (For FOLLOW_UP):
   }
 }
 
-Format C (For WORKFLOW_EXECUTION / FORM_AUTOMATION):
+Format C (Operational - e.g. Meetings, Files, Email):
 {
   "intent": "WORKFLOW_EXECUTION",
-  "isEventDriven": true/false,
+  "isEventDriven": false,
   "workflow": {
-    "title": "Short Descriptive Title",
-    "deadline": "ISO Date String if specified",
-    "trigger": { "type": "manual" | "message_received" | "scheduled", "source": "string" },
-    "conditions": [{ "field": "string", "operator": "string", "value": "string" }],
+    "title": "Meeting with Client",
+    "trigger": { "type": "manual", "source": "user_command" },
+    "conditions": [{ "field": "exists", "operator": "exists", "value": "true" }],
     "actions": [
       {
         "id": 1,
-        "label": "Search Web for [Specific Topic]",
-        "icon": "globe",
-        "delayMs": 2000,
-        "microLogs": ["Scanning search engines...", "Parsing results..."],
-        "retryConfig": { "maxRetries": 1, "retryDelayMs": 2000 },
-        "params": {
-          "query": "The precise topic to search for"
-        }
+        "label": "Create Google Meet: Project Sync",
+        "icon": "clock",
+        "params": { 
+          "provider": "google",
+          "title": "Project Sync",
+          "startTime": "2026-04-24T10:00:00Z"
+        },
+        "microLogs": ["Authenticating with Google...", "Generating secure meet link..."]
       }
     ]
   }
 }
 
-SPECIAL CASE: FORM AUTOMATION
-If the user wants to "Apply", "Register", "Sign up", or "Fill a form":
-1. Set title to something like "Application for [Role/Company]"
-2. Add these specific actions:
-   - Label: "Detect Form Elements", icon: "database", params: { "detectFields": true }
-   - Label: "Map Profile Data", icon: "file"
-   - Label: "Auto-Fill Fields", icon: "default"
-   - Label: "Submit Information", icon: "mail"
+Format D (Research - e.g. Data lookup, News, Scores):
+{
+  "intent": "WORKFLOW_EXECUTION",
+  "isEventDriven": false,
+  "workflow": {
+    "title": "Market Research",
+    "actions": [
+      {
+        "id": 1,
+        "label": "Search Web for [Topic]",
+        "icon": "globe",
+        "params": { "query": "Topic" }
+      }
+    ]
+  }
+}
+
+SPECIAL CASE: FORM AUTOMATION & JOB APPLICATIONS
+If the user wants to "Apply for jobs", "Find a job", "Register", "Sign up", or "Fill a form":
+1. Detect the target platform (e.g., "linkedin", "upwork", "fiverr", "google"). Default to "web" if none specified.
+2. Detect the number of applications. Default to "1". Max limit is "3".
+3. Set title to something like "Job Search & Application: [Role]"
+4. Add these specific actions:
+   - { "id": 1, "label": "Navigate and Search Jobs", "icon": "globe", "params": { "platform": "[Platform Name]", "query": "Job role search", "limit": [Number] } }
+   - { "id": 2, "label": "Execute Multi-Tab Auto Apply", "icon": "database", "params": { "batchSize": [Number] } }
 
 ENUMS (CRITICAL):
 - "icon": "drive" | "mail" | "file" | "spreadsheet" | "database" | "clock" | "globe" | "default"
@@ -195,9 +225,14 @@ RULES:
 - MicroLogs: Generate 3-5 realistic micro-logs showing search or task progress.
 - isEventDriven: true for "whenever/every time", false for one-shot tasks.
 - Conditions: Always include at least one (use "exists" for unconditional).
-- Provide 2-5 actions that meaningfully decompose the user's request.
-- CONTEXTUAL PRIORITY: If a user says "latest status" or "do it", and the history shows we were talking about IPL or a specific report, do NOT ask for clarification. Assume the context from history and generate the WORKFLOW_EXECUTION or FOLLOW_UP intent.
-- FOLLOW-UP SPECIFICITY: If a user provides a specific topic in a follow-up (e.g. "tell me more about Pittsburgh startup funding"), ALWAYS return intent: "WORKFLOW_EXECUTION" or "FOLLOW_UP" with a full search workflow. Do NOT use CLARIFICATION if a specific noun/topic is provided.
+- **NATIVE TOOLS (MANDATORY)**: Nurotra has direct API access to:
+  1. **Google Calendar / Meet**: For creating meetings and links.
+  2. **Zoom**: For creating Zoom links.
+  3. **File Management**: For renaming, uploading, and sharing files.
+  4. **Email (Nodemailer)**: For sending reports and alerts.
+- **NEVER SEARCH FOR MEETINGS**: If the user wants a meeting link, you MUST use icon: "clock" and a label like "Create Google Meet: [Topic]". Do NOT include a search step. Searching the web for meeting links is a system failure.
+- Provide 1 to 2 high-impact actions for operational tasks.
+- EMAIL SUMMARY: Set "options.sendEmailSummary" to true ONLY IF the user explicitly mentions words like "email", "mail", "send me a copy", "summary report", or "let me know via email". If they just say "Create a link" or "Find the score", set it to false.
 - SEARCH QUERY: If context is resolved from history (e.g. user says "latest status" after "IPL"), ensure the search query includes the context (e.g. "IPL latest news/status").
 
 CONVERSATION CONTEXT & MEMORY:

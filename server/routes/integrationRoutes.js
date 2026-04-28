@@ -17,6 +17,10 @@ router.get("/zoom/auth", protect, integrationController.authZoom);
 // /api/integrations/zoom/callback - redirect from Zoom
 router.get("/zoom/callback", integrationController.callbackZoom);
 
+// --- AGENT IDENTITY ROUTES (New: Dedicated for Action Agent) ---
+router.get("/agent/google/auth", protect, integrationController.authGoogleAgent);
+router.get("/agent/google/callback", integrationController.callbackGoogleAgent);
+
 // --- SYNC ENGINE ROUTES ---
 router.get("/sync/activity", protect, syncController.getSyncActivity);
 router.get("/sync/mappings", protect, syncController.getMappings);

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Sparkles, Globe, User, ShieldAlert, AlertCircle, RefreshCw, X, Paperclip, CheckCircle2, AlertTriangle, Play, Pause, Activity, Terminal, Menu, Bot, Plus, Mic, MicOff, ExternalLink } from 'lucide-react';
+import { Send, Loader2, Sparkles, Globe, User, ShieldAlert, AlertCircle, RefreshCw, X, Paperclip, CheckCircle2, AlertTriangle, Play, Pause, Activity, Terminal, Menu, Bot, Plus, Mic, MicOff, ExternalLink, Upload } from 'lucide-react';
 import './ActionAgent.css';
 
 // --- Typewriter Animation Component ---
@@ -36,8 +36,6 @@ const ActionAgentPage = () => {
     const [commandInput, setCommandInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [suggestions, setSuggestions] = useState([]);
-
-
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [pastWorkflows, setPastWorkflows] = useState([]);
@@ -136,7 +134,6 @@ const ActionAgentPage = () => {
                 setSuggestions(data.suggestions);
             }
         } catch (error) {
-            // Fail silently — fallback suggestions shown
             setSuggestions([
                 "Search for current IPL scores",
                 "Generate a weekly report",
@@ -158,13 +155,10 @@ const ActionAgentPage = () => {
         }
     };
 
-
-
     useEffect(() => {
         if (!globalSocket) return;
         socketRef.current = globalSocket;
 
-        // Explicitly join the execution room for this user to ensure monitor sync
         if (user?._id) {
             socketRef.current.emit('join-room', user._id);
         }
@@ -175,12 +169,6 @@ const ActionAgentPage = () => {
             setShowMonitorTroubleshoot(false);
             setMonitorVisible(true);
             setIsConnecting(false);
-
-            // Move to running state if we were connecting
-            setIsConnecting(false);
-            setMonitorLoadingStart(null);
-            
-            // Pulse the activity indicator to show it's alive
             setLastPulse(Date.now());
         });
 
@@ -196,16 +184,13 @@ const ActionAgentPage = () => {
         });
 
         socketRef.current.on('execution_log', (data) => {
-            // Move to running state if we were connecting
             setIsConnecting(false);
             setMonitorLoadingStart(null);
-            
-            // Update the live feed with the latest granular log
             setExecutionLogs(prev => {
                 const updated = [...prev, {
                     ...data,
                     _id: data._id || 'log_' + Date.now()
-                }].slice(-50); // Keep last 50 for performance
+                }].slice(-50);
                 return updated;
             });
             setLastPulse(Date.now());
@@ -229,13 +214,13 @@ const ActionAgentPage = () => {
             fetchTasks();
         });
 
-        // Cleanup listeners on unmount
         return () => {
             if (socketRef.current) {
                 socketRef.current.off('browser_frame');
                 socketRef.current.off('browser_block');
                 socketRef.current.off('task_update');
                 socketRef.current.off('chat_update');
+                socketRef.current.off('execution_log');
             }
         };
     }, [globalSocket, user]);
@@ -247,14 +232,12 @@ const ActionAgentPage = () => {
         fetchSuggestions(token);
         fetchHistory(token);
 
-        // Load User Name
         const userData = localStorage.getItem('nurotra_user');
         if (userData) {
-            const user = JSON.parse(userData);
-            if (user.name) setUserName(user.name.split(' ')[0]);
+            const userObj = JSON.parse(userData);
+            if (userObj.name) setUserName(userObj.name.split(' ')[0]);
         }
 
-        // Initialize Speech Recognition
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognitionRef.current = new SpeechRecognition();
@@ -275,13 +258,8 @@ const ActionAgentPage = () => {
 
             recognitionRef.current.onend = () => setIsListening(false);
         }
-
-        return () => {
-            // Do NOT disconnect global socket here
-        };
     }, []);
 
-    // Draggable Resizer Logic
     useEffect(() => {
         const handleMouseMove = (e) => {
             if (!isResizing || !containerRef.current) return;
@@ -303,9 +281,6 @@ const ActionAgentPage = () => {
         };
     }, [isResizing]);
 
-
-
-    // Polling Active Tasks
     useEffect(() => {
         const pollInterval = setInterval(() => {
             fetchTasks();
@@ -313,19 +288,17 @@ const ActionAgentPage = () => {
         return () => clearInterval(pollInterval);
     }, []);
 
-    // Scroll chat to bottom
     useEffect(() => {
         if (chatEndRef.current) {
             chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     }, [chatMessages]);
 
-    // Track active runs for timer
     useEffect(() => {
         const timer = setInterval(() => {
             setActiveTasks(prev => prev.map(t => {
                 if (['running', 'waiting', 'retrying'].includes(t.status)) {
-                    return { ...t, elapsed: Math.floor((Date.now() - new Date(t.startTime).getTime()) / 1000) };
+                    return { ...t, elapsed: t.startTime ? Math.floor((Date.now() - new Date(t.startTime).getTime()) / 1000) : 0 };
                 }
                 return t;
             }));
@@ -342,9 +315,9 @@ const ActionAgentPage = () => {
             });
             const data = await res.json();
             if (data.success) {
-                setChatMessages(data.logs || []); // Use logs as history if needed
+                setChatMessages(data.logs || []);
             }
-            fetchChat(); // Also get actual chat
+            fetchChat();
         } catch (e) {
             console.error(e);
         }
@@ -366,28 +339,36 @@ const ActionAgentPage = () => {
         }
     };
 
-    const sendCommand = async (inputStr, e = null) => {
-        if (e && e.preventDefault) e.preventDefault();
+    const sendCommand = async (inputStr, isInterventionInput = false) => {
         const text = typeof inputStr === 'string' ? inputStr : commandInput;
         if (!text.trim()) return;
 
         setCommandInput('');
         setIsLoading(true);
-        setIsConnecting(true); // Wake up monitor
+        setIsConnecting(true);
+
+        const tempUserMsg = {
+            _id: 'temp_' + Date.now(),
+            role: 'user',
+            content: text,
+            type: 'text',
+            timestamp: new Date().toISOString()
+        };
+        setChatMessages(prev => [...prev, tempUserMsg]);
 
         try {
             const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
-            const response = await fetch("http://localhost:5000/api/action-agent/execute", {
+            const res = await fetch("http://localhost:5000/api/action-agent/execute", {
                 method: "POST",
-                headers: {
+                headers: { 
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`,
-                    "x-socket-id": socketRef.current?.id || ""
+                    "x-socket-id": socketRef.current?.id
                 },
-                body: JSON.stringify({ command: text })
+                body: JSON.stringify({ command: text, isIntervention: isInterventionInput === true })
             });
 
-            const data = await response.json();
+            const data = await res.json();
             if (data.success) {
                 fetchChat();
                 fetchTasks();
@@ -456,6 +437,39 @@ const ActionAgentPage = () => {
         }
     };
 
+    const resumeIdentity = async (workflowId, email) => {
+        if (!workflowId) return alert("System Error: Reference lost. Please try a new command.");
+        setIsLoading(true);
+        try {
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            const res = await fetch("http://localhost:5000/api/action-agent/resume-identity", {
+                method: "POST",
+                headers: { 
+                    "Content-Type": "application/json", 
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ workflowId, email })
+            });
+            
+            if (!res.ok) throw new Error("Handshake failed");
+            
+            setChatMessages(prev => prev.map(m => 
+                (m.workflowId === workflowId || (m.metadata && m.metadata.workflowId === workflowId)) && m.type === 'intervention' 
+                ? { ...m, content: `Identity Locked: Using ${email}. Resuming search engine...`, type: 'text' } 
+                : m
+            ));
+
+            fetchTasks();
+            fetchChat();
+        } catch (err) {
+            console.error("Identity Bridge Error:", err);
+            alert("Direct sync failed. Falling back to command entry...");
+            sendCommand(`Use email: ${email}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleQuickAction = (actionText) => {
         setCommandInput(actionText);
         sendCommand(actionText);
@@ -473,7 +487,7 @@ const ActionAgentPage = () => {
                     "Authorization": `Bearer ${token}`,
                     "x-socket-id": socketRef.current?.id
                 },
-                body: JSON.stringify({ command: link, isIntervention: true })
+                body: JSON.stringify({ command: link, isIntervention: true, workflowId })
             });
             const data = await res.json();
             if (data.success) {
@@ -505,7 +519,7 @@ const ActionAgentPage = () => {
             const data = await res.json();
             
             if (data.documentId) {
-                // Resume the task with the document ID
+                const activeWf = activeWorkflowId || activeTasks[0]?._id;
                 await fetch("http://localhost:5000/api/action-agent/execute", {
                     method: "POST",
                     headers: { 
@@ -513,7 +527,7 @@ const ActionAgentPage = () => {
                         "Authorization": `Bearer ${token}`,
                         "x-socket-id": socketRef.current?.id
                     },
-                    body: JSON.stringify({ command: `I've uploaded my resume: ${data.documentId}`, isIntervention: true })
+                    body: JSON.stringify({ command: `I've uploaded my resume: ${data.documentId}`, isIntervention: true, workflowId: activeWf })
                 });
             }
         } catch (error) {
@@ -538,6 +552,8 @@ const ActionAgentPage = () => {
     const renderStructuredContent = (text, animate = false) => {
         if (!text) return null;
 
+            const isHeadline = (trimmed === trimmed.toUpperCase() && trimmed.length > 4 && !/^[•\-\*⚠]/.test(trimmed) && !trimmed.includes(':'))
+                || trimmed.startsWith('✅') || trimmed.startsWith('📌');
         // Split into paragraphs first (double newline = paragraph break)
         const paragraphs = text.split(/\n{2,}/);
 
@@ -567,12 +583,36 @@ const ActionAgentPage = () => {
                 );
             }
 
+            if (trimmed.startsWith('⚠')) {
+                return <div key={i} style={{ color: '#b8986a', fontSize: '12px', marginBottom: 4 }}>
+                    {animate ? <TypewriterText text={trimmed} speed={10} /> : trimmed}
+                </div>;
+            }
+
+            if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('  •')) {
+                const content = trimmed.replace(/^[•\-\*]\s*|^\s+•\s*/, '');
             if (isHeader) {
                 return (
                     <div key={pIdx} style={{ fontWeight: '700', fontSize: '13px', color: '#d0d0d0', marginTop: pIdx > 0 ? 18 : 0, marginBottom: 8, letterSpacing: '0.2px' }}>
                         {animate ? <TypewriterText text={lines[0]} speed={10} /> : lines[0]}
                     </div>
                 );
+            }
+
+            if (trimmed.includes(':') && !trimmed.startsWith('Source')) {
+                const colonIdx = trimmed.indexOf(':');
+                const key = trimmed.substring(0, colonIdx).trim();
+                const value = trimmed.substring(colonIdx + 1).trim();
+                if (key && value) {
+                    return (
+                        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                            <span style={{ color: '#666', fontWeight: '500', fontSize: '11px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{key}</span>
+                            <span style={{ color: '#e0e0e0', fontSize: '13px' }}>
+                                {animate ? <TypewriterText text={value} speed={15} /> : value}
+                            </span>
+                        </div>
+                    );
+                }
             }
 
             if (isBulletBlock) {
@@ -603,20 +643,49 @@ const ActionAgentPage = () => {
         });
     };
 
+    const [clickPulse, setClickPulse] = useState(null);
+
 
     // --- Interactive Browser Click Handlers ---
     const handleMonitorClick = (e) => {
-        if (!monitorImgRef.current || !socketRef.current) return;
+        if (!monitorImgRef.current || !socketRef.current || !user?._id) return;
         const rect = monitorImgRef.current.getBoundingClientRect();
+        
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+        
         const scaleX = 1280 / rect.width;
         const scaleY = 720 / rect.height;
         const finalX = Math.round(x * scaleX);
         const finalY = Math.round(y * scaleY);
-        const storedUser = localStorage.getItem('nurotra_user');
-        const userId = storedUser ? JSON.parse(storedUser).userId || '000000000000000000000001' : '000000000000000000000001';
-        socketRef.current.emit("browser_input", { userId, type: 'click', x: finalX, y: finalY });
+        
+        setClickPulse({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        setTimeout(() => setClickPulse(null), 600);
+
+        socketRef.current.emit("browser_input", { 
+            userId: user._id, 
+            type: 'click', 
+            x: finalX, 
+            y: finalY 
+        });
+    };
+
+    const handleKeyDown = (e) => {
+        // Only send if it's not a shortcut we want to keep (like Ctrl+R)
+        if (e.ctrlKey || e.metaKey) return;
+        
+        if (!socketRef.current || !user?._id) return;
+
+        // Prevent default for keys that scroll the page
+        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Backspace", "Space", "Enter"].includes(e.key)) {
+            e.preventDefault();
+        }
+
+        socketRef.current.emit("browser_input", {
+            userId: user._id,
+            type: 'keypress',
+            key: e.key
+        });
     };
 
     return (
@@ -624,13 +693,11 @@ const ActionAgentPage = () => {
             className="action-workspace-container"
             style={{ userSelect: (isResizing || isResizingVert) ? 'none' : 'auto' }}
         >
-            {/* --- HISTORY SIDEBAR (Collapsible Push) --- */}
             <div className="history-sidebar" style={{ width: isSidebarOpen ? 260 : 0 }}>
                 <div className="history-header">
                     <Activity size={14} /> Session History
                 </div>
 
-                {/* --- Sidebar Actions --- */}
                 <div style={{ padding: '16px 12px 10px 12px' }}>
                     <button
                         onClick={() => { handleNewChat(); setIsSidebarOpen(false); }}
@@ -650,8 +717,6 @@ const ActionAgentPage = () => {
                             cursor: 'pointer',
                             transition: 'all 0.2s'
                         }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(108, 92, 231, 0.2)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(108, 92, 231, 0.1)'}
                     >
                         <Plus size={14} /> START NEW CHAT
                     </button>
@@ -675,15 +740,11 @@ const ActionAgentPage = () => {
                 </div>
             </div>
 
-            {/* --- SPLIT LAYOUT CONTENT --- */}
             <div ref={containerRef} className="action-split-layout">
-
-                {/* --- LEFT SIDE: EXECUTION STAGE --- */}
                 <div
                     className="action-left-pane-split"
                     style={{ width: `${leftPaneWidth}%`, display: 'flex' }}
                 >
-                    {/* Upper Half: Execution Monitor */}
                     <div className={`execution-monitor-section ${activeTasks[0]?.metadata?.continuation ? 'deep-dive' : ''}`} style={{ height: `${topPaneHeight}%`, flex: 'none' }}>
                         <div className="terminal-header">
                             <Activity size={12} /> 
@@ -703,15 +764,89 @@ const ActionAgentPage = () => {
                                 </div>
                             )}
                         </div>
-                        <div style={{ flex: 1, backgroundColor: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div 
+                            style={{ flex: 1, backgroundColor: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'crosshair', outline: 'none' }} 
+                            onClick={handleMonitorClick}
+                            onKeyDown={handleKeyDown}
+                            tabIndex="0"
+                        >
                             {browserFrame ? (
-                                <img
-                                    ref={monitorImgRef}
-                                    src={browserFrame.frame}
-                                    alt="Browser View"
-                                    onClick={handleMonitorClick}
-                                    style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'crosshair' }}
-                                />
+                                <>
+                                    <img
+                                        ref={monitorImgRef}
+                                        src={browserFrame.frame}
+                                        alt="Browser View"
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
+                                        className={activeTasks[0]?.status === 'intervention' ? "monitor-dimmed" : ""}
+                                    />
+                                    {clickPulse && (
+                                        <motion.div
+                                            initial={{ scale: 0, opacity: 0.8 }}
+                                            animate={{ scale: 2, opacity: 0 }}
+                                            style={{
+                                                position: 'absolute',
+                                                top: clickPulse.y,
+                                                left: clickPulse.x,
+                                                width: 20,
+                                                height: 20,
+                                                background: 'rgba(255,255,255,0.4)',
+                                                borderRadius: '50%',
+                                                pointerEvents: 'none',
+                                                zIndex: 5
+                                            }}
+                                        />
+                                    )}
+                                    {activeTasks[0]?.status === 'intervention' && (
+                                        <div 
+                                            style={{ 
+                                                position: 'absolute', 
+                                                top: 20, left: 20, right: 20,
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                pointerEvents: 'none',
+                                                zIndex: 10
+                                            }}
+                                        >
+                                            <div style={{ 
+                                                background: 'rgba(243, 156, 18, 0.95)', 
+                                                backdropFilter: 'blur(10px)',
+                                                color: '#000', 
+                                                padding: '8px 15px', 
+                                                borderRadius: '12px', 
+                                                fontSize: '10px', 
+                                                fontWeight: '800',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 12,
+                                                boxShadow: '0 10px 30px rgba(243,156,18,0.3)',
+                                                pointerEvents: 'auto',
+                                                border: '1px solid rgba(0,0,0,0.1)'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <AlertTriangle size={12} /> VERIFICATION REQUIRED
+                                                </div>
+                                                <div style={{ width: 1, height: 15, background: 'rgba(0,0,0,0.1)' }} />
+                                                <button
+                                                    onClick={() => {
+                                                        sendCommand("I have solved the verification. Please continue.", true);
+                                                    }}
+                                                    style={{
+                                                        background: '#000',
+                                                        color: '#f39c12',
+                                                        border: 'none',
+                                                        padding: '5px 12px',
+                                                        borderRadius: '6px',
+                                                        fontSize: '9px',
+                                                        fontWeight: '900',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    RESUME MISSION
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             ) : (isConnecting || (activeTasks.length > 0 && activeTasks[0].status === 'running')) && !browserFrame ? (
                                 <div style={{ textAlign: 'center', color: '#444' }}>
                                     <Loader2 size={30} className="spin-icon" style={{ marginBottom: 15, color: '#6c5ce7' }} />
@@ -727,7 +862,6 @@ const ActionAgentPage = () => {
                             )}
                         </div>
 
-                        {/* Success Celebration Overlay */}
                         <AnimatePresence>
                             {activeTasks[0]?.status === 'completed' && !activeTasks[0]?.isAcknowledged && (
                                 <motion.div
@@ -742,44 +876,42 @@ const ActionAgentPage = () => {
                                         zIndex: 100,
                                         background: 'linear-gradient(135deg, #111 0%, #000 100%)',
                                         border: '1px solid #00ff88',
-                                        padding: '20px 25px',
+                                        padding: '12px 20px', // Slimmer padding
                                         borderRadius: '16px',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: 20,
-                                        boxShadow: '0 20px 50px rgba(0,0,0,0.8), 0 0 20px rgba(0,255,136,0.1)'
+                                        gap: 15,
+                                        boxShadow: '0 20px 50px rgba(0,0,0,0.8), 0 0 20px rgba(0,255,136,0.1)',
+                                        pointerEvents: 'auto'
                                     }}
                                 >
-                                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(0,255,136,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <CheckCircle2 size={20} color="#00ff88" />
+                                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(0,255,136,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <CheckCircle2 size={16} color="#00ff88" />
                                     </div>
                                     <div style={{ flex: 1 }}>
-                                        <div style={{ color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: 2 }}>Task Complete</div>
-                                        <div style={{ color: '#888', fontSize: '11px' }}>Results and evidence delivered to chat.</div>
+                                        <div style={{ color: '#fff', fontSize: '13px', fontWeight: '700' }}>Task Complete</div>
+                                        <div style={{ color: '#666', fontSize: '10px' }}>Final report delivered.</div>
                                     </div>
                                     <button
                                         onClick={() => {
                                             socketRef.current.emit('acknowledge_task', { workflowId: activeTasks[0]._id });
                                             fetchTasks();
-                                            // Scroll to chat bottom where the result is
                                             chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                                         }}
-                                        style={{ background: '#fff', color: '#000', border: 'none', padding: '8px 18px', borderRadius: '10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                                        style={{ background: '#00ff88', color: '#000', border: 'none', padding: '6px 14px', borderRadius: '8px', fontSize: '11px', fontWeight: '800', cursor: 'pointer' }}
                                     >
-                                        View Report
+                                        DISMISS
                                     </button>
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
 
-                    {/* --- VERTICAL DIVIDER --- */}
                     <div
                         className="pane-divider-vert"
                         onMouseDown={() => setIsResizingVert(true)}
                     />
 
-                    {/* Lower Half: Micro-logs Terminal */}
                     <div className="micro-logs-section" style={{ flex: 1 }}>
                         <div className="terminal-header">
                             <Terminal size={12} /> Task Activity Feed
@@ -804,17 +936,14 @@ const ActionAgentPage = () => {
                     </div>
                 </div>
 
-                {/* --- DRAGGABLE RESIZER --- */}
                 <div
                     className="pane-divider"
                     style={{ display: 'flex' }}
                     onMouseDown={() => setIsResizing(true)}
                 />
 
-                {/* --- RIGHT SIDE: COMMAND CENTER --- */}
                 <div className="action-right-pane-split">
                     <div className="command-center">
-                        {/* Header */}
                         <div style={{ padding: '16px 24px', borderBottom: '1px solid #111', display: 'flex', alignItems: 'center', gap: 12 }}>
                             <button className="hamburger-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
                                 <Menu size={18} style={{ color: isSidebarOpen ? '#a29bfe' : '#666' }} />
@@ -829,7 +958,6 @@ const ActionAgentPage = () => {
                             )}
                         </div>
 
-                        {/* Chat Timeline */}
                         <div className="chat-timeline" style={{ paddingBottom: suggestions.length > 0 ? 40 : 100 }}>
                             {chatMessages.length === 0 ? (
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.1 }}>
@@ -841,7 +969,6 @@ const ActionAgentPage = () => {
                                     const isUser = msg.role === 'user';
                                     const isResult = msg.type === 'result' || msg.type === 'browser_result';
                                     const isClarification = msg.type === 'clarification';
-                                    const isMilestone = msg.type === 'milestone';
                                     const isNew = (Date.now() - new Date(msg.timestamp).getTime()) < 5000;
 
                                     return (
@@ -857,7 +984,29 @@ const ActionAgentPage = () => {
                                                 </div>
                                             )}
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: isUser ? 'flex-end' : 'flex-start' }}>
-                                                {isResult ? (
+                                                {msg.metadata?.meetingData ? (
+                                                    <div className="premium-result-card" style={{ background: '#111', border: '1px solid #222', borderRadius: '16px', overflow: 'hidden' }}>
+                                                        <div style={{ padding: '15px 20px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                <CheckCircle2 size={12} /> MEETING SCHEDULED
+                                                            </div>
+                                                            <div style={{ color: '#444', fontSize: '10px' }}>{new Date(msg.timestamp).toLocaleTimeString()}</div>
+                                                        </div>
+                                                        <div style={{ padding: '20px' }}>
+                                                            <div style={{ color: '#fff', fontSize: '15px', fontWeight: 'bold', marginBottom: '10px' }}>
+                                                                {msg.metadata.meetingData.title || "Scheduled Meeting"}
+                                                            </div>
+                                                            <div style={{ color: '#aaa', fontSize: '13px', marginBottom: '20px' }}>
+                                                                Your requested meeting has been automatically set up via {msg.metadata.meetingData.provider === 'zoom' ? 'Zoom' : 'Google Meet'}.
+                                                            </div>
+                                                            <a href={msg.metadata.meetingData.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                                                                <div style={{ background: '#6c5ce7', color: '#fff', padding: '12px 20px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                                                                    <ExternalLink size={16} /> JOIN {msg.metadata.meetingData.provider === 'zoom' ? 'ZOOM' : 'MEETING'}
+                                                                </div>
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                ) : isResult ? (
                                                     <div className="premium-result-card" style={{ background: '#111', border: '1px solid #222', borderRadius: '16px', overflow: 'hidden' }}>
                                                         <div style={{ padding: '15px 20px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <div style={{ color: msg.metadata?.continuation ? '#00d2ff' : '#00ff88', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -868,200 +1017,130 @@ const ActionAgentPage = () => {
                                                         </div>
                                                         <div style={{ padding: '20px' }}>
                                                             {renderStructuredContent(msg.content, isNew)}
-                                                            
-                                                            {/* Dynamic Source Branding Row (Directly embedded) */}
                                                             {msg.metadata?.sourceUrl && (
                                                                 <div style={{ marginTop: 30, borderTop: '1px solid #222', paddingTop: 20 }}>
                                                                     <div style={{ color: '#555', fontSize: '10px', marginBottom: 12, fontWeight: '800', letterSpacing: '1px' }}>VERIFIED ORIGIN</div>
                                                                     <div 
-                                                                        style={{
-                                                                            display: 'inline-flex',
-                                                                            alignItems: 'center',
-                                                                            gap: 12,
-                                                                            background: 'rgba(255,255,255,0.03)',
-                                                                            padding: '10px 16px',
-                                                                            borderRadius: '50px',
-                                                                            border: '1px solid rgba(255,255,255,0.1)',
-                                                                            cursor: 'pointer'
-                                                                        }}
+                                                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.03)', padding: '10px 16px', borderRadius: '50px', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}
                                                                         onClick={() => window.open(msg.metadata.sourceUrl, '_blank')}
                                                                     >
                                                                         <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                                                                            <img 
-                                                                                src={`https://www.google.com/s2/favicons?domain=${(() => {
-                                                                                    try {
-                                                                                        return new URL(msg.metadata.sourceUrl.replace(/[\[\]\(\)]/g, '')).hostname;
-                                                                                    } catch(e) { return 'google.com'; }
-                                                                                })()}&sz=64`} 
-                                                                                style={{ width: 18, height: 18 }}
-                                                                                alt="favicon"
-                                                                            />
+                                                                            <img src={`https://www.google.com/s2/favicons?domain=${msg.metadata.sourceUrl}&sz=64`} style={{ width: 18, height: 18 }} alt="favicon" />
                                                                         </div>
-                                                                        <div style={{ color: '#eee', fontSize: '12px', fontWeight: '600' }}>
-                                                                            {(() => {
-                                                                                try {
-                                                                                    return new URL(msg.metadata.sourceUrl.replace(/[\[\]\(\)]/g, '')).hostname.replace('www.', '');
-                                                                                } catch(e) { return 'Source'; }
-                                                                            })()}
-                                                                        </div>
+                                                                        <div style={{ color: '#eee', fontSize: '12px', fontWeight: '600' }}>{new URL(msg.metadata.sourceUrl).hostname.replace('www.', '')}</div>
                                                                         <ExternalLink size={12} color="#666" style={{ marginLeft: 4 }} />
                                                                     </div>
                                                                 </div>
                                                             )}
-
                                                             {msg.metadata?.evidenceUrl && (
                                                                 <div style={{ marginTop: 20 }}>
                                                                     <div style={{ color: '#555', fontSize: '10px', marginBottom: 10, fontWeight: '800', letterSpacing: '1px' }}>VISUAL EVIDENCE</div>
                                                                     <a href={msg.metadata.evidenceUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', position: 'relative' }}>
                                                                         <img src={msg.metadata.evidenceUrl} alt="Proof" style={{ width: '100%', borderRadius: '12px', border: '1px solid #222', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }} />
-                                                                        <div style={{ position: 'absolute', bottom: 10, right: 10, background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontSize: '10px' }}>
-                                                                            CLICK TO EXPAND
-                                                                        </div>
                                                                     </a>
                                                                 </div>
                                                             )}
                                                         </div>
                                                     </div>
                                                 ) : isClarification ? (
-                                                    <div style={{
-                                                        background: 'rgba(255, 165, 0, 0.05)',
-                                                        border: '1px solid rgba(255, 165, 0, 0.2)',
-                                                        padding: '16px 20px',
-                                                        borderRadius: '16px 16px 16px 4px',
-                                                        color: '#fff',
-                                                        fontSize: '15px',
-                                                        lineHeight: '1.6',
-                                                        maxWidth: '600px'
-                                                    }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ffa500', fontSize: '11px', fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                    <div style={{ background: 'rgba(255, 165, 0, 0.05)', border: '1px solid rgba(255, 165, 0, 0.2)', padding: '16px 20px', borderRadius: '16px 16px 16px 4px', color: '#fff', fontSize: '15px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ffa500', fontSize: '11px', fontWeight: '800', marginBottom: 8, textTransform: 'uppercase' }}>
                                                             <Sparkles size={12} /> Need more clarity
                                                         </div>
                                                         {msg.content}
                                                     </div>
                                                 ) : msg.type === 'intervention' ? (
-                                                    <div style={{
-                                                        background: 'rgba(108, 92, 231, 0.05)',
-                                                        border: '1px solid rgba(108, 92, 231, 0.2)',
-                                                        padding: '16px 20px',
-                                                        borderRadius: '16px 16px 16px 4px',
-                                                        color: '#fff',
-                                                        fontSize: '15px',
-                                                        lineHeight: '1.6',
-                                                        maxWidth: '600px',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        gap: 15
-                                                    }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a29bfe', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                                            <Sparkles size={12} /> {msg.metadata?.subtype === 'resume_upload' ? 'Action Required: Resume Missing' : 'Action Required: Link Needed'}
+                                                    <div style={{ background: 'rgba(108, 92, 231, 0.05)', border: '1px solid rgba(108, 92, 231, 0.2)', padding: '16px 20px', borderRadius: '16px 16px 16px 4px', color: '#fff', fontSize: '15px', display: 'flex', flexDirection: 'column', gap: 15 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#a29bfe', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>
+                                                            <Sparkles size={12} /> {msg.metadata?.subtype === 'resume_upload' ? 'Action Required: Resume Missing' : 'Action Required: Identity Locked'}
                                                         </div>
                                                         <div style={{ opacity: 0.9 }}>{msg.content}</div>
                                                         
                                                         {msg.metadata?.subtype === 'resume_upload' && (
                                                             <div style={{ marginTop: 5 }}>
-                                                                <input 
-                                                                    type="file" 
-                                                                    ref={fileInputRef} 
-                                                                    onChange={handleFileUpload} 
-                                                                    style={{ display: 'none' }} 
-                                                                    accept=".pdf,.doc,.docx"
-                                                                />
-                                                                <button 
-                                                                    onClick={() => fileInputRef.current?.click()}
-                                                                    disabled={isLoading}
-                                                                    style={{ 
-                                                                        width: '100%', 
-                                                                        padding: '12px', 
-                                                                        background: 'rgba(108, 92, 231, 0.2)', 
-                                                                        border: '1px solid #6c5ce7', 
-                                                                        borderRadius: '12px', 
-                                                                        color: '#a29bfe', 
-                                                                        fontSize: '13px', 
-                                                                        fontWeight: '600', 
-                                                                        cursor: 'pointer',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        gap: 10
-                                                                    }}
-                                                                >
-                                                                    {isLoading ? <Loader2 size={16} className="spin-icon" /> : <Paperclip size={16} />}
+                                                                <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf,.doc,.docx" />
+                                                                <button onClick={() => fileInputRef.current?.click()} className="intervention-primary-btn" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', cursor: 'pointer' }}>
+                                                                    {isLoading ? <Loader2 size={16} className="spin-icon" /> : <Upload size={16} />}
                                                                     UPLOAD RESUME (.PDF, .DOCX)
                                                                 </button>
                                                             </div>
                                                         )}
 
-                                                        {msg.metadata?.subtype === 'link_request' && (
-                                                            <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
-                                                                <input 
-                                                                    type="text" 
-                                                                    placeholder="Paste the URL here..."
-                                                                    className="intervention-url-input"
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter') {
-                                                                            e.preventDefault();
-                                                                            handleInterventionLink(msg.workflowId, e.target.value);
-                                                                        }
-                                                                    }}
-                                                                    style={{
-                                                                        flex: 1,
-                                                                        background: 'rgba(0,0,0,0.3)',
-                                                                        border: '1px solid rgba(108, 92, 231, 0.3)',
-                                                                        borderRadius: '10px',
-                                                                        padding: '10px 15px',
-                                                                        color: '#fff',
-                                                                        fontSize: '13px',
-                                                                        outline: 'none'
-                                                                    }}
-                                                                />
+                                                        {msg.metadata?.subtype === 'email_selection' && (
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 5 }}>
                                                                 <button 
+                                                                    disabled={isLoading}
+                                                                    className="email-choice-card"
+                                                                    style={{ textAlign: 'left', width: '100%', background: 'rgba(255,255,255,0.03)', padding: '12px 18px', border: '1px solid #222', borderRadius: '12px', cursor: isLoading ? 'wait' : 'pointer' }}
                                                                     onClick={(e) => {
-                                                                        const input = e.currentTarget.previousSibling;
-                                                                        handleInterventionLink(msg.workflowId, input.value);
-                                                                    }}
-                                                                    style={{
-                                                                        background: '#6c5ce7',
-                                                                        color: '#fff',
-                                                                        border: 'none',
-                                                                        borderRadius: '10px',
-                                                                        padding: '0 20px',
-                                                                        fontSize: '12px',
-                                                                        fontWeight: '600',
-                                                                        cursor: 'pointer'
+                                                                        e.preventDefault();
+                                                                        const workflowId = msg.workflowId || msg.metadata?.workflowId;
+                                                                        resumeIdentity(workflowId, msg.metadata.registeredEmail);
                                                                     }}
                                                                 >
-                                                                    SUBMIT
+                                                                    <div style={{ fontSize: '11px', color: '#666', marginBottom: 2, textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between' }}>
+                                                                        <span>Registered Nurotra Email</span>
+                                                                        {isLoading && <Loader2 size={10} className="spin-icon" />}
+                                                                    </div>
+                                                                    <div style={{ color: '#fff', fontWeight: '600', fontSize: '14px' }}>{msg.metadata.registeredEmail}</div>
                                                                 </button>
+
+                                                                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #333', borderRadius: '12px', padding: '12px 16px' }}>
+                                                                    <div style={{ fontSize: '12px', color: '#666', marginBottom: 10 }}>Use a Different Email</div>
+                                                                    <div style={{ display: 'flex', gap: 10 }}>
+                                                                        <input 
+                                                                            type="email" 
+                                                                            id={`custom-email-input-${msg._id}`}
+                                                                            placeholder="e.g. name@professional.com"
+                                                                            className="orchestrator-input"
+                                                                            style={{ height: 38, fontSize: '13px', background: '#000', flex: 1, border: '1px solid #222' }}
+                                                                        />
+                                                                        <button 
+                                                                            disabled={isLoading}
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                const inputEl = document.getElementById(`custom-email-input-${msg._id}`);
+                                                                                const email = inputEl ? inputEl.value : '';
+                                                                                if (!email || !email.includes('@')) return alert("Please enter a valid email");
+                                                                                const workflowId = msg.workflowId || msg.metadata?.workflowId;
+                                                                                resumeIdentity(workflowId, email);
+                                                                            }}
+                                                                            style={{ background: '#6c5ce7', color: '#fff', padding: '0 15px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}
+                                                                        >
+                                                                            {isLoading ? <Loader2 size={14} className="spin-icon" /> : 'Save'}
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {msg.metadata?.subtype === 'link_request' && (
+                                                            <div style={{ display: 'flex', gap: 10, marginTop: 5 }}>
+                                                                <input type="text" placeholder="Paste the URL here..." className="intervention-url-input" onKeyDown={(e) => { if (e.key === 'Enter') handleInterventionLink(msg.workflowId, e.target.value); }} />
+                                                                <button onClick={(e) => handleInterventionLink(msg.workflowId, e.currentTarget.previousSibling.value)}>SUBMIT</button>
+                                                            </div>
+                                                        )}
+
+                                                        {(msg.metadata?.type === 'data_request' || msg.type === 'data_request' || (!msg.metadata?.subtype && !msg.metadata?.type)) && (
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 5 }}>
+                                                                <div style={{ display: 'flex', gap: 10 }}>
+                                                                    <input type="text" placeholder="Type your answer here..." className="intervention-url-input" onKeyDown={(e) => { if (e.key === 'Enter') handleInterventionLink(msg.metadata?.workflowId || msg.workflowId, e.target.value); }} />
+                                                                    <button onClick={(e) => handleInterventionLink(msg.metadata?.workflowId || msg.workflowId, e.currentTarget.previousSibling.value)}>SUBMIT</button>
+                                                                </div>
+                                                                {msg.content?.toLowerCase().match(/\b(resume|cv|upload)\b/) && (
+                                                                    <div>
+                                                                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf,.doc,.docx" />
+                                                                        <button onClick={() => fileInputRef.current?.click()} className="intervention-primary-btn" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', cursor: 'pointer', background: 'rgba(255, 255, 255, 0.05)', border: '1px dashed rgba(255,255,255,0.2)' }}>
+                                                                            {isLoading ? <Loader2 size={16} className="spin-icon" /> : <Upload size={16} />}
+                                                                            UPLOAD RESUME DOCUMENTS (.PDF, .DOCX)
+                                                                        </button>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
-                                                ) : isMilestone ? (
-                                                    <div style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 12,
-                                                        padding: '10px 15px',
-                                                        background: 'rgba(255,255,255,0.02)',
-                                                        borderRadius: '12px',
-                                                        color: '#666',
-                                                        fontSize: '12px',
-                                                        fontStyle: 'italic',
-                                                        border: '1px dashed rgba(255,255,255,0.05)',
-                                                        margin: '4px 0'
-                                                    }}>
-                                                        <Loader2 size={10} className="spin-icon" style={{ color: '#6c5ce7' }} />
-                                                        {msg.content}
-                                                    </div>
                                                 ) : (
-                                                    <div style={{
-                                                        color: isUser ? '#fff' : '#ccc',
-                                                        fontSize: '15px',
-                                                        lineHeight: '1.6',
-                                                        backgroundColor: isUser ? '#181818' : 'transparent',
-                                                        padding: isUser ? '12px 20px' : '0',
-                                                        borderRadius: '16px 4px 16px 16px',
-                                                        border: isUser ? '1px solid #222' : 'none'
-                                                    }}>
+                                                    <div style={{ color: isUser ? '#fff' : '#ccc', fontSize: '15px', backgroundColor: isUser ? '#181818' : 'transparent', padding: isUser ? '12px 20px' : '0', borderRadius: '16px 4px 16px 16px', border: isUser ? '1px solid #222' : 'none' }}>
                                                         {msg.content}
                                                     </div>
                                                 )}
@@ -1073,128 +1152,39 @@ const ActionAgentPage = () => {
                             <div ref={chatEndRef} />
                         </div>
 
-                        {/* Suggestions Carousel */}
-                        <div style={{ padding: '10px 5% 0 5%', display: 'flex', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <div style={{ padding: '10px 5% 0 5%', display: 'flex', gap: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
                             {suggestions.map((s, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => handleQuickAction(s)}
-                                    style={{
-                                        flexShrink: 0,
-                                        background: 'rgba(255,255,255,0.03)',
-                                        border: '1px solid rgba(255,255,255,0.08)',
-                                        borderRadius: '12px',
-                                        padding: '8px 16px',
-                                        color: '#aaa',
-                                        fontSize: '12px',
-                                        fontWeight: '500',
-                                        cursor: 'pointer',
-                                        whiteSpace: 'nowrap',
-                                        transition: 'all 0.2s'
-                                    }}
-                                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#fff'; }}
-                                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = '#aaa'; }}
-                                >
-                                    {s}
-                                </button>
+                                <button key={i} onClick={() => handleQuickAction(s)} className="suggestion-pill">{s}</button>
                             ))}
                         </div>
 
-                        {/* Input Bar */}
                         <div style={{ padding: '20px 5% 40px 5%', background: 'linear-gradient(to top, #080808 80%, transparent)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#111', borderRadius: '24px', padding: '8px 8px 8px 16px', border: '1px solid #222', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
-                                <div style={{ display: 'flex', gap: 10 }}>
-                                    <Sparkles size={18} color="#6c5ce7" style={{ opacity: 0.5 }} />
-                                    <button
-                                        onClick={toggleListening}
-                                        style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            color: isListening ? '#ff4757' : '#666',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            padding: 0,
-                                            position: 'relative'
-                                        }}
-                                    >
-                                        {isListening && (
-                                            <motion.div
-                                                layoutId="mic-pulse"
-                                                initial={{ scale: 0.8, opacity: 0.5 }}
-                                                animate={{ scale: 1.5, opacity: 0 }}
-                                                transition={{ duration: 1, repeat: Infinity }}
-                                                style={{ position: 'absolute', width: 18, height: 18, borderRadius: '50%', background: '#ff4757' }}
-                                            />
-                                        )}
-                                        {isListening ? <MicOff size={18} /> : <Mic size={18} />}
-                                    </button>
-                                    <button 
-                                        onClick={() => fileInputRef.current?.click()}
-                                        title="Attach file for ingestion"
-                                        style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
-                                    >
-                                        <Paperclip size={18} />
-                                    </button>
-                                    <button 
-                                        className="link-icon-btn"
-                                        style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0, position: 'relative' }}
-                                        title="Attach URL for processing"
-                                        onClick={() => {
-                                            const url = prompt("Enter the URL of the form, quiz, or task you want me to solve:");
-                                            if (url && url.trim()) {
-                                                const command = `Please go to ${url.trim()} and fill out the form or solve the quiz using my profile data.`;
-                                                setCommandInput(command);
-                                                // We can't directly call sendCommand here because it relies on the state which hasn't updated yet.
-                                                // Instead, we manually trigger the API call or simulate the form submission if possible.
-                                                // Easiest is to just set it and let the user hit enter, OR we can call the handler directly.
-                                                handleQuickAction(command);
-                                            }
-                                        }}
-                                    >
-                                        <Globe size={18} />
-                                        <div className="icon-tooltip">Direct Link Mode: Attach a URL for specific form filling or research.</div>
-                                    </button>
-                                </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#111', borderRadius: '24px', padding: '8px 8px 8px 16px', border: '1px solid #222' }}>
+                                <Sparkles size={18} color="#6c5ce7" style={{ opacity: 0.5 }} />
+                                <button onClick={toggleListening} style={{ background: 'none', border: 'none', color: isListening ? '#ff4757' : '#666', cursor: 'pointer' }}>
+                                    {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+                                </button>
+                                <button onClick={() => fileInputRef.current?.click()} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}>
+                                    <Paperclip size={18} />
+                                </button>
                                 <input
                                     type="text"
                                     placeholder={isLoading ? "Nurotra is thinking..." : isConnecting ? "Waiting for engine..." : `Message Nurotra...`}
                                     style={{ flex: 1, background: 'none', border: 'none', color: '#fff', outline: 'none', padding: '10px 0', fontSize: '15px' }}
                                     value={commandInput}
                                     onChange={(e) => setCommandInput(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            sendCommand();
-                                        }
-                                    }}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') sendCommand(); }}
                                     disabled={isLoading}
                                 />
-
                                 {activeTasks.length > 0 && activeTasks[0].status !== 'completed' && (
                                     <div className="execution-controls">
-                                        <button
-                                            onClick={pauseAgent}
-                                            className="control-btn pause"
-                                            title={activeTasks[0].status === 'paused' ? "Resume" : "Pause"}
-                                        >
+                                        <button onClick={pauseAgent} className="control-btn pause">
                                             {activeTasks[0].status === 'paused' ? <Play size={14} fill="currentColor" /> : <Pause size={14} fill="currentColor" />}
                                         </button>
-                                        <button
-                                            onClick={stopAgent}
-                                            className="control-btn stop"
-                                            title="Stop Execution"
-                                        >
-                                            <X size={16} strokeWidth={3} />
-                                        </button>
+                                        <button onClick={stopAgent} className="control-btn stop"><X size={16} strokeWidth={3} /></button>
                                     </div>
                                 )}
-
-                                <button
-                                    onClick={(e) => sendCommand(null, e)}
-                                    disabled={!commandInput.trim() || isLoading}
-                                    style={{ background: commandInput.trim() ? '#fff' : '#222', color: '#000', border: 'none', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' }}
-                                >
+                                <button onClick={(e) => sendCommand(null, e)} disabled={!commandInput.trim() || isLoading} style={{ background: commandInput.trim() ? '#fff' : '#222', color: '#000', border: 'none', width: 40, height: 40, borderRadius: '50%', cursor: 'pointer' }}>
                                     {isLoading ? <Loader2 size={18} className="spin-icon" /> : <Send size={18} />}
                                 </button>
                             </div>

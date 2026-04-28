@@ -126,3 +126,68 @@ exports.callbackZoom = async (req, res) => {
         res.status(500).send("Zoom Authentication failed.");
     }
 };
+
+/**
+ * Action Agent: Google Auth
+ * Specialized flow to secure a Refresh Token for the Browser Agent.
+ */
+exports.authGoogleAgent = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const oauth2Client = getOAuthClient();
+
+        // Standard profile scopes + offline access for background persistence
+        const scopes = ["profile", "email"];
+
+        const url = oauth2Client.generateAuthUrl({
+            access_type: "offline",
+            prompt: "consent", 
+            scope: scopes,
+            state: userId.toString()
+        });
+
+        res.redirect(url);
+    } catch (error) {
+        console.error("Auth Google Agent Error:", error);
+        res.status(500).json({ success: false, message: "Agent auth failed." });
+    }
+};
+
+/**
+ * Action Agent: Google Callback
+ * Saves tokens specifically to the Integration model (Identity Vault).
+ */
+exports.callbackGoogleAgent = async (req, res) => {
+    const { code, state: userId } = req.query;
+    const Integration = require("../models/Integration");
+
+    try {
+        const oauth2Client = getOAuthClient();
+        const { tokens } = await oauth2Client.getToken(code);
+
+        // Store in the specialized Identity Vault (Integration model)
+        // NOT interfering with the core User collection
+        await Integration.findOneAndUpdate(
+            { userId, platform: "google_agent" },
+            {
+                userId,
+                platform: "google_agent",
+                authType: "oauth2",
+                credentials: {
+                    accessToken: tokens.access_token,
+                    refreshToken: tokens.refresh_token,
+                    expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null
+                },
+                status: "connected",
+                "sessionData.isAgentActive": true
+            },
+            { upsert: true, new: true }
+        );
+
+        const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
+        res.redirect(`${clientUrl}/dashboard?agent_synced=google`);
+    } catch (error) {
+        console.error("Callback Google Agent Error:", error);
+        res.status(500).send("Agent sync failed.");
+    }
+};

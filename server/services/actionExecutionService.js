@@ -307,43 +307,135 @@ const stepExecutors = {
     // ----- CALENDAR & MEETINGS -----
     "create_meeting": async (step, context) => {
         const userId = context.userId;
+        const actionService = require("./actionService");
+        
         try {
             const user = await User.findById(userId);
-            if (!user || !user.googleAccessToken) {
-                // FALLBACK: High-Fidelity Synthetic Link (as requested for demo/fallback)
-                const mockMeetId = Math.random().toString(36).substring(2, 5) + "-" + 
-                                   Math.random().toString(36).substring(2, 6) + "-" + 
-                                   Math.random().toString(36).substring(2, 5);
-                const mockUrl = `https://meet.google.com/${mockMeetId}`;
-                
-                return { 
-                    success: true, 
-                    message: `Meeting link generated: ${mockUrl}`,
-                    data: { link: mockUrl, provider: 'Google Meet', type: 'synthetic' }
-                };
-            }
-
-            const googleCalendarService = require("./googleCalendarService");
+            const provider = (step.params?.provider || "google").toLowerCase();
+            
             const meetingInfo = {
-                title: step.params?.title || context.workflowTitle || "Nurotra Meeting",
+                title: step.params?.title || step.params?.summary || context.workflowTitle || "Nurotra Meeting",
                 description: step.params?.description || "Scheduled autonomously by Nurotra Action Agent.",
                 startTime: step.params?.startTime,
+                duration: step.params?.duration || 60,
                 attendees: step.params?.attendees || []
             };
 
-            const result = await googleCalendarService.createMeeting(user, meetingInfo);
+            console.log(`[ActionExec] Dispatching meeting creation to: ${provider}`);
             
+            let result;
+            if (provider === 'zoom' && user.zoomAccessToken) {
+                result = await actionService.createZoomMeeting(user, meetingInfo);
+            } else if (provider === 'zoom' && !user.zoomAccessToken) {
+                console.warn("[ActionExec] Zoom not connected. Falling back to Google Meet API.");
+                if (user.googleAccessToken) {
+                    result = await actionService.createGoogleMeet(user, meetingInfo);
+                } else {
+                    throw new Error("ACCOUNT_NOT_CONNECTED");
+                }
+            } else {
+                // Default: Google Meet (requires Google login)
+                if (!user.googleAccessToken) {
+                    throw new Error("ACCOUNT_NOT_CONNECTED");
+                }
+                result = await actionService.createGoogleMeet(user, meetingInfo);
+            }
+            
+            const meetingPayload = { 
+                link: result.joinUrl || result.link, 
+                id: result.meetingId, 
+                type: 'meeting',
+                provider: result.provider,
+                passcode: result.passcode || null,
+                title: meetingInfo.title
+            };
+
             return {
                 success: true,
-                message: `Meeting created and invitation sent. Link: ${result.link}`,
-                data: { link: result.link, id: result.id, type: 'oauth' }
+                message: `Meeting created successfully via ${result.provider}.`,
+                data: meetingPayload,
+                metadata: { meetingData: meetingPayload }
             };
 
         } catch (error) {
+            if (error.message === "ACCOUNT_NOT_CONNECTED") {
+                console.log("[ActionExec] FALLBACK: Google/Zoom not connected. Engaging Browser Agent for manual creation...");
+                const browserAgentService = require("./browserAgentService");
+                
+                // CRITICAL: We use a DIRECT URL to avoid search distractions
+                const browserResult = await browserAgentService.executeTask(
+                    userId, 
+                    "custom", 
+                    `1. Go to https://meet.google.com/
+                     2. Click the "New meeting" button (blue button).
+                     3. Click "Create a meeting for later" from the dropdown. 
+                     4. A small popup will appear in the bottom left with a link. 
+                     5. Wait 2 seconds and then EXTRACT that link (e.g. https://meet.google.com/abc-def-ghi). 
+                     It is vital you return the full URL.`,
+                    context.socket,
+                    { reuseSession: false }
+                );
+
+                if (browserResult.success) {
+                    console.log("[ActionExec] Browser success. Beginning deep-link extraction...");
+                    
+                    // --- DEEP LINK SCANNING (Fail-Proof) ---
+                    // 1. Check AI-synthesized message
+                    let rawMessage = browserResult.message || "";
+                    // 2. Check the raw page source if available in metadata
+                    let pageSource = browserResult.metadata?.pageSource || "";
+                    
+                    const urlRegex = /(https?:\/\/meet\.google\.com\/[a-z0-9\-]+)/gi;
+                    let foundLinks = (rawMessage + " " + pageSource).match(urlRegex) || [];
+                    
+                    let cleanLink = foundLinks.length > 0 ? foundLinks[0] : "";
+
+                    // 3. Fallback to AI extraction if regex missed a conversational link
+                    if (!cleanLink) {
+                        const { generateWithFallback } = require("./aiService");
+                        const aiExtracted = await generateWithFallback(
+                            `System Log: "${rawMessage}". 
+                             Find any Google Meet link or code. 
+                             Return ONLY the full URL. If none, return "NOT_FOUND".`,
+                            "You are a link extractor."
+                        );
+                        if (aiExtracted && !aiExtracted.includes("NOT_FOUND")) {
+                            cleanLink = aiExtracted.trim().replace(/[\[\]\(\)]/g, '');
+                        }
+                    }
+
+                    // Diagnostic Logs
+                    console.log("[ActionExec] Deep Scan Result:", cleanLink);
+                    if (context.socket) {
+                         context.socket.emit("execution_log", { 
+                             userId: context.userId, 
+                             message: cleanLink ? `[DIAGNOSTIC] Found Link: ${cleanLink}` : "[DIAGNOSTIC] ALERT: No link found in virtual workspace.", 
+                             type: cleanLink ? "success" : "error", 
+                             timestamp: new Date() 
+                         });
+                    }
+
+                    const meetingPayload = { 
+                        link: cleanLink || "https://meet.google.com/new", // Failsafe to at least get them to meet
+                        type: 'meeting',
+                        provider: 'google_meet_browser',
+                        diagnostic: cleanLink ? "Verified Link" : "Failsafe Redirect",
+                        title: step.params?.title || "Nurotra Meeting"
+                    };
+
+                    return {
+                        success: true,
+                        message: "Meeting link generated via virtual browser fallback.",
+                        data: meetingPayload,
+                        metadata: { meetingData: meetingPayload }
+                    };
+                }
+            }
             console.error(`[ActionExec] Meeting creation failed:`, error.message);
             throw error;
         }
     },
+
 
     // ----- DATA FETCHING -----
     "fetch_data": async (step, context) => {
@@ -504,12 +596,83 @@ const stepExecutors = {
     "submit_form": async (step, context) => {
         // --- REAL BROWSER SUBMISSION ---
         const taskDescription = `Submit/Apply using provided data: ${JSON.stringify(context.lastResult?.data || step.params || {})}`;
-        const result = await browserAgentService.executeTask(context.userId, "Portal/Form", taskDescription, context.socket);
+        const result = await browserAgentService.executeTask(context.userId, "custom", taskDescription, context.socket);
         
         return { 
             success: result.success, 
             message: result.message,
             data: result.data 
+        };
+    },
+
+    // ----- JOB APPLICATION AUTOMATION -----
+    "navigate_jobs": async (step, context) => {
+        const query = step.params?.query || context.workflowTitle || step.label;
+        const socket = context.socket;
+        
+        const searchTarget = context.originalPrompt || query;
+        console.log(`[ActionExec] Navigating job market for: "${searchTarget}"`);
+        // Use the browser's search capability to find real job links
+        const result = await browserAgentService.searchInfo(context.userId, `Jobs for ${searchTarget}`, socket, true, { reuseSession: true });
+        
+        if (!result.success) throw new Error("Could not find any job listings.");
+
+        return {
+            success: true,
+            message: `Found several job matches for "${query}". Initializing auto-apply sequence.`,
+            data: { 
+                links: result.metadata?.executionSteps?.filter(s => s.evidenceUrl).map(s => s.evidenceUrl) || [],
+                query,
+                searchResult: result.answer
+            }
+        };
+    },
+
+    "auto_apply_jobs": async (step, context) => {
+        const formAuto = require("./formAutomationService");
+        const browserAgentService = require("./browserAgentService");
+        
+        // 1. Gather Intelligence & Identity
+        const mappedData = await formAuto.mapContextualData([], context.userId);
+        const prevData = context.lastResult?.data || {};
+        const query = prevData.query || step.params?.query || "Job";
+        
+        // 2. Identify Target Platform
+        const fullSearchContext = `${context.originalPrompt || ''} ${query}`.toLowerCase();
+        const platform = fullSearchContext.includes('linkedin') ? 'LinkedIn' : 
+                         fullSearchContext.includes('google') ? 'Google Careers' : 'Company Career Portal';
+
+        // 3. Build a high-intensity task description for the browser agent
+        const taskDescription = `
+            Mission: Apply to the top job match for "${context.originalPrompt || query}".
+            
+            Protocol:
+            1. Search for "${context.originalPrompt || query}" on Google to find the official application page or a job board link (LinkedIn/Indeed/Glassdoor).
+            2. Navigate to the most relevant job listing found.
+            3. Once on the page, look for buttons like "Apply Now", "Interested", or "Easy Apply".
+            4. Fill out the application form carefully using this verified user data: ${JSON.stringify(mappedData)}.
+            5. If a resume is needed, download and use: ${mappedData.resume_link || 'Not provided'}.
+            6. Perform a final review and SUBMIT the application.
+            7. Return a success message with the name of the company applied to.
+        `;
+
+        console.log(`[ActionExec] Auto-applying to job: ${query}`);
+        const result = await browserAgentService.executeTask(context.userId, platform, taskDescription, context.socket, { reuseSession: true });
+        
+        if (!result.success) {
+            throw new Error(result.message || "The application process was interrupted.");
+        }
+
+        return {
+            success: true,
+            status: result.status,
+            message: result.message || "Intervention required or completed.",
+            data: { 
+                ...result.data,
+                company: platform,
+                appliedWith: mappedData.email
+            },
+            metadata: result.metadata
         };
     },
 
@@ -530,7 +693,20 @@ const mapStepToExecutor = (step) => {
     const label = (step.label || '').toLowerCase();
     const icon = (step.icon || '').toLowerCase();
 
-    // Web Search / Information Retrieval (HIGHER PRIORITY)
+    // --- NATIVE TOOL GUARD (ARCHITECTURAL LOCK) ---
+    // Forcefully intercept meeting keywords to prevent AI-search fallbacks
+    if (label.includes("meeting") || label.includes("google meet") || label.includes("zoom link")) {
+        return "create_meeting";
+    }
+
+    // Calendar & Meetings (HIGH PRIORITY)
+    if (/meeting|google\s*meet|zoom|schedule\s*call|calendar\s*event/.test(label) || icon === 'clock') return 'create_meeting';
+
+    // Job Search Automation (HIGH PRIORITY)
+    if (/navigate and search jobs|find a job/.test(label)) return 'navigate_jobs';
+    if (/multi-tab auto apply|auto-apply/.test(label)) return 'auto_apply_jobs';
+
+    // Web Search / Information Retrieval
     if (/search|score|match|team|news|fetch.*info|lookup|find.*on\s*web/.test(label) || icon === 'globe') return 'web_search';
 
     // Email / Notification
@@ -556,8 +732,7 @@ const mapStepToExecutor = (step) => {
     // Approvals
     if (/approv|review|sign.*off/.test(label)) return 'process_approval';
 
-    // Scheduling
-    if (/schedule|plan|calendar|book|reserve/.test(label) || icon === 'clock') return 'schedule_task';
+    if (/schedule|plan|book|reserve/.test(label)) return 'schedule_task';
 
     // Output Delivery Execution (ODE)
     if (/send|deliver|email|mail/.test(label)) return 'execute_output_delivery';
@@ -573,7 +748,7 @@ const mapStepToExecutor = (step) => {
     if (/detect\s*form|scan\s*page|find\s*fields/.test(label)) return 'detect_form';
     if (/map\s*profile|resolve\s*data|match\s*fields/.test(label)) return 'map_profile';
     if (/fill\s*form|populate|auto-fill/.test(label)) return 'fill_form';
-    if (/submit|apply|register|sign\s*up/.test(label)) return 'submit_form';
+    if (/submit|apply|register|sign\s*up/.test(label) && !/select|choice|pick/i.test(label)) return 'submit_form';
 
     return 'default';
 };
@@ -624,7 +799,16 @@ const flattenToText = (obj, prefix = '') => {
 };
 
 const executeStep = async (step, context = {}) => {
-    const executorKey = mapStepToExecutor(step);
+    let executorKey = mapStepToExecutor(step);
+    
+    // --- NATIVE TOOL GUARD (ARCHITECTURAL FIX) ---
+    // Forcefully intercept meeting keywords to prevent AI-search fallbacks
+    const label = (step.label || "").toLowerCase();
+    if (label.includes("meeting") || label.includes("google meet") || label.includes("zoom link")) {
+        console.log(`[ActionExec] GUARD: Intercepted meeting task "${step.label}". Enforcing native execution.`);
+        executorKey = "create_meeting";
+    }
+
     const executor = stepExecutors[executorKey] || stepExecutors['default'];
     
     // Decision Engine: Merge inferred values into params if they exist

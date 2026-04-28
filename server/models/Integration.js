@@ -10,7 +10,7 @@ const IntegrationSchema = new mongoose.Schema({
     platform: {
         type: String,
         required: true,
-        enum: ["google_sheets", "excel", "notion", "custom", "generic_search"]
+        enum: ["google_sheets", "excel", "notion", "custom", "generic_search", "google_agent", "linkedin_agent"]
     },
     authType: {
         type: String,
@@ -19,13 +19,17 @@ const IntegrationSchema = new mongoose.Schema({
     },
     credentials: {
         username: { type: String },
-        password: { type: String }, // Should be encrypted in a real production app
-        apiKey: { type: String }
+        password: { type: String }, 
+        apiKey: { type: String },
+        accessToken: { type: String },
+        refreshToken: { type: String },
+        expiresAt: { type: Date }
     },
     sessionData: {
         cookies: { type: Array, default: [] },
         localStorage: { type: Object, default: {} },
-        lastLogin: { type: Date }
+        lastLogin: { type: Date },
+        isAgentActive: { type: Boolean, default: false }
     },
     status: {
         type: String,

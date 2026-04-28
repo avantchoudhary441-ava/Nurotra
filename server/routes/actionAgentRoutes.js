@@ -8,6 +8,7 @@ router.use(protect);
 
 // --- Core execution ---
 router.post("/execute", actionAgentController.executeCommand);
+router.post("/resume-identity", actionAgentController.resumeIdentity);
 router.post("/confirm/:id", actionAgentController.confirmWorkflow);
 router.post("/intervention/:id", actionAgentController.submitIntervention);
 router.get("/active-tasks", actionAgentController.getActiveTasks);

@@ -139,6 +139,41 @@ class ActionService {
     }
 
     /**
+     * Zoom: Refresh OAuth Token
+     */
+    async refreshZoomToken(user) {
+        if (!user.zoomRefreshToken) {
+            throw new Error("Zoom is not connected. Please go to Integrations to connect your account.");
+        }
+
+        try {
+            console.log(`[ActionService] Refreshing Zoom token for user: ${user._id}`);
+            const auth = Buffer.from(`${process.env.ZOOM_CLIENT_ID}:${process.env.ZOOM_CLIENT_SECRET}`).toString('base64');
+            const response = await axios.post('https://zoom.us/oauth/token', null, {
+                params: {
+                    grant_type: 'refresh_token',
+                    refresh_token: user.zoomRefreshToken
+                },
+                headers: {
+                    Authorization: `Basic ${auth}`,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+
+            const User = require("../models/User");
+            const updatedUser = await User.findByIdAndUpdate(user._id, {
+                zoomAccessToken: response.data.access_token,
+                zoomRefreshToken: response.data.refresh_token
+            }, { new: true });
+
+            return updatedUser;
+        } catch (error) {
+            console.error(`[ActionService] Zoom Refresh Failed:`, error.response?.data || error.message);
+            throw new Error("Failed to refresh Zoom credentials. Please reconnect Zoom.");
+        }
+    }
+
+    /**
      * Zoom: Create a meeting using Zoom API.
      */
     async createZoomMeeting(user, details) {
@@ -147,11 +182,15 @@ class ActionService {
                 const startTime = details.startTime ? new Date(details.startTime).toISOString() : new Date().toISOString();
                 
                 const response = await axios.post('https://api.zoom.us/v2/users/me/meetings', {
-                    topic: details.summary || 'Nurotra Zoom Meeting',
+                    topic: details.summary || details.title || 'Nurotra Zoom Meeting',
                     type: 2,
                     start_time: startTime,
                     duration: details.duration || 60,
-                    settings: { join_before_host: true, waiting_room: false }
+                    settings: { 
+                        join_before_host: true, 
+                        waiting_room: false,
+                        meeting_authentication: false
+                    }
                 }, {
                     headers: { 
                         Authorization: `Bearer ${user.zoomAccessToken}`,
@@ -168,6 +207,13 @@ class ActionService {
                     provider: 'zoom'
                 };
             } catch (error) {
+                // If UNAUTHORIZED (401), try refreshing token ONCE
+                if (error.response?.status === 401 && !details._isRetrying) {
+                    console.log(`[ActionService] Zoom Token Expired. Attempting silent refresh...`);
+                    const refreshedUser = await this.refreshZoomToken(user);
+                    return await this.createZoomMeeting(refreshedUser, { ...details, _isRetrying: true });
+                }
+
                 // If it's a quota or limit issue, pivot to Google Meet
                 if (error.response?.status === 429 || error.response?.status === 403) {
                      return await this.handleAlternativePath('zoom', error, user, details);
