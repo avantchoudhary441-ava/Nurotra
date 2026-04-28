@@ -17,6 +17,10 @@ const mapContextualData = async (fields, userId) => {
     const influencer = await Influencer.findOne({ userId });
     const memory = await NuroMemory.findOne({ userId });
     
+    // Check for Preferred Identity Email
+    const { getPreferredEmail } = require("./agentResourceService");
+    const preferredEmail = await getPreferredEmail(userId);
+
     // Look for a resume in the Document collection
     const Document = require("../models/Document");
     const resumeDoc = await Document.findOne({ 
@@ -26,14 +30,15 @@ const mapContextualData = async (fields, userId) => {
 
     const profileData = {
         name: user?.name || influencer?.fullName,
-        email: user?.email || influencer?.email,
+        email: preferredEmail || user?.email || influencer?.email,
         phone: influencer?.contactNumber,
         platform_url: influencer?.platformUrl,
         social_handle: influencer?.socialHandle,
         niche: influencer?.niche,
         mission: memory?.longTermPlan?.mission,
         resume_name: resumeDoc?.name || "Not uploaded",
-        resume_link: resumeDoc ? `https://nurotra.com/documents/${resumeDoc._id}` : null,
+        resume_link: resumeDoc?.url || null, // <--- Provide the physical asset link for browser automation
+        resume_internal_link: resumeDoc ? `https://nurotra.com/documents/${resumeDoc._id}` : null,
         // Added standard fields for common forms
         website: influencer?.platformUrl || "Not specified",
         location: influencer?.targetingLocation?.join(", ") || "Global"

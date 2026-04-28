@@ -15,7 +15,11 @@ const jwt = require("jsonwebtoken");
 // 1. Redirect to Google
 router.get(
     "/google",
-    passport.authenticate("google", { scope: ["profile", "email"] })
+    passport.authenticate("google", { 
+        scope: ["profile", "email"],
+        accessType: "offline",
+        prompt: "consent"
+    })
 );
 
 // 2. Callback from Google

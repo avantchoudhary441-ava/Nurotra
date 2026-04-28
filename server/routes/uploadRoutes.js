@@ -47,6 +47,7 @@ router.post('/', protect, (req, res, next) => {
                     req.file.mimetype.includes('spreadsheet') || req.file.mimetype.includes('excel') ? 'excel' :
                         req.file.mimetype.includes('presentation') ? 'ppt' : 'generic',
             content: extractedContent,
+            url: fileUrl,  // <--- Linking the physical file asset
             metadata: {
                 purpose: 'Uploaded for analysis',
                 category: 'General',
