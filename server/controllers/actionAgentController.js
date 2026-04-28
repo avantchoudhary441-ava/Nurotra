@@ -20,8 +20,11 @@ const DEV_USER_ID = new mongoose.Types.ObjectId("000000000000000000000001");
 // ===========================================
 exports.executeCommand = async (req, res) => {
     try {
+        console.log("---- EXECUTE REQUEST RECEIVED ----");
+        console.log("BODY:", req.body);
         const { command } = req.body;
         if (!command) {
+            console.log("RETURNING 400: Command is required");
             return res.status(400).json({ success: false, message: "Command is required." });
         }
 
@@ -144,8 +147,27 @@ exports.executeCommand = async (req, res) => {
             });
         }
 
+        // 2b. Handle orphaned resume uploads (if activeTask was lost due to previous validation error or crash)
+        const orphanedResumeMatch = command.match(/I've uploaded my resume: ([a-f0-9]{24})/i);
+        if (!activeTask && orphanedResumeMatch) {
+            const documentId = orphanedResumeMatch[1];
+            const doc = await Document.findById(documentId);
+            if (doc) {
+                await agentResourceService.ingestResume(userId, doc.content, documentId);
+                await new ActionMessage({
+                    userId,
+                    role: "agent",
+                    content: "I have successfully saved your resume details to my Resource Engine. I lost track of the original job you wanted to apply for, so please ask me to apply for the job again!",
+                    type: "text"
+                }).save();
+            }
+            if (req.io) req.io.to(userId.toString()).emit('chat_update', { userId });
+            return res.json({ success: true, message: "Resume ingested successfully." });
+        }
+
         // 3. Block if another task is actually running (not intervention)
         if (activeTask && activeTask.status !== "intervention") {
+            console.log("RETURNING 400: activeTask exists", activeTask._id, activeTask.status);
             return res.status(400).json({ success: false, message: "A task is already in progress. Please wait for it to finish or pause it before starting a new one." });
         }
 
@@ -304,7 +326,7 @@ exports.executeCommand = async (req, res) => {
                 });
             }
         }
-        if (parsedData.intent === "WORKFLOW_EXECUTION") {
+        if (parsedData.intent === "WORKFLOW_EXECUTION" || parsedData.intent === "FORM_AUTOMATION") {
             const workflowData = parsedData.workflow;
             const isEventDriven = parsedData.isEventDriven || false;
 
@@ -545,6 +567,7 @@ exports.executeCommand = async (req, res) => {
             });
         }
 
+        console.log("RETURNING 400: Unknown intent parsed");
         return res.status(400).json({ success: false, message: "Unknown intent parsed." });
 
     } catch (error) {
@@ -564,6 +587,7 @@ exports.executeCommand = async (req, res) => {
         
         // Return specific validation error if possible
         if (error.name === 'ValidationError') {
+            console.log("RETURNING 400: ValidationError", error);
             return res.status(400).json({ 
                 success: false, 
                 message: "Validation Error: " + Object.values(error.errors).map(e => e.message).join(", ") 

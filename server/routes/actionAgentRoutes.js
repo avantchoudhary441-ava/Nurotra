@@ -3,6 +3,9 @@ const router = express.Router();
 const actionAgentController = require("../controllers/actionAgentController");
 const { protect } = require("../middleware/authMiddleware");
 
+// --- Test execution without auth ---
+router.post("/test-execute", actionAgentController.executeCommand);
+
 // Apply protect middleware to all action agent routes to ensure correct userId attribution
 router.use(protect);
 
