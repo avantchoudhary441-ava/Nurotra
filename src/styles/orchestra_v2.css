@@ -1,0 +1,400 @@
+/* 
+   NUROTRA ORCHESTRA V2 - UNIFIED STREAM DESIGN
+   Aesthetics: Glassmorphism, Deep Dark Mode, Vibrant Accents (#10e3b2, #6c5ce7)
+*/
+
+:root {
+  --orchestra-bg: #0a0a0c;
+  --card-bg: rgba(25, 25, 30, 0.6);
+  --card-border: rgba(255, 255, 255, 0.08);
+  --accent-primary: #10e3b2;
+  --accent-secondary: #6c5ce7;
+  --text-main: #f3f4f6;
+  --text-muted: #9ca3af;
+  --thought-text: rgba(156, 163, 175, 0.6);
+}
+
+.unified-orchestra-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 900px; 
+  margin: 0 auto;
+  padding: 20px 20px;
+  scroll-behavior: smooth;
+}
+
+/* MESSAGE BUBBLES */
+.stream-msg {
+  max-width: 90%;
+  padding: 12px 18px;
+  border-radius: 14px;
+  line-height: 1.5;
+  font-size: 0.95rem; /* Reduced for professional look */
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.stream-msg.user {
+  align-self: flex-end;
+  background: rgba(108, 92, 231, 0.1);
+  color: var(--text-main);
+  border: 1px solid rgba(108, 92, 231, 0.2);
+  border-radius: 12px;
+  margin-left: 50px;
+}
+
+.stream-msg.orchestrator {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  padding: 0;
+  margin-bottom: 10px;
+  width: 100%;
+}
+
+/* AGENT EXECUTION CARDS */
+.execution-card {
+  background: transparent;
+  border-top: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--card-border);
+  border-radius: 0;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.execution-card:hover {
+  border-color: rgba(16, 227, 178, 0.3);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.agent-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 227, 178, 0.1);
+  color: var(--accent-primary);
+}
+
+.agent-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.agent-status {
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+}
+
+/* SUB-STEPS (Details) */
+.card-details {
+  margin-top: 8px;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sub-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.sub-step.complete {
+  color: var(--text-main);
+}
+
+.sub-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--card-border);
+}
+
+.sub-step.complete .sub-step-dot {
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px var(--accent-primary);
+}
+
+/* THOUGHTS & NARRATIVE */
+.agent-thought {
+  font-style: italic;
+  font-size: 0.8rem;
+  color: var(--thought-text);
+  margin: 5px 0 10px 0;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.narrative-note {
+  font-size: 0.9rem;
+  color: var(--accent-secondary);
+  background: transparent;
+  padding: 0;
+  margin: 5px 0;
+  border-left: 2px solid var(--accent-secondary);
+  padding-left: 12px;
+  font-weight: 500;
+  opacity: 0.9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.narrative-note:nth-child(odd) {
+  color: #3b82f6; /* Royal Blue */
+  border-color: #3b82f6;
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: currentColor;
+  margin-left: 4px;
+  animation: blink 0.8s infinite;
+  vertical-align: middle;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.pulsing-dots::after {
+  content: "...";
+  display: inline-block;
+  animation: dots 1.5s infinite;
+  width: 1.5em;
+  text-align: left;
+}
+
+@keyframes dots {
+  0% { content: "."; }
+  33% { content: ".."; }
+  66% { content: "..."; }
+}
+
+/* FINAL COMPLETION BLOCK */
+.completion-block {
+  border-top: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--card-border);
+  padding: 24px 0;
+  text-align: center;
+  margin: 30px 0;
+  background: transparent;
+}
+
+.completion-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* HERO & EMPTY STATE */
+.orchestrator-empty-state {
+  animation: slideUp 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hero-greeting {
+  font-family: 'Outfit', sans-serif;
+  opacity: 0.9;
+}
+
+.hero-sub {
+  font-family: 'Outfit', sans-serif;
+  line-height: 1.1;
+  text-shadow: 0 0 30px rgba(168, 85, 247, 0.2);
+}
+
+.feature-roadmap li {
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  transition: all 0.3s ease;
+}
+
+.feature-roadmap li:hover {
+  color: #fff;
+  transform: translateX(5px);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* INTENT BUTTONS */
+.intent-btn {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  font-weight: 500 !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.intent-btn:hover {
+  background: rgba(168, 85, 247, 0.15) !important;
+  border-color: #a855f7 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(168, 85, 247, 0.2) !important;
+}
+
+.send-btn:not(:disabled):hover {
+  transform: scale(1.1) rotate(-5deg);
+  filter: brightness(1.2);
+}
+
+/* SIDEBAR REFINEMENT */
+.orchestrator-sidebar {
+  background: #0a0a0c !important;
+  border-right: 1px solid rgba(255,255,255,0.05) !important;
+}
+
+.history-item {
+  padding: 10px 14px !important;
+  border-radius: 12px !important;
+  margin-bottom: 4px !important;
+  font-size: 0.9rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.history-item:hover {
+  background: rgba(255,255,255,0.05) !important;
+  color: #fff !important;
+}
+
+.history-item.active {
+  background: rgba(168, 85, 247, 0.1) !important;
+  border-left: 3px solid #a855f7 !important;
+  color: #fff !important;
+}
+
+.new-chat-btn {
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  padding: 12px !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* TEAM LINEUP OVERVIEW */
+.team-lineup-container {
+  margin: 10px 0 20px 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.lineup-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin-bottom: 15px;
+  font-weight: 800;
+  opacity: 0.8;
+}
+
+.agent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.agent-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--card-border);
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4b5563; /* Gray for pending */
+}
+
+.agent-chip.executing {
+  border-color: var(--accent-primary);
+  background: rgba(16, 227, 178, 0.05);
+}
+
+.agent-chip.executing .chip-dot {
+  background: var(--accent-primary);
+  box-shadow: 0 0 10px var(--accent-primary);
+  animation: pulse 1.5s infinite;
+}
+
+.agent-chip.done {
+  border-color: var(--accent-secondary);
+  opacity: 0.7;
+}
+
+.agent-chip.done .chip-dot {
+  background: var(--accent-secondary);
+}
+
+.chip-name {
+  font-weight: 600;
+  color: var(--text-main);
+  text-transform: capitalize;
+}
+
+.chip-status {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  opacity: 0.5;
+  letter-spacing: 0.5px;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* MOBILE RESPONSIVENESS */
+@media (max-width: 600px) {
+  .unified-orchestra-stream {
+    padding: 20px 15px;
+  }
+  .stream-msg {
+    max-width: 95%;
+  }
+}

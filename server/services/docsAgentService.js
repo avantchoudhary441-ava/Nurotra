@@ -23,13 +23,24 @@ const docsAgentService = {
      * @param {Object} req - Express request or mock req
      * @param {Object} options - { prompt, docIds, links, uploadedFiles, history, currentDoc }
      */
-    generateFullDocument: async (user, options) => {
-        const { prompt, docIds = [], links = [], uploadedFiles = [], history = [], currentDoc = null } = options;
+    executeTask: async (prompt, taskData, user, sendLiveLog = null) => {
+        const { docIds = [], links = [], uploadedFiles = [], history = [], currentDoc = null, context = null, description } = taskData;
+        // Use the description if prompt is generic
+        const activePrompt = description || prompt;
 
         try {
+            // [NEW] Ingest Shared Context from Orchestrator
+            let orchestrationContext = "";
+            if (context && context.outputs) {
+                orchestrationContext = "\n### ORCHESTRATION TEAM OUTPUTS (SHARED CONTEXT):\n";
+                Object.entries(context.outputs).forEach(([stepKey, stepData]) => {
+                    orchestrationContext += `[TEAM_${stepKey.toUpperCase()} RESULT]:\n${JSON.stringify(stepData)}\n\n`;
+                });
+            }
             // 0. Auto-Grounding (Resource Engine)
+            if (sendLiveLog) sendLiveLog("Syncing autonomous memory and resource engine...");
             const resourceEngineService = require("./resourceEngineService");
-            const groundedResources = await resourceEngineService.autoGround(user._id, prompt);
+            const groundedResources = await resourceEngineService.autoGround(user._id, activePrompt);
             
             let resourceContext = "";
             if (groundedResources.length > 0) {
@@ -45,7 +56,7 @@ const docsAgentService = {
             }
 
             // 1. Ingest Sources
-            let sourceContent = resourceContext;
+            let sourceContent = resourceContext + orchestrationContext;
             if (docIds.length > 0) {
                 const docs = await Document.find({ _id: { $in: docIds } });
                 sourceContent += docs.map(d => `SOURCE [DOC: ${d.name}]:\n${d.content}`).join("\n\n");
@@ -101,10 +112,11 @@ const docsAgentService = {
             const temporalContext = getTemporalContext();
 
             // 1.5 Fetch Memory Context
+            if (sendLiveLog) sendLiveLog("Retrieving relationship intelligence and user preferences...");
             const memory = await NuroMemory.findOne({ userId: user._id }).lean();
             
             // Heuristic for high-stakes person detection in prompt
-            const words = prompt.split(/\s+/);
+            const words = activePrompt.split(/\s+/);
             let relationshipContext = "";
             for (const word of words) {
                 const cleanWord = word.replace(/[^\w]/g, "");
@@ -117,15 +129,17 @@ const docsAgentService = {
             }
 
             // 2. Stages 1 & 2: Intent & Classification
-            const intentData = await intentAnalyzer.analyzeIntent(prompt, sourceContent, multimediaBrief, temporalContext, memory, relationshipContext);
-            const classification = await classifier.classifyType(prompt, intentData, multimediaBrief, temporalContext);
+            if (sendLiveLog) sendLiveLog("Analyzing mission intent and document classification...");
+            const intentData = await intentAnalyzer.analyzeIntent(activePrompt, sourceContent, multimediaBrief, temporalContext, memory, relationshipContext);
+            const classification = await classifier.classifyType(activePrompt, intentData, multimediaBrief, temporalContext);
 
             // 3. Stage 2.5: Python PPT Interception
             if (intentData.output_format === 'ppt' || intentData.output_format === 'pptx') {
                 try {
+                    if (sendLiveLog) sendLiveLog("Routing to Python Visual Agent for high-fidelity rendering...");
                     console.log(`[DocsAgentService] Routing to Python Agent...`);
                     const fastApiResponse = await axios.post('http://localhost:8000/api/agents/ppt', {
-                        prompt: prompt,
+                        prompt: activePrompt,
                         context_data: sourceContent,
                         user_memory: memory // Pass memory to Python agent
                     }, { timeout: 120000 });
@@ -159,10 +173,16 @@ const docsAgentService = {
             }
 
             // 4. Normal Pipeline (Word/Website)
-            const structure = await structurePlanner.generateStructure(prompt, intentData, classification, sourceContent, multimediaContext, temporalContext);
-            const content = await contentGenerator.generateContent(prompt, intentData, structure, sourceContent, multimediaContext);
+            if (sendLiveLog) sendLiveLog("Establishing professional document structure...");
+            const structure = await structurePlanner.generateStructure(activePrompt, intentData, classification, sourceContent, multimediaContext, temporalContext);
+            
+            if (sendLiveLog) sendLiveLog(`Synthesizing content for ${structure.sections.length} core modules...`);
+            const content = await contentGenerator.generateContent(activePrompt, intentData, structure, sourceContent, multimediaContext);
+            
+            if (sendLiveLog) sendLiveLog("Applying visual design and professional layout engine...");
             const processedSlides = designEngine.processDesign(content.slides);
 
+            if (sendLiveLog) sendLiveLog("Finalizing high-fidelity rendering...");
             const finalOutput = await renderingEngine.renderOutput({
                 ...intentData,
                 slides: processedSlides,

@@ -35,7 +35,7 @@ const getApiKeys = () => {
  * @param {string} systemPrompt 
  * @param {Array} images - [{ mimeType, data }]
  */
-const generateWithOpenAI = async (prompt, systemPrompt = "", images = []) => {
+const generateWithOpenAI = async (prompt, systemPrompt = "", images = [], options = {}) => {
     const openai = getOpenAI();
     console.log(`[AI Service] generateWithOpenAI called. Key present: ${!!process.env.OPENAI_API_KEY}`);
     if (!openai) {
@@ -63,7 +63,7 @@ const generateWithOpenAI = async (prompt, systemPrompt = "", images = []) => {
         const needsJson = (prompt + systemPrompt).toLowerCase().includes('json');
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o", // High precision with vision
+            model: options.model || "gpt-4o-mini", // Optimized for speed
             messages: [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: contentParts }
@@ -112,7 +112,7 @@ const generateWithFallback = async (prompt, systemPrompt = "", images = [], mult
         if (openai && (!multimedia || multimedia.length === 0)) {
             try {
                 console.log(`[AI Service] Attempting delivery via OpenAI (Primary)... ${images.length > 0 ? '[Vision Mode]' : ''}`);
-                const text = await generateWithOpenAI(prompt, systemPrompt, images);
+                const text = await generateWithOpenAI(prompt, systemPrompt, images, options);
                 if (text) {
                     if (images.length === 0 && (!multimedia || multimedia.length === 0)) {
                         responseCache.set(cacheKey, { data: text, timestamp: Date.now() });

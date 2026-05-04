@@ -98,9 +98,23 @@ const OrchestratorLayout = () => {
             className="header-profile-icon"
             title={user ? `Signed in as ${user.name}` : 'Click to Log In'}
             onClick={() => navigate(user ? '/profile' : '/login')}
-            style={{ cursor: 'pointer' }}
+            style={{ 
+              cursor: 'pointer',
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #a855f7, #3b82f6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.85rem',
+              fontWeight: '700',
+              color: 'white',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              border: '2px solid rgba(255,255,255,0.1)'
+            }}
           >
-            👤
+            {user?.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'AC'}
           </div>
         </div>
 

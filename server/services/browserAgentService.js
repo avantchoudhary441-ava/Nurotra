@@ -643,7 +643,15 @@ class BrowserAgentService {
                     
                     // Now navigate to Google Careers (already authenticated!)
                     await this.logExecutionStep(userId, "Fast-Tracking: Routing to Google Careers...", "info", socket);
-                    await page.goto("https://careers.google.com/jobs/results/?q=software%20engineer", { waitUntil: 'load' });
+                    try {
+                        await page.goto("https://careers.google.com/jobs/results/?q=software%20engineer", { 
+                            waitUntil: 'domcontentloaded', 
+                            timeout: 60000 
+                        });
+                    } catch (navError) {
+                        console.warn("[BrowserAgent] Initial navigation timeout, checking if page partially loaded...");
+                        await page.waitForTimeout(5000); // Give it a bit more time
+                    }
                     await page.waitForTimeout(3000);
                 }
             } else if (taskDescription.toLowerCase().includes("linkedin") || page.url().includes("naukri")) {
@@ -666,20 +674,22 @@ class BrowserAgentService {
             while (!completed && steps < maxSteps) {
                 // Dynamic Page Resolution: Ensure we are always on the latest tab (Multi-tab support)
                 page = this.activePages.get(userId.toString()) || page;
-
-                const snapshot = await this.getSnapshot(page);
                 const currentUrl = page.url();
 
                 // --- PRIVACY & SAFETY GUARD (Account Page Escape) ---
-                // If we get redirected to personal account settings, the AI will hit a safety filter.
-                // We must force the agent back to the mission area.
+                // Check this BEFORE snapshotting to prevent AI from seeing sensitive data
                 if (currentUrl.match(/myaccount\.google\.com|accounts\.google\.com/i) && !currentUrl.includes("signin/v2/challenge")) {
                     await this.logExecutionStep(userId, "Privacy Guard: Redirected to Google Account settings. Rerouting to secure mission area...", "warn", socket);
-                    await page.goto("https://careers.google.com/jobs/results/?q=software%20engineer", { waitUntil: 'load' }).catch(() => {});
+                    await page.goto("https://careers.google.com/jobs/results/?q=software%20engineer", { 
+                        waitUntil: 'domcontentloaded', 
+                        timeout: 60000 
+                    }).catch(() => console.log("Privacy Guard navigation timeout, proceeding anyway."));
                     await page.waitForTimeout(3000);
                     steps++;
                     continue;
                 }
+
+                const snapshot = await this.getSnapshot(page);
 
                 // --- STRICT PIVOT (Stop the Job Board Loops) ---
                 const isTargetingGoogle = taskDescription.toLowerCase().includes("google");
@@ -821,7 +831,8 @@ class BrowserAgentService {
                 5. THE "ASK FIRST" PROTOCOL: If a required personal field (e.g., Phone Number) is empty and cannot be deduced from the USER PROFESSIONAL PROFILE, use: INTERVENE [I need your phone number and resume to proceed...]
                 6. SUCCESS CONFIRMATION: You are NEVER allowed to respond with \`COMPLETE\` just because you clicked a 'Submit' button. You must verify success by seeing text like "Application Received", "Thank you", or checking for red validation error blockers on the page.
                 7. ERROR CATCHING: If you clicked submit but are still on the form, read the error messages and act on them.
-                8. NEVER repeat a failed action endlessly.
+                8. NAVIGATING RESULTS: If you are on a search results page, you must CLICK on the most relevant job title/listing ID to enter the actual application page. Do not mark the task as complete until you have reached the final confirmation screen.
+                9. NEVER repeat a failed action endlessly.
                 
                 INTERACTIVE ELEMENTS:
                 ${snapshot.elements.map((e, i) => `- ID ${i+1}: [${e.tag}] "${e.text}"`).join('\n')}
@@ -848,23 +859,36 @@ class BrowserAgentService {
                 // 1. Clean up markdown and extra junk
                 const cleanDecision = rawDecision.replace(/```[a-z]*\n?/g, '').replace(/```/g, '').trim();
                 
-                // 2. Extract Thought & Command using positional indexing (more robust than line-based regex)
                 let thought = "Analyzing next step...";
                 let decision = "";
-                
-                const thoughtIdx = cleanDecision.toUpperCase().indexOf("THOUGHT:");
-                const commandIdx = cleanDecision.toUpperCase().indexOf("COMMAND:");
-                
-                if (thoughtIdx !== -1) {
-                    const endOfThought = commandIdx !== -1 ? commandIdx : cleanDecision.length;
-                    thought = cleanDecision.substring(thoughtIdx + 8, endOfThought).trim();
+
+                // 2. Support for JSON responses (Some LLMs prefer this)
+                if (cleanDecision.startsWith("{") && cleanDecision.endsWith("}")) {
+                    try {
+                        const parsed = JSON.parse(cleanDecision);
+                        thought = parsed.THOUGHT || parsed.thought || "Analyzing...";
+                        decision = parsed.COMMAND || parsed.command || "";
+                    } catch (e) {
+                        console.log("[BrowserAgent] Failed to parse AI JSON, falling back to string search.");
+                    }
                 }
-                
-                if (commandIdx !== -1) {
-                    decision = cleanDecision.substring(commandIdx + 8).trim();
-                } else {
-                    // Fallback: if no COMMAND: tag, take the whole thing if it doesn't have a THOUGHT tag
-                    decision = (thoughtIdx === -1) ? cleanDecision : "";
+
+                // 3. Positional Indexing Fallback (For plain text)
+                if (!decision) {
+                    const thoughtIdx = cleanDecision.toUpperCase().indexOf("THOUGHT:");
+                    const commandIdx = cleanDecision.toUpperCase().indexOf("COMMAND:");
+                    
+                    if (thoughtIdx !== -1) {
+                        const endOfThought = commandIdx !== -1 ? commandIdx : cleanDecision.length;
+                        thought = cleanDecision.substring(thoughtIdx + 8, endOfThought).trim();
+                    }
+                    
+                    if (commandIdx !== -1) {
+                        decision = cleanDecision.substring(commandIdx + 8).trim();
+                    } else if (thoughtIdx === -1) {
+                        // Fallback: if no tags at all, take the whole thing
+                        decision = cleanDecision;
+                    }
                 }
 
                 // LLM Safety & Capability Refusal Detection
@@ -874,7 +898,8 @@ class BrowserAgentService {
                     "policy", "safety guidelines", "privacy"
                 ];
                 
-                const isSafetyRefusal = refusalKeywords.some(k => cleanDecision.toLowerCase().includes(k));
+                const lowerDecision = (thought + " " + decision).toLowerCase();
+                const isSafetyRefusal = refusalKeywords.some(k => lowerDecision.includes(k));
 
                 if (isSafetyRefusal) {
                     console.log(`[BrowserAgent] [${userId}] LLM Safety/Capability Refusal detected: ${cleanDecision}`);

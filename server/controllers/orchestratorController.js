@@ -128,7 +128,7 @@ const executeTask = async (req, res) => {
         }
 
         // TRIGGER LEARNING: Analyze the interaction to extract patterns/roles
-        const userId = req.user?._id;
+        // Note: userId is already declared at the top of the function
         if (userId) {
             // Build full conversation for analysis: history + current prompt + result
             const fullConversation = [
