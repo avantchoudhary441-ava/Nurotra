@@ -22,6 +22,7 @@ class BrowserAgentService {
         this.browser = null;
         this.activeContexts = new Map(); // userId -> browserContext
         this.activePages = new Map(); // userId -> Page
+        this.activeStreams = new Map(); // userId -> intervalId
         this.io = null; // Global socket server instance
     }
 
@@ -55,11 +56,47 @@ class BrowserAgentService {
                 this.browser = null;
             }
 
+            this.stopStreaming(userId);
             console.log(`[BrowserAgent] [${userId}] Session cleared.`);
             return true;
         } catch (e) {
             console.error(`[BrowserAgent] [${userId}] Failed to restart session:`, e.message);
             return false;
+        }
+    }
+
+    /**
+     * Start a continuous live stream of the browser screen.
+     */
+    startStreaming(userId, page) {
+        if (this.activeStreams.has(userId.toString())) return;
+        
+        console.log(`[BrowserAgent] [${userId}] Initiating Live Stream Monitor...`);
+        const interval = setInterval(async () => {
+            try {
+                if (page.isClosed()) {
+                    this.stopStreaming(userId);
+                    return;
+                }
+                // Use lower quality for background stream to maintain performance
+                await this.emitFrame(null, userId, page, "LIVE", null, 30);
+            } catch (e) {
+                this.stopStreaming(userId);
+            }
+        }, 800); // ~1.2 FPS is a good balance for live feel vs resource usage
+        
+        this.activeStreams.set(userId.toString(), interval);
+    }
+
+    /**
+     * Stop the live stream for a user.
+     */
+    stopStreaming(userId) {
+        const interval = this.activeStreams.get(userId.toString());
+        if (interval) {
+            clearInterval(interval);
+            this.activeStreams.delete(userId.toString());
+            console.log(`[BrowserAgent] [${userId}] Live Stream suspended.`);
         }
     }
 
@@ -268,7 +305,8 @@ class BrowserAgentService {
             console.log(`[BrowserAgent] [${userId}] Reusing existing session for continuation...`);
         }
         
-        // Instant reality: Show the browser immediately
+        // Instant reality: Show the browser immediately and start live stream
+        this.startStreaming(userId, page);
         await this.emitFrame(socket, userId, page);
         
         try {
@@ -402,26 +440,27 @@ class BrowserAgentService {
 
             // 3. Final Extraction: Data-first, Business Grace
             await this.logExecutionStep(userId, "Synthesizing professional strategic report...", "info", socket, executionSteps);
-            const extractionPrompt = `You are an expert Data Extraction Engine.
+            const extractionPrompt = `You are Nurotra, a knowledgeable and articulate AI assistant.
             Task: ${query}
             
             Current URL: ${finalUrl}
             
             CRITICAL RULES:
-            1. EXTRACT REAL DATA: Pull out actual numbers, scores, dates, names, facts, statistics that are visible in the content. (e.g., "• **Mumbai Indians**: 178/4 vs **CSK**: 162/8").
+            1. EXTRACT REAL DATA: Pull out actual numbers, scores, dates, names, facts, and statistics visible in the content.
             2. NEVER list or describe websites. The user wants the DATA, not a directory of sources.
-            3. If actual data IS present, extract and present it beautifully with bullet points.
-            4. If the actual data is genuinely NOT in the content, say "I couldn't find the exact status on ${finalUrl} after exploring." and state what is still outstanding.
-            5. NEVER ask 'Would you like me to go deep?'. Summarize the best information discovered.
-            6. NEVER hallucinate or invent data. Only use what's actually in the CONTENT below.
-            7. NEVER tell the user to visit a website themselves.
-            8. DATA PRIORITY: For 'latest status', present it as "Status as of [Time/Date]: [Details]".
+            3. Write in natural, flowing prose — like a smart human explaining findings to a colleague. Do NOT default to bullet points unless the content is genuinely a list of items (e.g., top 5 results, multiple match scores).
+            4. Use **bold** for key names or important values inline within sentences (e.g., "**Mumbai Indians** scored 178/4 against **CSK**'s 162/8").
+            5. Use short paragraphs. Each paragraph should cover one idea. Leave a blank line between paragraphs.
+            6. If the data is genuinely not available, say so honestly in one clear sentence.
+            7. NEVER hallucinate or invent data. Only use what's in the CONTENT below.
+            8. NEVER tell the user to visit a website themselves.
+            9. NEVER ask follow-up questions like "Would you like me to go deeper?".
+            10. End with a single line: "Source: ${finalUrl}"
             
-            FORMAT:
-            - Use bullet points (•) for data items
-            - Bold key names (**Team**: Score)
-            - Keep it concise and data-dense
-            - End with: "Source: ${finalUrl}"
+            WRITING STYLE:
+            - Conversational but precise, like a Bloomberg terminal summary written by a human
+            - Vary sentence structure — mix short punchy sentences with richer explanatory ones
+            - Only use bullet points if there are 3+ parallel items that genuinely make sense as a list
             
             CONTENT TO ANALYZE:
             ${finalContent.substring(0, 10000)}`;
@@ -448,6 +487,7 @@ class BrowserAgentService {
 
             console.log(`[BrowserAgent] [${userId}] Search completed. [Persistent: ${options.reuseSession}]`);
             if (!options.reuseSession) {
+                this.stopStreaming(userId);
                 await page.close();
                 this.activePages.delete(userId.toString());
             }
@@ -463,6 +503,7 @@ class BrowserAgentService {
 
         } catch (error) {
             console.error("[BrowserAgent] Search failed:", error.message);
+            this.stopStreaming(userId);
             // Always clean up on error to prevent hung sessions
             await page.close().catch(() => {});
             this.activePages.delete(userId.toString());
@@ -537,7 +578,8 @@ class BrowserAgentService {
             taskDescription += " " + interventionContext;
         }
 
-        // Immediate wake up frame
+        // Immediate wake up frame and start live stream
+        this.startStreaming(userId, page);
         await this.emitFrame(socket, userId, page, "Preparing Virtual Workspace...");
         
         try {
@@ -1067,6 +1109,7 @@ class BrowserAgentService {
             }
 
             if (!options.reuseSession) {
+                this.stopStreaming(userId);
                 await page.close();
                 this.activePages.delete(userId.toString());
             }
@@ -1093,6 +1136,7 @@ class BrowserAgentService {
                 return await this.executeTask(userId, platform, taskDescription, socket, { ...options, retryCount: retryCount + 1 });
             }
 
+            this.stopStreaming(userId);
             await page.close().catch(() => {});
             this.activePages.delete(userId.toString());
             return { success: false, message: `Execution Error: ${error.message}. TIP: ${recovery.advice || "Ensure you are logged in or provide more specific selectors."}` };
@@ -1298,7 +1342,7 @@ class BrowserAgentService {
     /**
      * Stream a screenshot to the frontend via Socket.io
      */
-    async emitFrame(socket, userId, page, statusMessage, directSocketId = null) {
+    async emitFrame(socket, userId, page, statusMessage, directSocketId = null, quality = 50) {
         const io = this.io || socket?.server || (socket?.emit ? null : socket); 
         if (!io) return;
         
@@ -1308,7 +1352,7 @@ class BrowserAgentService {
                 this.checkBlock(userId, page, socket);
             }
 
-            const screenshot = await page.screenshot({ type: 'jpeg', quality: 50 });
+            const screenshot = await page.screenshot({ type: 'jpeg', quality });
             const base64 = screenshot.toString('base64');
             const timestamp = new Date();
             
