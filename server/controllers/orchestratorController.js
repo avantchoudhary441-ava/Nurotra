@@ -2,29 +2,100 @@ const orchestratorService = require('../services/orchestratorService');
 const learningService = require('../services/learningService');
 const docsAgentService = require('../services/docsAgentService');
 const communicationService = require('../services/communicationService');
-const timeAgentController = require('./timeAgentController');
+const actionAgentService = require('../services/actionAgentService');
+const timeAgentService = require('../services/timeAgentService');
+const NuroMemory = require('../models/NuroMemory');
 const orchestratorChatController = require('./orchestratorChatController');
 
+/**
+ * Strips Mongoose documents and non-serializable objects into plain JSON.
+ * This prevents the SSE stream from breaking when result objects contain
+ * circular references or Mongoose model instances.
+ */
+const sanitizeResult = (result) => {
+    if (!result) return null;
+    try {
+        // Mongoose documents have toObject(); plain objects pass through
+        const r = typeof result.toObject === 'function' ? result.toObject() : result;
+        return {
+            success: r.success ?? true,
+            message: r.message || '',
+            intent:  r.intent  || null,
+            workflow: r.workflow ? {
+                title:   r.workflow.title,
+                actions: (r.workflow.actions || []).map(a => ({
+                    id:    a.id,
+                    label: a.label,
+                    icon:  a.icon
+                }))
+            } : null,
+            planning: r.planning ? {
+                intensity:   r.planning.intensity,
+                totalPhases: r.planning.totalPhases,
+                schedule:    (r.planning.schedule || []).slice(0, 6)
+            } : null,
+            document: r.document ? {
+                _id:  r.document._id?.toString(),
+                name: r.document.name,
+                type: r.document.type
+            } : null,
+            fileName:  r.fileName  || null,
+            needs_clarification: r.needs_clarification || false
+        };
+    } catch (e) {
+        console.error('[Orchestrator] sanitizeResult failed:', e.message);
+        return { success: false, message: 'Result serialization error.' };
+    }
+};
+
+/**
+ * Build a human-readable summary string from the agent results.
+ */
+const buildSummaryMessage = (agentResults) => {
+    if (!agentResults || agentResults.length === 0) return 'Task processing complete.';
+    const lines = agentResults.map(r => {
+        const label = r.agent.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+        if (r.error) return `**${label}**: ⚠ ${r.error}`;
+        const res = r.result;
+        if (res?.document?.name) return `**${label}**: ✅ Document ready — *${res.document.name}*`;
+        if (res?.workflow?.title)  return `**${label}**: ✅ Workflow — *${res.workflow.title}*`;
+        if (res?.planning)         return `**${label}**: ✅ Schedule generated (${res.planning.totalPhases} phases)`;
+        if (res?.message)          return `**${label}**: ✅ ${res.message.slice(0, 120)}`;
+        return `**${label}**: ✅ Complete`;
+    });
+    return lines.join('\n\n');
+};
+
+/**
+ * Orchestrator Execute — Multi-Agent Coordination Loop
+ * POST /api/orchestrator/execute
+ *
+ * Streams SSE updates as it:
+ *   1. Classifies intent
+ *   2. Breaks task into sub-tasks via LLM
+ *   3. Maps sub-tasks to agents
+ *   4. Dispatches EVERY sub-task to the correct agent sequentially
+ *   5. Collects all results and emits a 'complete' event
+ */
 const executeTask = async (req, res) => {
     let { prompt, guardDecision, history = [], chatId = null } = req.body;
     const userId = req.user?._id;
 
     // STEP 0: Guard Layer Validation
-    // Exits immediately if the teammate's Guard Layer deemed it conversational/trivial
     if (guardDecision && guardDecision.response_strategy !== 'ROUTE_TO_SYSTEM') {
-        console.log(`[Orchestrator] Bypassed. Guard Layer strategy active: ${guardDecision.response_strategy}`);
+        console.log(`[Orchestrator] Bypassed. Guard Layer strategy: ${guardDecision.response_strategy}`);
         return res.status(200).json({
             success: true,
             bypassed: true,
-            message: "Handled by Guard Layer. Orchestrator bypassed successfully."
+            message: 'Handled by Guard Layer. Orchestrator bypassed successfully.'
         });
     }
 
     if (!prompt) {
-        return res.status(400).json({ error: "Prompt payload is heavily required for Orchestration." });
+        return res.status(400).json({ error: 'Prompt payload is required for Orchestration.' });
     }
 
-    // Initialize Server-Sent Events (SSE) for transparent stream updates
+    // Initialize SSE stream
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -37,25 +108,20 @@ const executeTask = async (req, res) => {
     let activeChatId = chatId;
 
     try {
-        // STEP -1: Manage Chat Session & Persistence
+        // ── Chat Session Management ──────────────────────────────────────────
         if (userId) {
             const chat = await orchestratorChatController.getOrCreateChat(userId, activeChatId, prompt);
             activeChatId = chat._id;
-            
-            // Note: User message is already saved in the /intent route if called before this,
-            // but we might want to check for duplicates if the frontend calls this directly.
-            // For now, we assume /intent saved it if it preceded this.
         }
-        // STEP 1: Understanding Intent
-        sendUpdate('intent', 'Decoding architectural intent from raw block...', false);
-        
-        // Utilize the static engine rules locally
+
+        // ── STEP 1: Intent Classification ────────────────────────────────────
+        sendUpdate('intent', 'Decoding intent from user prompt...', false);
+
         const intentResult = orchestratorService.engine.classifyIntent(prompt);
         const docTypeResult = orchestratorService.engine.detectDocType(prompt);
         const riskResult = orchestratorService.engine.detectRisk(prompt);
-        
-        // Ensure UX perception is realistic
-        await new Promise(r => setTimeout(r, 600));
+
+        await new Promise(r => setTimeout(r, 500));
 
         const consolidatedIntent = {
             ...intentResult,
@@ -63,20 +129,19 @@ const executeTask = async (req, res) => {
             isHighRisk: riskResult.isHighRisk
         };
 
-        sendUpdate('intent', 'Intent fully mapped safely.', true, consolidatedIntent);
+        sendUpdate('intent', 'Intent fully mapped.', true, consolidatedIntent);
 
-        // STEP 2: Task Breakdown
-        sendUpdate('breakdown', 'Deconstructing overarching goal into executable micro-steps...', false);
-        
+        // ── STEP 2: Task Breakdown via LLM ───────────────────────────────────
+        sendUpdate('breakdown', 'Deconstructing goal into executable sub-tasks...', false);
+
         const tasks = await orchestratorService.breakDownTask(prompt, consolidatedIntent);
-        
-        sendUpdate('breakdown', 'Task Breakdown Matrix dynamically generated.', true, tasks);
 
-        // STEP 3 & 4: Agent Mapping & Trigger Logic
-        sendUpdate('mapping', 'Allocating computational workload to specialized Agent Workforces...', false);
-        await new Promise(r => setTimeout(r, 800));
+        sendUpdate('breakdown', `${tasks.length} sub-task(s) identified.`, true, tasks);
 
-        // Sorting mapping mathematically
+        // ── STEP 3: Agent Mapping ─────────────────────────────────────────────
+        sendUpdate('mapping', 'Allocating sub-tasks to specialized Agent Workforces...', false);
+        await new Promise(r => setTimeout(r, 600));
+
         const mappedAgents = {};
         let requiresTimeAgent = false;
 
@@ -88,81 +153,154 @@ const executeTask = async (req, res) => {
             if (task.is_delayed) requiresTimeAgent = true;
         });
 
-        // Logical Routing Decision
-        const routingDecision = requiresTimeAgent 
-            ? 'Execution temporally scheduled via Time Agent holding pattern.'
-            : 'Immediate autonomous execution triggered via base node Agents.';
+        const routingDecision = requiresTimeAgent
+            ? 'Execution temporally scheduled via Time Agent.'
+            : 'Immediate execution triggered across base Agents.';
 
         sendUpdate('mapping', routingDecision, true, mappedAgents);
 
-        // STEP 5: Execution Handoff
-        sendUpdate('execution', `Handoff initiated to ${tasks[0].suggested_agent}...`, false);
-        let executionResult = null;
+        // ── STEP 4: Multi-Agent Sequential Execution ─────────────────────────
+        const agentResults = [];
 
+        // Fetch user memory once (shared across agents that need it)
+        let userMemory = null;
         try {
-            const firstAgent = tasks[0].suggested_agent;
-            
-            if (firstAgent === 'docs_agent') {
-                sendUpdate('execution', 'Docs Agent: Initializing document generation pipeline...', false);
-                executionResult = await docsAgentService.generateFullDocument(req.user, {
-                    prompt: prompt,
-                    history: []
-                });
-                sendUpdate('execution', 'Docs Agent: Document generation complete.', true);
-            } 
-            else if (firstAgent === 'communication_agent') {
-                sendUpdate('execution', 'Communication Agent: Drafting contextual message...', false);
-                executionResult = await communicationService.processMessage(req.user._id, prompt, history);
-                sendUpdate('execution', 'Communication Agent: Draft completed.', true);
+            if (userId) {
+                userMemory = await NuroMemory.findOne({ userId }).lean();
             }
-            else if (firstAgent === 'time_agent') {
-                sendUpdate('execution', 'Time Agent: Analyzing temporal constraints and generating schedule...', false);
-                // Mock req/res for the controller
-                const mockRes = { json: (data) => { executionResult = data; }, status: () => mockRes };
-                await timeAgentController.planTask({ body: { prompt }, user: req.user }, mockRes);
-                sendUpdate('execution', 'Time Agent: Strategic plan finalized.', true);
-            }
-        } catch (execError) {
-            console.error('[Orchestrator] Execution handoff failed:', execError);
-            sendUpdate('execution', `Execution error: ${execError.message}`, true);
+        } catch (memErr) {
+            console.warn('[Orchestrator] Memory fetch failed:', memErr.message);
         }
 
-        // TRIGGER LEARNING: Analyze the interaction to extract patterns/roles
-        const userId = req.user?._id;
+        const history = await orchestratorChatController.getHistory(activeChatId);
+        let currentExecutionHistory = [...history];
+
+        for (const task of tasks) {
+            const agentKey = task.suggested_agent;
+            const taskPrompt = task.description || prompt;
+
+            sendUpdate(
+                'execution',
+                `[${agentKey}] Initiating: "${task.action}"...`,
+                false,
+                { agent: agentKey, task }
+            );
+
+            let result = null;
+            let taskError = null;
+
+            try {
+                // ── Docs Agent ────────────────────────────────────────────────
+                // Always use the MAIN user prompt for docs_agent; the task
+                // description is a workflow label, not a document brief.
+                if (agentKey === 'docs_agent') {
+                    result = await docsAgentService.generateFullDocument(req.user, {
+                        prompt: prompt,
+                        history: []
+                    });
+                }
+
+                // ── Action Agent ──────────────────────────────────────────────
+                else if (agentKey === 'action_agent') {
+                    result = await actionAgentService.parseActionIntent(
+                        taskPrompt,
+                        userMemory,
+                        history
+                    );
+                }
+
+                // ── Time Agent ────────────────────────────────────────────────
+                else if (agentKey === 'time_agent') {
+                    result = await timeAgentService.planTask(taskPrompt, req.user, history);
+                }
+
+                // ── Communication Agent ───────────────────────────────────────
+                else if (agentKey === 'communication_agent') {
+                    result = await communicationService.processMessage(
+                        userId,
+                        taskPrompt,
+                        currentExecutionHistory
+                    );
+                }
+
+                // ── Unknown Agent — graceful fallback ─────────────────────────
+                else {
+                    console.warn(`[Orchestrator] Unknown agent type: ${agentKey}`);
+                    result = {
+                        success: false,
+                        message: `No handler registered for agent: ${agentKey}`
+                    };
+                }
+
+            } catch (execError) {
+                console.error(`[Orchestrator] ${agentKey} execution failed:`, execError);
+                taskError = execError.message;
+                result = { success: false, message: execError.message };
+            }
+
+            const sanitized = sanitizeResult(result);
+            agentResults.push({ agent: agentKey, task, result: sanitized, error: taskError });
+
+            // Feed this result back into the execution history for the next agent in the loop
+            currentExecutionHistory.push({
+                role: 'system',
+                content: `Agent [${agentKey}] completed task: "${task.action}". Result: ${JSON.stringify(sanitized)}`
+            });
+
+            sendUpdate(
+                'execution',
+                taskError
+                    ? `[${agentKey}] ⚠ "${task.action}" encountered an error.`
+                    : `[${agentKey}] ✓ "${task.action}" complete.`,
+                true,
+                { agent: agentKey, result: sanitized }
+            );
+        }
+
+        // ── STEP 5: Learning Trigger ──────────────────────────────────────────
         if (userId) {
-            // Build full conversation for analysis: history + current prompt + result
+            const primaryResult = agentResults[0]?.result;
             const fullConversation = [
                 ...history.map(h => ({ role: h.role, content: h.content })),
-                { role: "user", content: prompt },
-                ...(executionResult?.message ? [{ role: "assistant", content: executionResult.message }] : [])
+                { role: 'user', content: prompt },
+                ...(primaryResult?.message
+                    ? [{ role: 'assistant', content: primaryResult.message }]
+                    : [])
             ];
             if (fullConversation.length >= 2) {
-                learningService.analyzeInteraction(userId, fullConversation).catch(err => 
-                    console.error("[OrchestratorController] Learning Trigger failed:", err)
-                );
+                learningService
+                    .analyzeInteraction(userId, fullConversation)
+                    .catch(err => console.error('[Orchestrator] Learning trigger failed:', err));
             }
         }
 
-        // Save Assistant Message
-        if (userId && executionResult?.message) {
-            await orchestratorChatController.saveMessage(activeChatId, null, executionResult.message);
+        // ── STEP 6: Build summary & save to chat ─────────────────────────────
+        const summaryMessage = buildSummaryMessage(agentResults);
+        if (userId) {
+            try {
+                await orchestratorChatController.saveMessage(activeChatId, null, summaryMessage);
+            } catch (saveErr) {
+                console.warn('[Orchestrator] Failed to save summary message:', saveErr.message);
+            }
         }
 
-        // End active execution stream
-        sendUpdate('complete', 'Task fulfilled successfully via automated orchestration.', true, { 
-            result: executionResult,
-            agent: tasks[0].suggested_agent,
-            chatId: activeChatId
+        // ── STEP 7: Complete (sanitized, plain-JSON payload) ──────────────────
+        const primaryResult = agentResults[0]?.result || null;
+        sendUpdate('complete', summaryMessage, true, {
+            results:    agentResults,   // already sanitized
+            result:     primaryResult,  // legacy compat
+            agent:      agentResults[0]?.agent,
+            chatId:     activeChatId,
+            summary:    summaryMessage
         });
+
         res.end();
 
     } catch (error) {
-        console.error('[Orchestrator] Execution Pipeline Critical Error:', error);
-        sendUpdate('error', 'Execution sequence aborted due to internal anomaly.', true, { error: error.message });
+        console.error('[Orchestrator] Critical Pipeline Error:', error);
+        sendUpdate('error', 'Execution aborted due to internal error.', true, { error: error.message });
         res.end();
     }
 };
 
-module.exports = {
-    executeTask
-};
+module.exports = { executeTask };

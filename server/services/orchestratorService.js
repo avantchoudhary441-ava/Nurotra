@@ -14,18 +14,24 @@ const breakDownTask = async (prompt, contextIntent) => {
 The user has provided a prompt, and the internal engine classified the primary intent as: ${contextIntent.intent} with content type: ${contextIntent.docType}.
 
 Your job is to cleanly break this entire goal into 3 to 5 logical, executable sub-tasks.
-Each object must strictly have:
-- "step": Number
-- "action": String (Short 2-3 word title)
-- "description": String (Detailed instruction)
-- "suggested_agent": String (Must be: "docs_agent", "action_agent", "time_agent", "communication_agent")
-- "is_delayed": Boolean (Does this task need to wait for a future event?)
+Return your response in JSON format matching this exact structure:
+{
+  "tasks": [
+    {
+      "step": Number,
+      "action": "String (Short 2-3 word title)",
+      "description": "String (Detailed instruction)",
+      "suggested_agent": "String (Must be exactly one of: 'docs_agent', 'action_agent', 'time_agent', 'communication_agent')",
+      "is_delayed": Boolean
+    }
+  ]
+}
 
 CRITICAL INSTRUCTIONS:
 1. If the goal involves creating a file (Word, Excel, PPT, Report), you MUST include a step for the "action_agent" to perform "File System Execution" (FSE) for professional renaming and cloud upload.
-2. If the user mentions a RECIPIENT (e.g., "send to client", "email my boss", "notify Sarah"), you MUST ALWAYS include a final step for the "action_agent" to perform "Output Delivery Execution" (ODE). This step handles identifying the recipient in contacts and professional dispatching.
-3. The description for the ODE step must specify the intended recipient.
-4. If search or navigation is needed, use "action_agent".
+2. If the user mentions a RECIPIENT (e.g., "send to client", "email my boss", "notify Sarah"), you MUST ALWAYS include a final step for the "communication_agent" to perform "Output Delivery Execution" (ODE). This step handles identifying the recipient in contacts and professional dispatching via email or other platforms.
+3. The description for the ODE step must specify the intended recipient and the content/document to attach.
+4. If search or web navigation is needed, use "action_agent".
 
 User Prompt: "${prompt}"`;
 
@@ -39,8 +45,22 @@ User Prompt: "${prompt}"`;
         });
 
         const parsed = JSON.parse(response.choices[0].message.content);
-        // Safely extract the array using fallback keys
-        return parsed.tasks || parsed.steps || parsed.task_breakdown || [parsed];
+        
+        // Dynamically find the array inside the parsed object
+        let extractedTasks = null;
+        if (Array.isArray(parsed)) {
+            extractedTasks = parsed;
+        } else {
+            for (const key of Object.keys(parsed)) {
+                if (Array.isArray(parsed[key])) {
+                    extractedTasks = parsed[key];
+                    break;
+                }
+            }
+        }
+        
+        // If we still didn't find an array, wrap the object itself
+        return extractedTasks || [parsed];
     } catch (error) {
         console.error("[Orchestrator] LLM Breakdown failed:", error);
         // Deterministic Fallback if LLM times out or API key missing

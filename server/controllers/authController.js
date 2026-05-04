@@ -236,6 +236,7 @@ const loginUser = async (req, res) => {
                 profileImg: user.profileImg,
                 totalCollabs: user.totalCollabs || 0,
                 successfulCollabs: user.successfulCollabs || 0,
+                gmailEmail: user.gmailEmail,
                 token: generateToken(user._id),
             });
 
@@ -264,6 +265,7 @@ const getMe = async (req, res) => {
             profileImg: user.profileImg,
             totalCollabs: user.totalCollabs || 0,
             successfulCollabs: user.successfulCollabs || 0,
+            gmailEmail: user.gmailEmail,
             token: req.headers.authorization.split(" ")[1] // Echo back token or just rely on client having it
         });
     } catch (error) {

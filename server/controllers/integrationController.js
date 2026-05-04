@@ -24,6 +24,7 @@ exports.authGmail = async (req, res) => {
         const userId = req.user._id;
         console.log(`[GmailAuth] Generating URL for user: ${userId}`);
         const oauth2Client = getOAuthClient();
+        console.log(`[GmailAuth] Redirect URI: ${oauth2Client.redirectUri}`);
 
         const scopes = [
             "https://www.googleapis.com/auth/gmail.readonly",
@@ -43,8 +44,8 @@ exports.authGmail = async (req, res) => {
             state: userId.toString()
         });
 
-        console.log(`[GmailAuth] Success! Redirecting...`);
-        res.redirect(url);
+        console.log(`[GmailAuth] Success! Returning URL...`);
+        res.json({ url });
     } catch (error) {
         console.error("Auth Gmail Error:", error);
         res.status(500).json({ success: false, message: "Failed to generate Gmail auth URL", error: error.message });
@@ -66,10 +67,17 @@ exports.callbackGmail = async (req, res) => {
     try {
         const oauth2Client = getOAuthClient();
         const { tokens } = await oauth2Client.getToken(code);
+        oauth2Client.setCredentials(tokens);
+
+        // Fetch user email from Google
+        const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+        const profile = await gmail.users.getProfile({ userId: "me" });
+        const gmailEmail = profile.data.emailAddress;
 
         // Update the user
         await User.findByIdAndUpdate(userId, {
             gmailAccessToken: tokens.access_token,
+            gmailEmail: gmailEmail,
             // Only update refresh token if we received a new one 
             ...(tokens.refresh_token && { gmailRefreshToken: tokens.refresh_token })
         });
@@ -78,6 +86,9 @@ exports.callbackGmail = async (req, res) => {
         const clientUrl = process.env.CLIENT_URL || "http://localhost:5173";
         res.redirect(`${clientUrl}/dashboard?gmail_connected=true`);
     } catch (error) {
+        const fs = require('fs');
+        const logPath = 'c:\\Users\\hp\\OneDrive\\Desktop\\Nurotra\\server\\gmail_debug.log';
+        fs.appendFileSync(logPath, `[${new Date().toISOString()}] Callback Gmail Error: ${error.stack || error.message}\n`);
         console.error("Callback Gmail Error:", error);
         res.status(500).send("Authentication failed. Please try again.");
     }
@@ -146,7 +157,7 @@ exports.authGoogleAgent = async (req, res) => {
             state: userId.toString()
         });
 
-        res.redirect(url);
+        res.json({ url });
     } catch (error) {
         console.error("Auth Google Agent Error:", error);
         res.status(500).json({ success: false, message: "Agent auth failed." });

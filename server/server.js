@@ -58,7 +58,7 @@ app.use(express.urlencoded({ limit: '200mb', extended: true }));
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
-        if (finalOrigins.indexOf(origin) !== -1 || finalOrigins.some(o => origin && origin.startsWith(o))) {
+        if (finalOrigins.indexOf(origin) !== -1 || finalOrigins.some(o => origin && origin.startsWith(o)) || origin.startsWith('chrome-extension://')) {
             callback(null, true);
         } else {
             console.warn(`Blocked CORS request from: ${origin}. Allowed: ${finalOrigins.join(', ')}`);

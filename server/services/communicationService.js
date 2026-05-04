@@ -7,6 +7,7 @@ const Meeting = require("../models/Meeting");
 const BulkCampaign = require("../models/BulkCampaign");
 const actionService = require("./actionService");
 const User = require("../models/User");
+const NuroMemory = require("../models/NuroMemory");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -49,20 +50,18 @@ CRITICAL INSTRUCTIONS:
 
 Respond with this exact JSON structure:
 {
-  "intent": "send_message|setup_followup|broadcast_completion|draft_message|platform_route|recall_history|retry_failed|daily_digest|meeting_comm|bulk_send|manage_contacts|meeting_lifecycle|bulk_personalized|general_chat",
+  "intent": "send_message|setup_followup|broadcast_completion|draft_message|platform_route|recall_history|retry_failed|daily_digest|meeting_comm|bulk_send|manage_contacts|meeting_lifecycle|bulk_personalized|dispatch_output|general_chat",
   "needs_clarification": true/false,
   "clarification_question": "question if needs_clarification is true",
   "extracted_data": {
     "recipients": ["email/name array"],
-    "group_name": "group name if applicable",
+    "recipient_alias": "name or role like 'tanuj' or 'boss'",
     "subject": "subject",
     "body": "base message body",
-    "placeholders": ["name", "company"],
-    "context": "project/task context",
-    "campaign_title": "title for the campaign",
-    "personalize": true
+    "context": "description of the document or task being delivered",
+    "platform": "email"
   },
-  "response_text": "Your natural language response to the user if needs_clarification is false"
+  "response_text": "Your natural language response"
 }`;
 
 // ─── INTENT CLASSIFICATION ──────────────────────────────────────────────────
@@ -161,7 +160,12 @@ async function dispatchOutput(userId, deliveryData) {
         temperature: 0.7
     });
 
-    const body = response.choices[0].message.content;
+    let body = response.choices[0].message.content;
+
+    // Ensure the link is actually in the body
+    if (fileLink && !body.includes(fileLink)) {
+        body += `\n\nDownload Link: ${fileLink}`;
+    }
 
     // Final Dispatch
     return await executeSendMessage(userId, {
@@ -1099,6 +1103,44 @@ async function processMessage(userId, prompt, history = []) {
             break;
         case "bulk_personalized":
             actionResult = await handleBulkPersonalized(userId, data);
+            break;
+        case "dispatch_output":
+            // ODE Logic: Discover recipient -> Draft -> Send
+            const alias = data.recipient_alias || (data.recipients && data.recipients[0]);
+            const contact = await resolveRecipient(userId, alias);
+            
+            if (!contact) {
+                return {
+                    intent: "dispatch_output",
+                    message: `I couldn't find a contact for "${alias}". Could you provide their email address?`,
+                    needs_clarification: true
+                };
+            }
+
+            // Find the most recent document from history/context if possible
+            let docLink = "the generated report";
+            // Use [...history] to avoid modifying the original array
+            const lastDocResult = [...history].reverse().find(h => h.role === 'system' && h.content.includes('Agent [docs_agent] completed task'));
+            
+            if (lastDocResult) {
+                try {
+                    const jsonPart = lastDocResult.content.split('Result: ')[1];
+                    const resultData = JSON.parse(jsonPart);
+                    const docId = resultData.document?._id;
+                    if (docId) {
+                        docLink = `${process.env.VITE_API_URL || 'http://localhost:5000'}/api/workspace/download/${docId}`;
+                    }
+                } catch (e) {
+                    console.error("[CommService] Failed to parse docId from history:", e.message);
+                }
+            }
+
+            actionResult = await dispatchOutput(userId, {
+                contact,
+                fileLink: docLink,
+                context: data.context || "Finalized Output Delivery",
+                platform: data.platform || "email"
+            });
             break;
         default:
             // General conversation — return the LLM's response directly
