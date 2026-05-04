@@ -1,15 +1,20 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { chatService, aiService } from "../../services/apiService";
+import { chatService, aiService, workspaceService } from "../../services/apiService";
 import "../../styles/chat.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import GrowthPathModal from "../../components/GrowthPathModal";
+import PremiumCallModal from "../../components/modals/PremiumCallModal";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Paperclip, Sun, Moon, CheckCircle, XCircle, Wand2, Sparkles } from "lucide-react";
+import { Paperclip, Sun, Moon, CheckCircle, XCircle, Wand2, Sparkles, Phone } from "lucide-react";
+import { useSocket } from "../../context/SocketContext";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNuroCore } from "../../context/NuroCoreContext";
 
 export default function ChatPage() {
     const { user } = useAuth();
+    const { checkSafety, setHasUnreadMessages } = useNuroCore();
+    const { callUser } = useSocket();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -23,13 +28,20 @@ export default function ChatPage() {
     const [selectedChat, setSelectedChat] = useState(null);
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState("");
-    const [loadingChats, setLoadingChats] = useState(false);
 
     // UI State
     const [isDarkMode, setIsDarkMode] = useState(true);
     const [showGrowthPathCTA, setShowGrowthPathCTA] = useState(false);
     const [growthPathType, setGrowthPathType] = useState(null); // 'success' or 'failure'
     const [isGrowthModalOpen, setIsGrowthModalOpen] = useState(false);
+
+    useEffect(() => {
+        setHasUnreadMessages(false);
+    }, [setHasUnreadMessages]);
+
+    // Premium Call Modal State
+    const [showCallModal, setShowCallModal] = useState(false);
+    const [callTarget, setCallTarget] = useState(null);
 
     // Refs
     const scrollRef = useRef();
@@ -38,14 +50,12 @@ export default function ChatPage() {
 
     // Fetch My Chats
     const fetchChats = async () => {
-        setLoadingChats(true);
         try {
             const data = await chatService.fetchChats();
             setChats(data);
         } catch (error) {
             console.error("Failed to load chats", error);
         }
-        setLoadingChats(false);
     };
 
 
@@ -135,14 +145,18 @@ export default function ChatPage() {
     };
 
     const handleInput = (e) => {
-        setNewMessage(e.target.value);
+        const value = e.target.value;
+        setNewMessage(value);
         setEnhancedText(null); // Hide enhanced suggestion if user types
+
+        // NURO: Adaptive Intervention Check
+        checkSafety(value, "Chat");
+
         // Auto-expand
         if (textareaRef.current) {
             textareaRef.current.style.height = "auto";
             textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
         }
-        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
     }
 
     const handleFileUpload = async (e) => {
@@ -163,7 +177,6 @@ export default function ChatPage() {
             scrollToBottom();
         } catch (error) {
             console.error("File Upload Error:", error);
-            alert("Failed to upload file");
         }
     };
 
@@ -186,11 +199,17 @@ export default function ChatPage() {
     };
 
     useEffect(() => {
-        fetchChats();
+        const init = async () => {
+            await fetchChats();
+        };
+        init();
     }, [user]);
 
     useEffect(() => {
-        fetchMessages();
+        const initMessages = async () => {
+            await fetchMessages();
+        };
+        initMessages();
         // Polling for simple real-time effect (every 3s)
         const interval = setInterval(fetchMessages, 3000);
         return () => clearInterval(interval);
@@ -201,10 +220,35 @@ export default function ChatPage() {
         setShowGrowthPathCTA(false);
     }, [selectedChat]);
 
+    // Browser Back Interception to Analytical Dashboard
+    useEffect(() => {
+        if (!user) return;
+
+        // Push a state into historical stack to catch the back action
+        window.history.pushState(null, null, window.location.pathname);
+
+        const handlePopState = (event) => {
+            const role = user.role?.toLowerCase();
+            const dashboardPath = role === 'influencer' ? '/influencer/overview' : '/brand/overview';
+
+            // Using window.location.replace for a hard redirect to the correct "Analytical Dashboard"
+            // This ensures we break out of any potential routing loops or conflicting component-level redirects
+            window.location.replace(dashboardPath);
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [user]);
+
     // Helpers to get other user name
     const getSender = (loggedUser, users) => {
         if (!users || users.length < 2) return "Unknown User";
         return users[0]._id === loggedUser._id ? users[1].name : users[0].name;
+    };
+
+    const getSenderId = (loggedUser, users) => {
+        if (!users || users.length < 2) return null;
+        return users[0]._id === loggedUser._id ? users[1]._id : users[0]._id;
     };
 
     const getSenderImg = (loggedUser, users) => {
@@ -215,6 +259,7 @@ export default function ChatPage() {
     return (
         <div className={`chat-page-container ${isDarkMode ? "dark-theme" : "light-theme"}`}>
             <BackgroundEffects />
+            <BackgroundEffects />
 
             {/* Growth Path Modal */}
             <GrowthPathModal
@@ -223,15 +268,37 @@ export default function ChatPage() {
                 initialType={growthPathType}
             />
 
+            {/* Premium Call Modal - Intercepts call button */}
+            <PremiumCallModal
+                isOpen={showCallModal}
+                onClose={() => {
+                    setShowCallModal(false);
+                    setCallTarget(null);
+                }}
+                onProceed={() => {
+                    // After premium flow completes, actually call the user
+                    if (callTarget) {
+                        callUser(
+                            callTarget.targetId,
+                            callTarget.targetName,
+                            callTarget.targetPic,
+                            callTarget.targetContext
+                        );
+                    }
+                    setShowCallModal(false);
+                    setCallTarget(null);
+                }}
+                targetName={callTarget?.targetName}
+            />
+
             {/* Overlay Gradient */}
             <div className="chat-overlay">
-                <div className="chat-window">
+                <div className={`chat-window ${selectedChat ? 'mobile-chat-active' : ''}`}>
 
-                    {/* SIDEBAR */}
-                    <div className="chat-sidebar">
+                    {/* SIDEBAR (LIST View) */}
+                    <div className={`chat-sidebar ${selectedChat ? 'mobile-hidden' : ''}`}>
                         <div className="sidebar-header">
                             <h2>Chats</h2>
-                            <button className="back-btn" onClick={() => navigate(-1)}>⬅ Back</button>
                         </div>
 
                         <div className="chat-list">
@@ -261,8 +328,8 @@ export default function ChatPage() {
                         </div>
                     </div>
 
-                    {/* MAIN CHAT AREA */}
-                    <div className="chat-main">
+                    {/* MAIN CHAT AREA (Window View) */}
+                    <div className={`chat-main ${!selectedChat ? 'mobile-hidden' : ''}`}>
                         {!selectedChat ? (
                             <div className="welcome-screen">
                                 <h1 className="welcome-title">Welcome, {user?.name}</h1>
@@ -273,6 +340,8 @@ export default function ChatPage() {
                             <>
                                 <div className="chat-header">
                                     <div className="header-left">
+                                        {/* Mobile Back Button - REMOVED for linear flow */}
+
                                         <img
                                             src={getSenderImg(user, selectedChat.users) || "https://via.placeholder.com/150"}
                                             alt="Current"
@@ -281,6 +350,34 @@ export default function ChatPage() {
                                         <div className="header-details">
                                             <h3>{getSender(user, selectedChat.users)}</h3>
                                         </div>
+
+                                        {/* Call Button - Now triggers Premium Modal */}
+                                        <button
+                                            className="icon-btn highlight-call-btn"
+                                            title="Start Voice Call"
+                                            onClick={() => {
+                                                const targetId = getSenderId(user, selectedChat.users);
+                                                const targetName = getSender(user, selectedChat.users);
+                                                const targetPic = getSenderImg(user, selectedChat.users);
+
+                                                // Find the actual user object to get details
+                                                const targetUser = selectedChat.users.find(u => u._id !== user._id);
+                                                const targetContext = {
+                                                    role: targetUser?.role || "User",
+                                                    isVerified: targetUser?.isVerified || false,
+                                                    matchScore: selectedChat.matchScore || null
+                                                };
+
+                                                // Store call target and show premium modal (unplugged direct call)
+                                                if (targetId) {
+                                                    setCallTarget({ targetId, targetName, targetPic, targetContext });
+                                                    setShowCallModal(true);
+                                                }
+                                            }}
+                                            style={{ marginLeft: 'auto', marginRight: '10px' }}
+                                        >
+                                            <Phone size={20} />
+                                        </button>
                                     </div>
 
                                     {/* Toggle Check */}
@@ -307,7 +404,7 @@ export default function ChatPage() {
                                                             alt="sent"
                                                             className="chat-msg-img"
                                                             style={{ maxWidth: '200px', borderRadius: '8px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}
-                                                            onClick={() => window.open(m.attachments[0], '_blank')}
+                                                            onClick={() => workspaceService.downloadByUrl(m.attachments[0], m.attachments[0].split('/').pop())}
                                                         />
                                                     </div>
                                                 ) : m.type === 'file' && m.attachments?.length > 0 ? (
@@ -324,7 +421,7 @@ export default function ChatPage() {
                                                             cursor: 'pointer',
                                                             border: '1px solid rgba(255,255,255,0.1)'
                                                         }}
-                                                        onClick={() => window.open(m.attachments[0], '_blank')}
+                                                        onClick={() => workspaceService.downloadByUrl(m.attachments[0], m.attachments[0].split('/').pop())}
                                                     >
                                                         <div style={{ background: '#3b82f6', padding: '8px', borderRadius: '50%', display: 'flex', minWidth: '36px', justifyContent: 'center' }}>
                                                             <Paperclip size={20} color="white" />
@@ -443,6 +540,8 @@ export default function ChatPage() {
                                     </div>
 
                                     {/* Collaboration Status Icons - Lower Right */}
+                                    {/* Collaboration Status Icons - Lower Right REPLACED WITH 'THE END' */}
+                                    {/* 
                                     <div className="collab-icons">
                                         <div
                                             className="collab-icon-group"
@@ -459,6 +558,13 @@ export default function ChatPage() {
                                             <XCircle size={18} className="collab-failure" />
                                         </div>
                                     </div>
+                                    */}
+                                    <button
+                                        className="the-end-btn"
+                                        onClick={() => navigate('/collab-conclusion', { state: { chatId: selectedChat._id } })}
+                                    >
+                                        The END
+                                    </button>
                                 </div>
                             </>
                         )}

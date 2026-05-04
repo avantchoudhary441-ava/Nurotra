@@ -1,5 +1,6 @@
 const Brand = require("../models/Brand");
 const Influencer = require("../models/Influencer");
+const { logEvent } = require("../utils/eventLogger");
 
 // ---------------------------------------------------------
 // HELPER FUNCTIONS (Normalization)
@@ -111,24 +112,26 @@ const calculateMatchScore = (brand, influencer) => {
     return Math.min(Math.round(score), 100);
 };
 
-// ---------------------------------------------------------
-// CONTROLLERS
-// ---------------------------------------------------------
-
 // Find Influencers for a Brand
 exports.matchForBrand = async (req, res) => {
     try {
-        // Use authenticated user ID instead of nuroId from body
         const brand = await Brand.findOne({ userId: req.user._id });
 
         if (!brand) {
             return res.status(404).json({ message: "Brand profile not found. Please complete your profile first." });
         }
 
-        const influencers = await Influencer.find({});
+        // Fetch user object to get seenMatches
+        const currentUser = await require("../models/User").findById(req.user._id);
+        const seenIds = currentUser.seenMatches || [];
+
+        // Filter influencers: Not seen yet AND not the user themselves
+        const influencers = await Influencer.find({
+            userId: { $nin: [...seenIds, req.user._id] }
+        });
 
         // Manual Populate to ensure no schema errors
-        const userIds = influencers.map(inf => inf.userId); // Fix: use userId
+        const userIds = influencers.map(inf => inf.userId);
         const users = await require("../models/User").find({ _id: { $in: userIds } }, "name profileImg");
         const userMap = {};
         users.forEach(u => userMap[u._id.toString()] = u);
@@ -145,6 +148,21 @@ exports.matchForBrand = async (req, res) => {
 
         // Filter 0 scores if desired, or keep all (Soft Strictness = keep all sorted)
         results.sort((a, b) => b.matchScore - a.matchScore);
+
+        // PERSISTENCE: Mark these top 3 (or whatever is returned) as seen
+        if (results.length > 0) {
+            const newSeenIds = results.slice(0, 3).map(r => r.userId);
+            await require("../models/User").findByIdAndUpdate(req.user._id, {
+                $addToSet: { seenMatches: { $each: newSeenIds } },
+                $set: {
+                    lastActivityAt: new Date(),
+                    "onboardingProgress.firstBrandViewed": true
+                }
+            });
+
+            // Log event
+            await logEvent(req.user._id, "brand_viewed");
+        }
 
         res.json(results);
 
@@ -163,10 +181,17 @@ exports.matchForInfluencer = async (req, res) => {
             return res.status(404).json({ message: "Influencer profile not found. Please complete your profile first." });
         }
 
-        const brands = await Brand.find({});
+        // Fetch user object to get seenMatches
+        const currentUser = await require("../models/User").findById(req.user._id);
+        const seenIds = currentUser.seenMatches || [];
+
+        // Filter brands: Not seen yet AND not the user themselves
+        const brands = await Brand.find({
+            userId: { $nin: [...seenIds, req.user._id] }
+        });
 
         // Manual Populate
-        const userIds = brands.map(b => b.userId); // Fix: use userId
+        const userIds = brands.map(b => b.userId);
         const users = await require("../models/User").find({ _id: { $in: userIds } }, "name profileImg");
         const userMap = {};
         users.forEach(u => userMap[u._id.toString()] = u);
@@ -183,6 +208,22 @@ exports.matchForInfluencer = async (req, res) => {
         });
 
         results.sort((a, b) => b.matchScore - a.matchScore);
+
+        // PERSISTENCE: Mark as seen
+        if (results.length > 0) {
+            const newSeenIds = results.slice(0, 3).map(r => r.userId);
+            await require("../models/User").findByIdAndUpdate(req.user._id, {
+                $addToSet: { seenMatches: { $each: newSeenIds } },
+                $set: {
+                    lastActivityAt: new Date(),
+                    "onboardingProgress.firstBrandViewed": true
+                }
+            });
+
+            // Log event (Influencer viewing brands)
+            await logEvent(req.user._id, "brand_viewed");
+        }
+
         res.json(results);
 
     } catch (err) {

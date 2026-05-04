@@ -24,6 +24,13 @@
     font-family: 'Inter', sans-serif;
 }
 
+@media (max-width: 768px) {
+    .nuro-orb-container {
+        bottom: 90px;
+        right: 15px;
+    }
+}
+
 .nuro-orb {
     width: 60px;
     height: 60px;
@@ -790,6 +797,35 @@
     margin: 0;
     color: #fff;
     font-size: 1.2rem;
+}
+
+/* --- TUTORIAL WALKTHROUGH --- */
+.tutorial-prompt-card {
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.tutorial-prompt-card button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+}
+
+.nuro-soft-confirm {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.nuro-window .nuro-content {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Hide video controls to enforce no pause/seek */
+video::-webkit-media-controls {
+    display: none !important;
+}
+
+video::media-controls {
+    display: none !important;
 }
 
 .tone-badge {

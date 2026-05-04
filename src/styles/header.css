@@ -109,6 +109,12 @@ nav a:hover {
   color: var(--text-main);
 }
 
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* THEME TOGGLE */
 .theme-toggle {
   background: transparent;
@@ -180,10 +186,25 @@ nav a:hover {
 @media (max-width: 768px) {
   header {
     padding: 0 16px;
+    height: 60px;
+    /* Smaller header on mobile */
   }
 
-  nav a {
+  nav {
+    display: flex;
+    /* Restore visibility */
+    gap: 10px;
+  }
+
+  /* We might want to show a hamburger menu here later, 
+     but for now ensure logo and user profile are visible */
+
+  .header-user-section {
+    gap: 0.5rem;
+  }
+
+  .header-welcome-text {
     display: none;
-    /* Hide links on mobile */
+    /* Hide welcome text on mobile to save space */
   }
 }

@@ -139,14 +139,13 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: #fff;
-  color: #333;
-  border: 1px solid var(--border-subtle);
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  border: none;
 }
 
 :root[data-theme="dark"] .btn-google {
   background: white;
-  /* Google btn usually stays white/light */
   color: #333;
 }
 
@@ -169,4 +168,40 @@
   backdrop-filter: blur(10px);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ------------------------------------------------ */
+/* MOBILE RESPONSIVE AUTH                          */
+/* ------------------------------------------------ */
+
+@media (max-width: 768px) {
+  .auth-container {
+    padding: 16px;
+    justify-content: center;
+  }
+
+  .auth-top {
+    width: 100%;
+    margin-bottom: 20px;
+  }
+
+  .auth-card {
+    margin-top: 10px;
+    max-width: 100%;
+    padding: 24px;
+    width: 100% !important;
+  }
+
+  .auth-title {
+    font-size: 24px;
+  }
+
+  .auth-logo {
+    width: 80px;
+  }
+
+  .auth-glow {
+    display: none;
+    /* improve performance on mobile */
+  }
 }

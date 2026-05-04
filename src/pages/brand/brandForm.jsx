@@ -3,25 +3,41 @@ import { useState, useEffect } from "react";
 import logo from "../../assets/NurotraLogo.png";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { profileService } from "../../services/apiService";
+import { profileService, chatService } from "../../services/apiService";
+import { useCurrency } from "../../context/CurrencyContext";
+import CurrencySelector from "../../components/CurrencySelector";
 
 export default function BrandForm() {
   const navigate = useNavigate();
   const { user, updateUser } = useAuth(); // Get user from context
+  const { currency } = useCurrency();
+  const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
 
   // ---------------------------------------
   // FORM STATE (AUTO SAVE)
   // ---------------------------------------
   const [formData, setFormData] = useState({
+    brandName: "",
     website: "",
-    companyType: "Startup",
+    companyType: "Direct-to-Consumer (DTC)",
     contact: "",
-    industry: "Tech",
-    contentType: "Reels",
-    budget: "",
-    nuroId: "", // Renamed
-    profileImg: "", // Added for Google Auth Profile Pic
+    industry: "",
+    contentTypes: [],
+    // budget removed
+    profileImg: "",
+    nuroId: "",
+    campaignGoal: "Brand Awareness",
+    influencerCategory: "Nano (1k-10k)", // Fixed: Matches Brand.js Enum
+    minEngagement: "1-3%", // Fixed: Matches Brand.js Enum
+    platform: "Instagram",
+    collabDuration: "1 week", // Fixed: Matches Brand.js Enum
+    noteToInfluencer: ""
   });
+
+
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [isEdit, setIsEdit] = useState(false);
 
   // Auto-fill effect (Enforces User Data)
   useEffect(() => {
@@ -29,32 +45,78 @@ export default function BrandForm() {
       setFormData(prev => ({
         ...prev,
         // Prioritize User Identity Data
-        contact: (prev.contact && prev.contact !== user.email) ? prev.contact : (user.email || ""),
+        // Only auto-fill if currently empty
+        contact: prev.contact || user.email || "",
         nuroId: user.uniqueId || user._id || "",
-        // profileImg: Manually uploaded only (Requested by user)
       }));
     }
   }, [user]);
 
-  // Load saved data if exists
+  // Fetch Existing Profile if editing
   useEffect(() => {
-    const saved = localStorage.getItem("brandForm");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Smart Merge: Don't overwrite identity with empty saved data
-      if (user) {
-        parsed.contact = (parsed.contact && parsed.contact !== user.email) ? parsed.contact : (user.email || "");
-        parsed.nuroId = user.uniqueId || user._id || "";
+    const fetchProfile = async () => {
+      if (user?.token && user?.role === "brand") {
+        try {
+          setLoading(true);
+          const existingProfile = await profileService.getBrand(user.token);
+          if (existingProfile) {
+            setFormData(prev => ({
+              ...prev,
+              ...existingProfile,
+              // contentType is a single select in form, but contentTypes is array in DB
+              contentType: existingProfile.contentTypes?.[0] || prev.contentType,
+            }));
+            setIsEdit(true);
+          }
+        } catch (err) {
+          console.error("No existing brand profile found", err);
+        } finally {
+          setLoading(false);
+        }
       }
-      setFormData(parsed);
-    }
+    };
+    fetchProfile();
   }, [user]);
 
-  // Save form data on every change
+  // Load saved draft if NOT editing existing profile
   useEffect(() => {
-    // console.log("Saving form data:", formData); // Commented out to avoid spam
-    localStorage.setItem("brandForm", JSON.stringify(formData));
-  }, [formData]);
+    if (!isEdit) {
+      const saved = localStorage.getItem("brandForm");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (user) {
+          parsed.contact = parsed.contact || user.email || "";
+          parsed.nuroId = user.uniqueId || user._id || "";
+        }
+        setFormData(parsed);
+      }
+    }
+  }, [user, isEdit]);
+
+  // Save form data draft on every change
+  useEffect(() => {
+    if (!isEdit) {
+      localStorage.setItem("brandForm", JSON.stringify(formData));
+    }
+  }, [formData, isEdit]);
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      const response = await chatService.uploadFile(file);
+      if (response && response.url) {
+        updateField("profileImg", response.url);
+      }
+    } catch (error) {
+      console.error("Image upload failed", error);
+      alert("Failed to upload image.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -62,8 +124,8 @@ export default function BrandForm() {
 
   // Theme Toggle
   const toggleTheme = () => {
-    const current = document.documentElement.getAttribute("data-theme") || "light";
-    const next = current === "light" ? "dark" : "light";
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
     document.documentElement.setAttribute("data-theme", next);
     localStorage.setItem("theme", next);
   };
@@ -88,7 +150,10 @@ export default function BrandForm() {
       await profileService.saveBrand(payload, user.token);
 
       // Update Local User Role so they can access dashboard immediately
-      updateUser({ role: "brand" });
+      updateUser({
+        role: "brand",
+        profileImg: formData.profileImg
+      });
 
       // Clear Form Draft
       localStorage.removeItem("brandForm");
@@ -98,7 +163,9 @@ export default function BrandForm() {
 
     } catch (error) {
       console.error("Brand Creation Error:", error);
-      alert("Failed to create profile. Please try again.");
+      console.log("Error Response:", error.response?.data); // Added detailed logging
+      const msg = error.response?.data?.message || "Failed to create profile. Please try again.";
+      alert(msg);
     }
   };
 
@@ -115,7 +182,12 @@ export default function BrandForm() {
         </button>
 
         <div className="brand-top-right">
-          <button className="brand-toggle-btn" onClick={toggleTheme}>🌙</button>
+          <div className="brand-header-actions" style={{ position: 'absolute', right: '20px', top: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <CurrencySelector />
+            <button className="brand-toggle-btn" onClick={toggleTheme}>
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+          </div>
           {formData.profileImg && (
             <div className="brand-profile-icon">
               <img
@@ -132,11 +204,26 @@ export default function BrandForm() {
       <div className="brand-header">
         <img src={logo} alt="Logo" className="brand-logo" />
         <h2 className="brand-title">Collaborator</h2>
-        <p className="brand-subtitle">Set up your Brand Profile</p>
+        <p className="brand-subtitle">{isEdit ? "Update your Brand Profile" : "Set up your Brand Profile"}</p>
       </div>
 
       {/* Form Card */}
       <div className="brand-card">
+        {/* Profile Image Section */}
+        <div className="brand-photo-section">
+          <div className="brand-photo-box">
+            {formData.profileImg ? (
+              <img src={formData.profileImg} className="brand-photo-preview" />
+            ) : (
+              <span className="brand-photo-placeholder">🏢</span>
+            )}
+            {uploading && <div className="photo-loader">...</div>}
+          </div>
+          <label className="brand-upload-btn">
+            {uploading ? "Uploading..." : "Change Profile Photo"}
+            <input type="file" accept="image/*" onChange={handleImageUpload} hidden />
+          </label>
+        </div>
 
         {/* TWO COLUMN FORM */}
         <div className="brand-columns">
@@ -153,6 +240,17 @@ export default function BrandForm() {
                 value={formData.nuroId}
                 className="brand-disabled"
                 readOnly
+              />
+            </div>
+
+            {/* Brand Name */}
+            <div className="brand-group">
+              <label>Brand Name</label>
+              <input
+                type="text"
+                value={formData.brandName}
+                onChange={(e) => updateField("brandName", e.target.value)}
+                placeholder="Nurotra Corp"
               />
             </div>
 
@@ -184,14 +282,12 @@ export default function BrandForm() {
 
             {/* Contact Info */}
             <div className="brand-group">
-              <label>Email (Auto-filled)</label>
+              <label>Contact Email</label>
               <input
                 type="text"
                 value={formData.contact}
-                onChange={(e) => !user && updateField("contact", e.target.value)}
+                onChange={(e) => updateField("contact", e.target.value)}
                 placeholder="yourmail@company.com"
-                readOnly={!!user}
-                className={user ? "brand-disabled" : ""}
               />
             </div>
           </div>
@@ -231,16 +327,6 @@ export default function BrandForm() {
               </select>
             </div>
 
-            {/* Budget */}
-            <div className="brand-group">
-              <label>Budget</label>
-              <input
-                type="number"
-                value={formData.budget}
-                onChange={(e) => updateField("budget", e.target.value)}
-                placeholder="₹ Enter Budget"
-              />
-            </div>
 
           </div>
         </div>
@@ -248,7 +334,7 @@ export default function BrandForm() {
         {/* Submit Button */}
         <div className="brand-submit-wrapper">
           <button className="btn-primary brand-submit" onClick={submitForm}>
-            Submit Brand Profile
+            {isEdit ? "Update Brand Profile" : "Submit Brand Profile"}
           </button>
         </div>
 

@@ -192,6 +192,14 @@
   width: 100%;
 }
 
+.inf-group input[type="checkbox"],
+.inf-group input[type="radio"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent-1);
+  transform: scale(1.1);
+}
+
 .inf-group textarea {
   /* Specific overrides from JSX */
   padding: 1rem;
@@ -290,7 +298,7 @@
   font-weight: 700;
   box-shadow: 0 10px 28px rgba(99, 102, 241, 0.25);
   transition: 0.25s ease;
-  background: var(--primary);
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
   /* Assuming var exists, else use standard color */
   color: white;
   border: none;
@@ -497,7 +505,7 @@
   padding: 6px 14px;
   font-size: 0.85rem;
   border-radius: 6px;
-  background: var(--accent-1);
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
   color: white;
   border: none;
   cursor: pointer;
@@ -519,5 +527,60 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+/* Mobile Optimization - Enhanced */
+@media (max-width: 768px) {
+  .inf-page {
+    padding: 10px;
+    margin-top: 0;
+  }
+
+  .inf-header {
+    margin-bottom: 1.5rem;
+  }
+
+  .inf-card {
+    padding: 1.25rem;
+    border-radius: 16px;
+  }
+
+  .inf-header-title {
+    font-size: 1.8rem;
+  }
+
+  .inf-group textarea {
+    font-size: 16px;
+    /* prevent zoom on iOS */
+  }
+
+  .inf-checkboxes-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .match-results-container {
+    max-height: 90vh;
+    width: 95%;
+  }
+
+  .match-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .match-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .match-actions {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .match-score {
+    align-self: flex-start;
   }
 }

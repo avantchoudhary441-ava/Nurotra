@@ -68,7 +68,7 @@
 }
 
 .btn-modal-login {
-  background: linear-gradient(135deg, #6366f1, #a855f7);
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
   color: white;
   padding: 12px 30px;
   border-radius: 12px;
@@ -100,11 +100,23 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes scaleUp {
-  from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }

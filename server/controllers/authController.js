@@ -1,8 +1,10 @@
 const User = require("../models/User");
-const BrandProfile = require("../models/BrandProfile");
-const InfluencerProfile = require("../models/InfluencerProfile");
-const jwt = require("jsonwebtoken");
+const { logEvent } = require("../utils/eventLogger");
 
+const Brand = require("../models/Brand");
+const Influencer = require("../models/Influencer");
+const PendingUser = require("../models/PendingUser");
+const jwt = require("jsonwebtoken");
 const sendEmail = require("../utils/sendEmail");
 
 // Generate JWT
@@ -21,40 +23,40 @@ const registerUser = async (req, res) => {
             return res.status(403).json({ message: "Admin registration is restricted." });
         }
 
+        // 1. Check if user is already in the main collection (Verified)
         const userExists = await User.findOne({ email });
-        if (userExists) {
+        if (userExists && userExists.isVerified) {
             return res.status(400).json({ message: "User already exists" });
         }
 
-        const uniqueId = Date.now().toString();
+        // 2. Clean up "ghost" users from previous system (Unverified records in main User collection)
+        if (userExists && !userExists.isVerified) {
+            // This cleans up the mess from the previous implementation
+            await User.deleteOne({ _id: userExists._id });
+            await Brand.deleteOne({ userId: userExists._id });
+            await Influencer.deleteOne({ userId: userExists._id });
+        }
 
-        // 1. Generate 6-digit OTP
+        // 3. Generate OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const otpExpires = Date.now() + 10 * 60 * 1000; // 10 Minutes
 
-        // 2. Create User (Unverified)
-        const user = await User.create({
-            name,
-            email,
-            password,
-            role,
-            uniqueId,
-            otp,
-            otpExpires,
-            isVerified: false
-        });
+        // 4. Save to PendingUser collection (Temporary)
+        // Upsert so if they try again, we just restart the timer and update the info
+        const uniqueId = Date.now().toString();
+        const pendingUser = await PendingUser.findOneAndUpdate(
+            { email },
+            { name, email, password, role, uniqueId, otp, otpExpires, createdAt: Date.now() },
+            { upsert: true, new: true }
+        );
 
-        if (user) {
-            // Create empty profile
-            if (role === 'brand') await BrandProfile.create({ user: user._id });
-            else if (role === 'influencer') await InfluencerProfile.create({ user: user._id });
-
-            // 3. Send OTP Email
+        if (pendingUser) {
+            // 5. Send OTP Email
             const message = `
                 <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
                     <h2 style="color: #6366f1;">Verify Your Email</h2>
-                    <p>Hi ${user.name},</p>
-                    <p>Thank you for signing up for Nurotra (Collaborator). Please use the code below to verify your email address:</p>
+                    <p>Hi ${pendingUser.name},</p>
+                    <p>Thank you for signing up for Nurotra. Please use the code below to verify your email address:</p>
                     <h1 style="font-size: 32px; letter-spacing: 5px; color: #333;">${otp}</h1>
                     <p>This code expires in 10 minutes.</p>
                 </div>
@@ -62,25 +64,22 @@ const registerUser = async (req, res) => {
 
             try {
                 await sendEmail({
-                    email: user.email,
+                    email: pendingUser.email,
                     subject: "Nurotra - Your Verification Code",
                     message,
                 });
 
                 res.status(201).json({
-                    message: "User registered. Please check your email for OTP.",
-                    email: user.email
+                    message: "OTP sent to your email. Please verify to complete registration.",
+                    email: pendingUser.email
                 });
             } catch (emailError) {
                 console.error("Email send failed:", emailError);
-                // We still registered the user, but email failed.
-                // Could delete user or just let them resend. Letting them resend is safer.
                 res.status(201).json({
-                    message: "User registered, but email failed to send. Please try resending OTP.",
-                    email: user.email
+                    message: "Registration recorded, but email failed to send. Please try resending OTP.",
+                    email: pendingUser.email
                 });
             }
-
         } else {
             res.status(400).json({ message: "Invalid user data" });
         }
@@ -89,38 +88,77 @@ const registerUser = async (req, res) => {
     }
 };
 
-// @desc    Verify OTP
+// @desc    Verify OTP & Commit User
 // @route   POST /api/auth/verify-otp
 // @access  Public
 const verifyOtp = async (req, res) => {
     const { email, otp } = req.body;
 
     try {
-        const user = await User.findOne({ email });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+        // 1. Check main User collection (in case already verified)
+        const existingUser = await User.findOne({ email });
+        if (existingUser && existingUser.isVerified) {
+            return res.status(200).json({ message: "User already verified", token: generateToken(existingUser._id), user: existingUser });
         }
 
-        if (user.isVerified) {
-            return res.status(200).json({ message: "User already verified", token: generateToken(user._id), user });
+        // 2. Check PendingUser collection
+        const pendingUser = await PendingUser.findOne({ email });
+
+        if (!pendingUser) {
+            return res.status(404).json({ message: "No pending registration found for this email. Please sign up again." });
         }
 
-        if (user.otp === otp && user.otpExpires > Date.now()) {
-            user.isVerified = true;
-            user.otp = undefined;
-            user.otpExpires = undefined;
-            await user.save();
-
-            res.status(200).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                uniqueId: user.uniqueId,
-                profileImg: user.profileImg,
-                token: generateToken(user._id),
+        if (pendingUser.otp === otp && pendingUser.otpExpires > Date.now()) {
+            // 3. Move data to main collections (Real Registration)
+            const newUser = await User.create({
+                name: pendingUser.name,
+                email: pendingUser.email,
+                password: pendingUser.password, // This will be RE-HASHED by User model's pre-save hook?
+                // Wait, if password was already hashed in PendingUser (if we used a hook there), 
+                // we should be careful. But User.js has a pre-save hook.
+                role: pendingUser.role,
+                uniqueId: pendingUser.uniqueId,
+                isVerified: true
             });
+
+            if (newUser) {
+                // Create profiles
+                if (newUser.role === 'brand') {
+                    await Brand.create({
+                        userId: newUser._id,
+                        nuroId: newUser.uniqueId,
+                        website: "https://pending",
+                        contact: newUser.email
+                    });
+                } else if (newUser.role === 'influencer') {
+                    await Influencer.create({
+                        userId: newUser._id,
+                        nuroId: newUser.uniqueId,
+                        email: newUser.email,
+                        primaryPlatform: "Other",
+                        platformUrl: "https://pending",
+                        followers: "Pending"
+                    });
+                }
+
+                // 4. Delete pending record
+                await PendingUser.deleteOne({ _id: pendingUser._id });
+
+                // Log discovery/activation
+                await logEvent(newUser._id, "apk_installed", { role: newUser.role });
+
+                res.status(200).json({
+                    _id: newUser._id,
+                    name: newUser.name,
+                    email: newUser.email,
+                    role: newUser.role,
+                    uniqueId: newUser.uniqueId,
+                    profileImg: newUser.profileImg,
+                    totalCollabs: 0,
+                    successfulCollabs: 0,
+                    token: generateToken(newUser._id),
+                });
+            }
         } else {
             res.status(400).json({ message: "Invalid or expired OTP" });
         }
@@ -135,14 +173,22 @@ const verifyOtp = async (req, res) => {
 const resendOtp = async (req, res) => {
     const { email } = req.body;
     try {
-        const user = await User.findOne({ email });
-        if (!user) return res.status(404).json({ message: "User not found" });
-        if (user.isVerified) return res.status(400).json({ message: "Account already verified. Please login." });
+        // Only resend if they are in Pending collection
+        const pendingUser = await PendingUser.findOne({ email });
+
+        if (!pendingUser) {
+            const user = await User.findOne({ email });
+            if (user && user.isVerified) {
+                return res.status(400).json({ message: "Account already verified. Please login." });
+            }
+            return res.status(404).json({ message: "No pending registration found. Please sign up again." });
+        }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        user.otp = otp;
-        user.otpExpires = Date.now() + 10 * 60 * 1000;
-        await user.save();
+        pendingUser.otp = otp;
+        pendingUser.otpExpires = Date.now() + 10 * 60 * 1000;
+        pendingUser.createdAt = Date.now(); // Reset TTL
+        await pendingUser.save();
 
         const message = `
             <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
@@ -153,7 +199,7 @@ const resendOtp = async (req, res) => {
         `;
 
         await sendEmail({
-            email: user.email,
+            email: pendingUser.email,
             subject: "Nurotra - Resend Verification Code",
             message,
         });
@@ -175,10 +221,9 @@ const loginUser = async (req, res) => {
         const user = await User.findOne({ email });
 
         if (user && (await user.matchPassword(password))) {
-            // Check verification
+            // With the new system, only verified users exist in the User collection
+            // but we keep the check for backward compatibility/safety
             if (user.isVerified === false) {
-                // You might want to allow them to login but restrict access, 
-                // OR force them to verify. Let's force verify for safety.
                 return res.status(403).json({ message: "Email not verified. Please verify your email.", isVerified: false });
             }
 
@@ -189,8 +234,14 @@ const loginUser = async (req, res) => {
                 role: user.role,
                 uniqueId: user.uniqueId,
                 profileImg: user.profileImg,
+                totalCollabs: user.totalCollabs || 0,
+                successfulCollabs: user.successfulCollabs || 0,
+                gmailEmail: user.gmailEmail,
                 token: generateToken(user._id),
             });
+
+            // Log login
+            await logEvent(user._id, "login");
         } else {
             res.status(401).json({ message: "Invalid email or password" });
         }
@@ -212,6 +263,9 @@ const getMe = async (req, res) => {
             role: user.role,
             uniqueId: user.uniqueId,
             profileImg: user.profileImg,
+            totalCollabs: user.totalCollabs || 0,
+            successfulCollabs: user.successfulCollabs || 0,
+            gmailEmail: user.gmailEmail,
             token: req.headers.authorization.split(" ")[1] // Echo back token or just rely on client having it
         });
     } catch (error) {

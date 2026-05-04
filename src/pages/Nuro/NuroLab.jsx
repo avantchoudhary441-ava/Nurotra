@@ -14,6 +14,28 @@ const MOCK_HISTORY = [
 ];
 
 export default function NuroLab() {
+    const [memory, setMemory] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchMemory = async () => {
+            try {
+                const { nuroService } = await import("../../services/apiService");
+                const data = await nuroService.getMemory();
+                setMemory(data);
+            } catch (err) {
+                console.error("Failed to fetch Nuro Lab data", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchMemory();
+    }, []);
+
+    if (loading) return <div className="loading-screen"><div className="spinner"></div></div>;
+
+    const history = memory?.collabHistory || [];
+
     return (
         <div className="nuro-lab-container">
             {/* HEADER */}
@@ -31,18 +53,20 @@ export default function NuroLab() {
                     <p className="subtext">Humans grow when feedback is recent & actionable.</p>
 
                     <div className="timeline-list">
-                        {MOCK_HISTORY.map((match) => (
-                            <div key={match.id} className={`timeline-item ${match.outcome.toLowerCase()}`}>
+                        {history.length > 0 ? history.slice().reverse().slice(0, 7).map((match, idx) => (
+                            <div key={idx} className={`timeline-item ${match.outcome?.toLowerCase() || 'success'}`}>
                                 <div className="timeline-dot"></div>
                                 <div className="timeline-content">
-                                    <h4>{match.partner}</h4>
-                                    <span className="match-date">{match.date}</span>
+                                    <h4>{match.partnerName || "Anonymous Partner"}</h4>
+                                    <span className="match-date">{new Date(match.timestamp).toLocaleDateString()}</span>
                                 </div>
                                 <div className="timeline-score">
-                                    {match.score}%
+                                    {match.overallScore}%
                                 </div>
                             </div>
-                        ))}
+                        )) : (
+                            <div className="text-gray-500 italic text-sm p-4">Begin collaborations to unlock your memory window.</div>
+                        )}
                     </div>
                 </section>
 

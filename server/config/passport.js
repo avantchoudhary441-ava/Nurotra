@@ -10,6 +10,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                 clientID: process.env.GOOGLE_CLIENT_ID,
                 clientSecret: process.env.GOOGLE_CLIENT_SECRET,
                 callbackURL: "/api/auth/google/callback",
+                proxy: true,
             },
             async (accessToken, refreshToken, profile, done) => {
                 try {
@@ -20,29 +21,49 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                         return done(null, user);
                     }
 
-                    // 2. Check if user exists with email (merge accounts)
+                    // 2. Check if user exists with email (PREVENT MERGE)
                     const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
                     if (email) {
                         user = await User.findOne({ email });
                         if (user) {
-                            // Update user with googleId for future logins
-                            user.googleId = profile.id;
-                            if (!user.avatar && profile.photos && profile.photos[0]) {
-                                user.avatar = profile.photos[0].value;
-                            }
-                            await user.save();
-                            return done(null, user);
+                            // User exists but didn't log in via Google (Step 1 would have caught that)
+                            // Reject the login attempt
+                            return done(null, false, { message: 'EmailExists' });
                         }
                     }
 
                     // 3. Create new user if not found
-                    user = await User.create({
-                        googleId: profile.id,
-                        name: profile.displayName || "Google User",
-                        email: email, // If null, this might fail schema validation, but better than crashing here
-                        avatar: profile.photos && profile.photos[0] ? profile.photos[0].value : "",
-                        isVerified: true // Google accounts are implicitly verified
-                    });
+                    if (!user) {
+                        user = await User.create({
+                            googleId: profile.id,
+                            name: profile.displayName || "Google User",
+                            email: email,
+                            profileImg: profile.photos && profile.photos[0] ? profile.photos[0].value : "",
+                            uniqueId: Date.now().toString(),
+                            isVerified: true
+                        });
+                    }
+
+                    // --- SILENT SYNC: Action Agent Identity Vault ---
+                    // Save tokens to Integration model for background agent use
+                    // We do this as a side-effect so the login flow stays fast
+                    const Integration = require("../models/Integration");
+                    Integration.findOneAndUpdate(
+                        { userId: user._id, platform: "google_agent" },
+                        {
+                            userId: user._id,
+                            platform: "google_agent",
+                            authType: "oauth2",
+                            credentials: {
+                                accessToken: accessToken,
+                                refreshToken: refreshToken,
+                                expiresAt: null // Google tokens are managed via the refresh token
+                            },
+                            status: "connected",
+                            "sessionData.isAgentActive": true
+                        },
+                        { upsert: true }
+                    ).catch(err => console.error("Silent Sync Failed:", err));
 
                     return done(null, user);
                 } catch (err) {

@@ -1,24 +1,30 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { profileService, matchService } from "../../services/apiService";
 import "../../styles/matchingForms.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
 import InfluencerMatchResults from "./InfluencerMatchResults";
+import CurrencySelector from "../../components/CurrencySelector";
+import { localizeText } from "../../utils/textUtils";
 
 export default function InfluencerMatchingForm() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { userId } = useParams(); // Get target userId for inspection
     const { user } = useAuth();
 
     // Determine mode based on URL
     const isStandardsMode = location.pathname.includes("matching-standards");
 
     // Default explicit logic for view vs edit
-    const [isEditing, setIsEditing] = useState(!isStandardsMode);
+    // FORCE FALSE if inspecting
+    const [isEditing, setIsEditing] = useState(userId ? false : !isStandardsMode);
 
     const [matches, setMatches] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [isCustomNiche, setIsCustomNiche] = useState(false);
+    const nicheInputRef = useRef(null);
 
     const [formData, setFormData] = useState({
         // Basic
@@ -50,40 +56,58 @@ export default function InfluencerMatchingForm() {
     // Pre-fill from existing profile if available
     useEffect(() => {
         const fetchProfile = async () => {
-            if (user?.token) {
-                try {
-                    const data = await profileService.getInfluencer(user.token);
-                    if (data) {
-                        setFormData(prev => ({
-                            ...prev,
-                            fullName: data.fullName || user.name || "",
-                            email: data.email || user.email || "",
-                            contactNumber: data.contactNumber || "",
-                            profileUrl: data.platformUrl || "",
-                            primaryPlatform: data.primaryPlatform || "Instagram",
-                            socialHandle: data.socialHandle || "",
-                            followers: data.followers || "Nano (1k–10k)",
-                            engagementRate: data.engagementRate || 2.5,
-                            audienceAge: data.audienceAge || [],
-                            targetingLocation: data.targetingLocation || [],
-                            niche: data.niche || "",
-                            contentTypes: data.contentTypes || [],
-                            budget: data.budget || "₹500–₹5,000",
-                            collabExperience: data.collabExperience || "New to collaborations",
-                            noteToBrand: data.noteToBrand || ""
-                        }));
-                    } else {
-                        // No data? Force edit mode
-                        setIsEditing(true);
+            try {
+                let data = null;
+                if (userId) {
+                    // INSPECTION MODE
+                    data = await profileService.getInfluencerById(userId);
+                } else if (user?.token) {
+                    // OWNER MODE
+                    data = await profileService.getInfluencer(user.token);
+                }
+
+                if (data) {
+                    setFormData(prev => ({
+                        ...prev,
+                        fullName: data.fullName || (userId ? data.userId?.name : user.name) || "",
+                        email: data.email || (userId ? data.userId?.email : user.email) || "",
+                        contactNumber: data.contactNumber || "",
+                        profileUrl: data.platformUrl || "",
+                        primaryPlatform: data.primaryPlatform || "Instagram",
+                        socialHandle: data.socialHandle || "",
+                        followers: data.followers || "Nano (1k–10k)",
+                        engagementRate: data.engagementRate || 2.5,
+                        audienceAge: data.audienceAge || [],
+                        targetingLocation: data.targetingLocation || [],
+                        niche: data.niche || "",
+                        contentTypes: data.contentTypes || [],
+                        budget: data.budget || "₹500–₹5,000",
+                        collabExperience: data.collabExperience || "New to collaborations",
+                        noteToBrand: data.noteToBrand || ""
+                    }));
+
+                    // If niche is not in predefined list, enable custom mode
+                    if (data.niche && !niches.includes(data.niche)) {
+                        setIsCustomNiche(true);
                     }
-                } catch (err) {
-                    console.log("No existing profile or error fetching");
+                } else if (!userId) {
+                    // No data and not inspecting? Force edit mode
                     setIsEditing(true);
                 }
+            } catch (err) {
+                console.log("No existing profile or error fetching");
+                if (!userId) setIsEditing(true);
             }
         };
         fetchProfile();
-    }, [user]);
+    }, [user, userId]);
+
+    // Handle auto-focus for custom niche input
+    useEffect(() => {
+        if (isCustomNiche && nicheInputRef.current) {
+            nicheInputRef.current.focus();
+        }
+    }, [isCustomNiche]);
 
     const updateField = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -159,11 +183,11 @@ export default function InfluencerMatchingForm() {
 
     // Options
     const platforms = ["Instagram", "YouTube", "TikTok", "X (Twitter)", "Facebook", "Other"];
-    const followerRanges = ["Nano (1k–10k)", "Micro (10k–100k)", "Macro (100k–1M)", "Celebrity (1M+)"];
+    const followerRanges = ["Nano (1k-10k)", "Micro (10k-100k)", "Macro (100k-1M)", "Celebrity (1M+)"];
     const ageRanges = ["10-18", "18-25", "25-30", "30-65"];
-    const niches = ["Fitness", "Fashion", "Tech", "Beauty", "Lifestyle", "Food", "Travel", "Gaming", "Education", "Finance", "Home & Living", "Others"];
+    const niches = ["Fitness", "Fashion", "Tech", "Beauty", "Lifestyle", "Food", "Travel", "Gaming", "Education", "Finance", "Home & Living", "Other"];
     const contentOpts = ["Reel / Short Video", "Post", "Story", "Unboxing", "Review Video", "Carousel", "Live Session", "UGC Content Only"];
-    const budgetRanges = ["₹500–₹5,000", "₹5,000–₹20,000", "₹20,000–₹50,000", "₹50,000+"];
+    const budgetRanges = ["₹500-₹5,000", "₹5,000-₹20,000", "₹20,000-₹50,000", "₹50,000+"];
     const expOpts = ["New to collaborations", "Barter experience", "Paid experience", "Both"];
 
     // Location handling (Select + Add)
@@ -197,17 +221,18 @@ export default function InfluencerMatchingForm() {
                 <button onClick={() => navigate(-1)} className="inf-back-btn">← Back to Dashboard</button>
                 <div style={{ display: "flex", gap: "10px" }}>
                     {/* Render Edit Button in Standards Mode */}
-                    {isStandardsMode && !isEditing && (
+                    {isStandardsMode && !isEditing && !userId && (
                         <button onClick={() => setIsEditing(true)} className="inf-theme-toggle" title="Edit Standards">
                             ✏️
                         </button>
                     )}
                     {/* Render Cancel Edit Button */}
-                    {isStandardsMode && isEditing && (
+                    {isStandardsMode && isEditing && !userId && (
                         <button onClick={() => setIsEditing(false)} className="inf-theme-toggle" title="Cancel Edit">
                             ❌
                         </button>
                     )}
+                    <CurrencySelector />
                     <button onClick={toggleTheme} className="inf-theme-toggle">
                         {theme === "dark" ? "☀️" : "🌙"}
                     </button>
@@ -215,11 +240,15 @@ export default function InfluencerMatchingForm() {
             </div>
 
             <div className="inf-header">
-                <h2 className="inf-header-title">{isStandardsMode ? "Matching Standards" : "Matching Details"}</h2>
+                <h2 className="inf-header-title">
+                    {localizeText(isStandardsMode ? "Matching Standards" : "Matching Details", formData.fullName, userId)}
+                </h2>
                 <p className="inf-header-subtitle">
-                    {isStandardsMode
-                        ? "Configure your default profile for automated matching."
-                        : "Complete your profile to get the best brand matches."}
+                    {userId
+                        ? localizeText("Viewing your default profile for automated matching.", formData.fullName, true)
+                        : (isStandardsMode
+                            ? "Configure your default profile for automated matching."
+                            : "Complete your profile to get the best brand matches.")}
                 </p>
             </div>
 
@@ -320,11 +349,48 @@ export default function InfluencerMatchingForm() {
                 <h3 className="inf-section-title mt-large"> Match Preferences</h3>
                 <div className="inf-two-columns">
                     <div className="inf-group">
-                        <label>Niche / Industry</label>
-                        <select value={formData.niche} disabled={!isEditing} onChange={e => updateField("niche", e.target.value)}>
-                            <option value="">Select Niche</option>
-                            {niches.map(n => <option key={n}>{n}</option>)}
-                        </select>
+                        <label className="flex-between">
+                            <span>Niche / Industry</span>
+                            {isCustomNiche && isEditing && (
+                                <span
+                                    className="text-primary pointer"
+                                    style={{ fontSize: "11px", textDecoration: "underline" }}
+                                    onClick={() => {
+                                        setIsCustomNiche(false);
+                                        updateField("niche", "");
+                                    }}
+                                >
+                                    Back to list
+                                </span>
+                            )}
+                        </label>
+                        {isCustomNiche ? (
+                            <input
+                                ref={nicheInputRef}
+                                type="text"
+                                value={formData.niche === "Other" ? "" : formData.niche}
+                                placeholder="Type your niche..."
+                                disabled={!isEditing}
+                                onChange={e => updateField("niche", e.target.value)}
+                            />
+                        ) : (
+                            <select
+                                value={formData.niche}
+                                disabled={!isEditing}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    if (val === "Other") {
+                                        setIsCustomNiche(true);
+                                        updateField("niche", "");
+                                    } else {
+                                        updateField("niche", val);
+                                    }
+                                }}
+                            >
+                                <option value="">Select Niche</option>
+                                {niches.map(n => <option key={n}>{n}</option>)}
+                            </select>
+                        )}
                     </div>
                     <div className="inf-group">
                         <label>Minimum Budget Expectation</label>

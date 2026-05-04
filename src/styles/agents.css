@@ -6,34 +6,30 @@
   padding: 30px 40px 50px;
 }
 
-/* AGENT CARDS WITH GRADIENT BORDER */
+/* AGENT CARDS - VIBRANT RESTORE */
+/* AGENT GRID - NEON GRADIENT BORDER RESTORE */
 .agent-card {
-  border-radius: 18px;
-  padding: 1px;
-  /* The "border" width */
-  background: linear-gradient(135deg,
-      rgba(99, 102, 241, 0.9),
-      rgba(16, 185, 129, 0.5),
-      rgba(236, 72, 153, 0.8));
-  box-shadow: var(--shadow-soft);
-  transition: transform 0.2s ease, box-shadow 0.25s ease;
+  border-radius: 12px;
+  padding: 1px; /* The "patla" border width */
+  background: linear-gradient(135deg, #3b82f6, #ec4899); /* Blue to Pink Gradient */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
   height: 100%;
 }
 
 .agent-inner {
-  background: var(--card-bg);
-  border-radius: 16px;
-  /* slightly smaller than card radius */
-  padding: 22px;
+  background: #0f121a;
+  border-radius: 11px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
   height: 100%;
 }
 
 .agent-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 22px 45px rgba(79, 70, 229, 0.45);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(59, 130, 246, 0.2);
 }
 
 .agent-inner .icon {
@@ -59,6 +55,25 @@
   color: var(--text-muted);
   margin-top: 4px;
   margin-bottom: 12px;
+}
+
+/* Gradient Button Style */
+.agent-inner button.btn-secondary {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  padding: 12px 20px;
+  border-radius: 100px; /* Pillow style button */
+  transition: all 0.3s;
+  font-weight: 600;
+  margin-top: auto;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+}
+
+.agent-inner button.btn-secondary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  filter: brightness(1.1);
 }
 
 /* STATUS + DETAILS */
@@ -103,6 +118,10 @@
   background: #facc15;
 }
 
+.status-pill.offline .dot {
+  background: #ef4444;
+}
+
 .details-link {
   font-size: 12px;
   text-decoration: none;
@@ -116,9 +135,111 @@
   color: #818cf8;
 }
 
+/* LOCKED STATE */
+.agent-card.locked {
+  cursor: not-allowed;
+  position: relative;
+  /* Remove pointer-events: none to allow hover interaction (lift/glow) */
+}
+
+/* Specific Hover for Locked Cards to match active ones */
+.agent-card.locked:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 22px 45px rgba(79, 70, 229, 0.45);
+}
+
+/* We blur everything inside agent-inner EXCEPT the overlay */
+.agent-card.locked .agent-inner>*:not(.locked-overlay) {
+  filter: blur(1px);
+  opacity: 0.5;
+}
+
+.locked-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  z-index: 10;
+}
+
+.locked-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 12px 20px;
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  letter-spacing: 0.5px;
+}
+
 /* RESPONSIVE */
 @media (max-width: 768px) {
   .agents-grid {
     padding: 20px 16px 40px;
+  }
+}
+
+/* ANALYTICS ENGINE WARNING BANNER */
+.analytics-engine-warning {
+  margin: 16px 20px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 12px;
+  display: flex;
+  gap: 16px;
+  padding: 14px 18px;
+  animation: slideInDown 0.4s ease-out;
+}
+
+.engine-warning-icon {
+  color: #f59e0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(245, 158, 11, 0.1);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.engine-warning-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.engine-warning-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #d97706;
+  margin: 0;
+}
+
+.engine-warning-text {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+@keyframes slideInDown {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
   }
 }

@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../styles/auth.css";
-import axios from "axios";
-import { useAuth } from "../../context/AuthContext";
+import { authService } from "../../services/apiService";
 import { API_BASE_URL } from "../../config";
 
 export default function OtpVerify() {
     const navigate = useNavigate();
     const location = useLocation();
-    const { login } = useAuth(); // We might use this to manually set user state if context allows, or just redirect to login
+    // Use authService from apiService for verification
 
     // Get email from query params
     const [email, setEmail] = useState("");
@@ -52,22 +51,16 @@ export default function OtpVerify() {
         setMsg("");
 
         try {
-            const { data } = await axios.post(`${API_BASE_URL}/api/auth/verify-otp`, {
-                email,
-                otp: code
-            });
+            const data = await authService.verifyOtp(email, code);
 
             // Login success
             setMsg("Verification Successful! Logging in...");
 
-            // Store token (mimic login)
-            if (data.token) {
-                localStorage.setItem("user", JSON.stringify(data));
-                // Refresh page or context to sync
-                setTimeout(() => {
-                    window.location.href = "/"; // Force reload/redirect to dashboard
-                }, 1000);
-            }
+            // Session is saved by authService.verifyOtp
+            // Refresh page or context to sync
+            setTimeout(() => {
+                window.location.href = "/"; // Force reload/redirect to dashboard
+            }, 1000);
 
         } catch (err) {
             setError(err.response?.data?.message || "Verification failed");
@@ -79,7 +72,7 @@ export default function OtpVerify() {
         setError("");
         setMsg("Sending code...");
         try {
-            await axios.post(`${API_BASE_URL}/api/auth/resend-otp`, { email });
+            await authService.resendOtp(email);
             setMsg("New code sent to your email.");
         } catch (err) {
             setError(err.response?.data?.message || "Failed to resend");

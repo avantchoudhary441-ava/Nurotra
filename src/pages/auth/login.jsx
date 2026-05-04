@@ -1,47 +1,64 @@
 import logo from "../../assets/NurotraLogo.png";
 import "../../styles/auth.css";
 import BackgroundEffects from "../../components/BackgroundEffects";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { GOOGLE_AUTH_URL } from "../../config";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, loginWithToken } = useAuth();
+  const { user, login, loginWithToken } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isGoogleAuth, setIsGoogleAuth] = useState(false);
-
-  // Check for Google Auth Token
   const processingRef = useRef(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Check for Google Auth Token
+  // 1. Check for token and trigger loginWithToken
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
+    let token = searchParams.get("token");
+    let errorParam = searchParams.get("error");
+
+    if (!token && !errorParam && window.location.hash.includes("?")) {
+      const hashQuery = window.location.hash.split("?")[1];
+      const params = new URLSearchParams(hashQuery);
+      token = params.get("token");
+      errorParam = params.get("error");
+    }
+
+    if (errorParam) {
+      setError(errorParam === 'EmailExists' ? "Account already exists with this email." : "Authentication Error.");
+      setSearchParams({}, { replace: true });
+    }
 
     if (token && !processingRef.current) {
       processingRef.current = true;
       setIsGoogleAuth(true);
 
-      console.log("Token found, attempting login...");
-      loginWithToken(token)
-        .then((userData) => {
-          console.log("Login successful:", userData);
-          // Only clear URL on success to avoid aggressive cleanup
-          window.history.replaceState({}, document.title, "/login");
-          navigate("/");
-        })
-        .catch(err => {
-          console.error("Google Login Error:", err);
-          setError("Google Login Failed: " + err.message);
-          setIsGoogleAuth(false);
-          processingRef.current = false; // Allow retry
-        });
+      // Attempt login
+      loginWithToken(token).catch(err => {
+        console.error("Google Login Error:", err);
+        setError("Google Login Failed: " + (err.message || "Unknown error"));
+        setIsGoogleAuth(false);
+        processingRef.current = false;
+      });
+
+      // Clear params immediately to keep URL clean
+      setSearchParams({}, { replace: true });
     }
-  }, []);
+  }, [searchParams, loginWithToken, setSearchParams]);
+
+  // 2. Safe Navigation: Use window.location.href for "Hard Sync" to home
+  useEffect(() => {
+    if (user && isGoogleAuth) {
+      // Small timeout to ensure localStorage is settled
+      setTimeout(() => {
+        window.location.href = "/#/";
+      }, 500);
+    }
+  }, [user, isGoogleAuth]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

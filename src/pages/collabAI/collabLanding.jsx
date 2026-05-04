@@ -1,13 +1,33 @@
+
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import logo from "../../assets/NurotraLogo.png";
 import "../../styles/collabLanding.css";
 import { useNavigate } from "react-router-dom";
+import CurrencySelector from "../../components/CurrencySelector";
 import BackgroundEffects from "../../components/BackgroundEffects";
+import NuroLab from "../../components/Nuro/NuroLab";
+import api from "../../services/apiService";
 
 export default function CollabLanding() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [isLabOpen, setLabOpen] = useState(false);
+  const [deliverablesCount, setDeliverablesCount] = useState(0);
+
+  const fetchDeliverablesCount = async () => {
+    if (!user) return;
+    try {
+      const res = await api.get("/deliverables");
+      setDeliverablesCount(Array.isArray(res.data) ? res.data.length : 0);
+    } catch (err) {
+      console.error("Error fetching deliverables count", err);
+    }
+  };
+
+  useState(() => {
+    fetchDeliverablesCount();
+  }, [user]);
 
   const [theme, setTheme] = useState(
     localStorage.getItem("theme") || "light"
@@ -38,18 +58,55 @@ export default function CollabLanding() {
 
 
         {/* RIGHT: THEME + PROFILE */}
-        <div className="collab-top-right">
+        <div className="collab-top-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            className="icon-btn-floating"
+            onClick={() => setLabOpen(true)}
+            title="Open Nuro Lab"
+            style={{
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: '1.2rem'
+            }}
+          >
+            🧪
+          </button>
+          <CurrencySelector />
           <button className="theme-toggle" onClick={toggleTheme}>
             {theme === "dark" ? "☀️" : "🌙"}
           </button>
 
           {user && user.profileImg && (
-            <div className="profile-icon">
+            <div className="profile-icon" style={{ position: 'relative' }}>
               <img
                 src={user.profileImg}
                 alt="Profile"
                 className="collab-profile-img"
               />
+              {deliverablesCount > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '-10px',
+                  right: '-10px',
+                  background: 'rgba(0,0,0,0.8)',
+                  color: '#4ade80',
+                  border: '1px solid #4ade80',
+                  borderRadius: '12px',
+                  padding: '2px 6px',
+                  fontSize: '0.7rem',
+                  fontWeight: 'bold',
+                  whiteSpace: 'nowrap'
+                }}>
+                  ✅ {deliverablesCount}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -86,6 +143,7 @@ export default function CollabLanding() {
         </div>
       </div>
 
+      <NuroLab isOpen={isLabOpen} toggleLab={() => setLabOpen(false)} />
     </div>
   );
 }

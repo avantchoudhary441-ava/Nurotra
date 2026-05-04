@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://anujtiwari1406.github.io/Nurotra",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,24 +11,39 @@
   },
   "dependencies": {
     "@vercel/speed-insights": "^1.3.1",
-    "axios": "^1.13.2",
+    "axios": "^1.13.6",
+    "docx": "^9.5.1",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.562.0",
+    "mermaid": "^11.13.0",
     "nodemailer": "^7.0.11",
+    "playwright-extra": "^4.3.6",
+    "pptxgenjs": "^4.0.1",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-is": "^19.2.4",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.10.1",
-    "recharts": "^3.5.1"
+    "recharts": "^3.5.1",
+    "simple-peer": "^9.11.1",
+    "socket.io-client": "^4.8.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@iconify/json": "^2.2.450",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
-    "vite": "^7.2.4"
+    "unplugin-icons": "^23.0.1",
+    "vite": "^7.3.1",
+    "vite-plugin-node-polyfills": "^0.25.0"
   }
 }

@@ -18,7 +18,12 @@ const ChatSchema = new mongoose.Schema(
             default: 'new'
         },
         summary: { type: String, default: "" },
-        matchContext: { type: Object } // Snapshot of match data
+        matchContext: { type: Object }, // Snapshot of match data
+        collabStatus: {
+            type: String,
+            enum: ['none', 'Collaboration Successful', 'Collaboration Unsuccessful'],
+            default: 'none'
+        }
     },
     { timestamps: true }
 );

@@ -1,4 +1,4 @@
-/* src/styles/dashboard.css
+﻿/* src/styles/dashboard.css
    Premium Influencer Dashboard (CollabAI style)
    - Fixed transparent navbar -> glass on scroll
    - Sidebar (hover gradient)
@@ -44,7 +44,7 @@ body {
   display: flex;
   min-height: 100vh;
 
-  /* 🔥 SAME GRID BACKGROUND AS OTHER PAGES */
+  /* ðŸ”¥ SAME GRID BACKGROUND AS OTHER PAGES */
 
 }
 
@@ -155,7 +155,7 @@ body {
   font-weight: 600;
   display: flex;
   align-items: center;
-  /* ✅ aligns text with icon */
+  /* âœ… aligns text with icon */
   line-height: 1;
 }
 
@@ -171,6 +171,13 @@ body {
   color: #fff;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dash-cta:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
 }
 
 /* --- MAIN (navbar + content) --- */
@@ -307,7 +314,7 @@ body {
 
 .rank-bar:hover {
   transform: scaleY(1.12);
-  /* 👈 slight enlarge only */
+  /* ðŸ‘ˆ slight enlarge only */
 }
 
 /* Ensure profile card keeps the same left-right spacing after swap */
@@ -446,7 +453,7 @@ body {
   overflow: hidden;
   background: var(--card-bg);
   border: 1px solid var(--border-subtle);
-  /* ✅ REAL BORDER */
+  /* âœ… REAL BORDER */
 }
 
 :root[data-theme="dark"] .neon-card {
@@ -534,7 +541,7 @@ line chart design */
   height: 180px;
   width: 100%;
   flex: 1;
-  /* 🔥 THIS IS CRITICAL */
+  /* ðŸ”¥ THIS IS CRITICAL */
   min-width: 0;
 }
 
@@ -789,11 +796,59 @@ line chart design */
 
 
 /* Chart Tooltip Overrides */
+/* Chart Tooltip Overrides */
 .chart-tooltip-wrapper .recharts-default-tooltip {
   background-color: var(--card-bg) !important;
   border-radius: 10px !important;
   border: 1px solid var(--border-subtle) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ------------------------------------------------ */
+/* MOBILE RESPONSIVE DASHBOARD                     */
+/* ------------------------------------------------ */
+
+/* Desktop Default (Restoring what was inline in JS) */
+.overview-container {
+  margin-left: 240px;
+  /* Sidebar width + padding */
+  width: calc(100% - 240px);
+  padding: 2rem;
+  transition: all 0.3s ease;
+}
+
+@media (max-width: 980px) {
+  /* Sidebar is hidden by default rule on line 673, 
+     so we reset main content to full width */
+
+  .overview-container {
+    margin-left: 0;
+    width: 100%;
+    padding: 16px;
+  }
+
+  .dashboard-row {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stack profile card vertically */
+  .profile-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .profile-right {
+    width: 100%;
+    margin-top: 10px;
+  }
 }
 
 .chart-tooltip-wrapper .recharts-tooltip-item {
@@ -972,3 +1027,550 @@ line chart design */
   transform: translateY(-4px) scale(1.1);
   box-shadow: 0 0 20px rgba(108, 99, 255, 0.6), 0 0 40px rgba(139, 92, 246, 0.4);
 }
+
+/* Added by Nuro AI */
+.btn-primary-gradient {
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2)) !important;
+  color: white !important;
+  border: none !important;
+  padding: 8px 18px !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.btn-primary-gradient:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
+  filter: brightness(1.1) !important;
+}
+
+/* ------------------------------------------------ */
+/* MOBILE SIDEBAR DRAWER STYLES                    */
+/* ------------------------------------------------ */
+
+/* Mobile Menu Button - Default Hidden */
+.mobile-menu-btn {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  font-size: 1.2rem;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-right: 15px;
+}
+
+/* Sidebar Overlay Backdrop */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Mobile Header inside Sidebar */
+.dash-sidebar-header-mobile {
+  display: none;
+  /* Hidden on desktop */
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.close-sidebar-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.mobile-menu-trigger-btn {
+  display: none;
+  /* Hidden on Desktop */
+}
+
+@media (max-width: 980px) {
+
+  /* Show Menu Button */
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Transform Sidebar into Drawer */
+  .dash-sidebar {
+    display: flex;
+    /* Override display:none from previous rule if any */
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 280px;
+    background: var(--card-bg);
+    /* Opaque background */
+    z-index: 999;
+    transform: translateX(-100%);
+    /* Hidden by default */
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.2);
+    border-right: 1px solid var(--border-subtle);
+    padding: 20px;
+  }
+
+  .dash-sidebar.active {
+    transform: translateX(0);
+    /* Slide in */
+  }
+
+  .dash-sidebar-header-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 15px;
+  }
+
+  .mobile-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* Fixed Menu Trigger (Global) - Polished Glass Style */
+  .mobile-menu-trigger-btn {
+    display: flex;
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 1002;
+    /* Ensure higher than header content */
+    background: rgba(22, 22, 24, 0.6);
+    /* Glass Dark */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+  }
+
+  .mobile-menu-trigger-btn:active {
+    transform: scale(0.95);
+    background: rgba(22, 22, 24, 0.8);
+  }
+
+  /* Global Header Adjustment for Mobile (Prevent Overlap) */
+  .influencer-navbar .nav-left,
+  .brand-navbar .nav-left,
+  .dashboard-header .header-left {
+    padding-left: 60px !important;
+    /* Space for the button */
+  }
+}
+
+/* ------------------------------------------------ */
+/* MOBILE FLOATING ELEMENTS OVERRIDES              */
+/* ------------------------------------------------ */
+
+@media (max-width: 768px) {
+
+  /* Lift floating Chat button above bottom bar/safe area */
+  .floating-chat-btn {
+    bottom: 90px !important;
+    left: 15px !important;
+    width: 50px !important;
+    height: 50px !important;
+  }
+
+  /* Ensure body has enough padding so content isn't covered */
+  body {
+    padding-bottom: 100px;
+  }
+}
+
+/* ------------------------------------------------ */
+/* MOBILE REVAMP STYLES (UX RESCUE)                */
+/* ------------------------------------------------ */
+
+/* ------------------------------------------------ */
+/* GLOBAL RESPONSIVE OVERHAUL                      */
+/* ------------------------------------------------ */
+
+/* Responsive Grid Logic */
+@media (max-width: 1024px) {
+  .overview-main-grid {
+    grid-template-columns: 1fr !important;
+    /* Force Single Column */
+    gap: 20px;
+  }
+
+  .overview-graph-section {
+    order: 1;
+    /* Graph first or second? */
+  }
+
+  .overview-scores-section {
+    order: 2;
+  }
+}
+
+/* Mobile Hero Wrapper */
+.mobile-hero-wrapper {
+  margin-bottom: 20px;
+}
+
+/* Adaptive Scores */
+.desktop-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.mobile-scores {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .desktop-scores {
+    display: none;
+    /* Hide huge cards on very small screens, use compact */
+  }
+
+  .mobile-scores {
+    display: flex;
+    /* Show compact rows */
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* Adjust Graph Container for small widths */
+  .graph-card {
+    padding: 10px;
+    overflow: hidden;
+    /* Prevent SVG blowout */
+  }
+
+  .pentagon-container svg {
+    width: 100%;
+    height: auto;
+  }
+}
+
+/* Utility to hide legacy sidebar on mobile if not using drawer */
+@media (max-width: 980px) {
+  .desktop-sidebar-hidden-mobile {
+    display: none !important;
+  }
+}
+
+/* Mobile Hero Card */
+.mobile-hero-container {
+  background: linear-gradient(135deg, rgba(30, 30, 35, 0.95), rgba(10, 10, 12, 0.98));
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle Glow behind Hero */
+.mobile-hero-container::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.08), transparent 70%);
+  pointer-events: none;
+}
+
+.mobile-health-ring {
+  width: 80px;
+  height: 80px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.circular-chart {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.circle-bg {
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+.circle {
+  animation: progress 1s ease-out forwards;
+}
+
+@keyframes progress {
+  0% {
+    stroke-dasharray: 0 100;
+  }
+}
+
+.health-score-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  line-height: 1;
+}
+
+.score-val {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text-main);
+  display: block;
+}
+
+.score-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.mobile-hero-content {
+  flex: 1;
+  z-index: 1;
+}
+
+.hero-insight-title {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--accent-1);
+  margin-bottom: 4px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.hero-insight-text {
+  font-size: 0.95rem;
+  color: var(--text-main);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.mobile-action-btn {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-1);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  padding: 8px 16px;
+  border-radius: 99px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mobile-action-btn:active {
+  background: rgba(99, 102, 241, 0.3);
+  transform: scale(0.98);
+}
+
+/* Compact Score Rows */
+.mobile-score-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-label {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin-left: 5px;
+  margin-bottom: 5px;
+}
+
+.mobile-score-row {
+  background: var(--card-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  transition: transform 0.2s ease;
+}
+
+.mobile-score-row:active {
+  transform: scale(0.98);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ms-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+
+.ms-content {
+  flex: 1;
+}
+
+.ms-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.ms-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.ms-val {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* --- Mobile Sticky Footer for Find Matches --- */
+.mobile-find-matches-footer {
+  display: none;
+  /* Hidden by default on desktop */
+}
+
+@media (max-width: 980px) {
+
+  /* Hide the navbar button container */
+  .mobile-hidden {
+    display: none !important;
+  }
+
+  /* Show and style the sticky footer */
+  .mobile-find-matches-footer {
+    display: flex;
+    justify-content: center;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px) saturate(1.8);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    z-index: 9999;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+    /* Safe area for iPhone home bar */
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+  }
+
+  /* Dark mode support */
+  :root[data-theme="dark"] .mobile-find-matches-footer {
+    background: rgba(15, 23, 42, 0.85);
+    /* Matches dark theme card/nav bg */
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 -4px 25px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Ensure content has padding so it doesn't get hidden behind footer */
+  .influencer-dashboard {
+    padding-bottom: 90px;
+  }
+
+  .btn-primary-gradient {
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+    color: white;
+    border: none;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    transition: all 0.2s ease;
+  }
+
+  .btn-primary-gradient:active {
+    transform: scale(0.98);
+  }
+}
+/* --- Navbar Profile Icon Fix --- */
+.nav-profile-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid var(--border-subtle);
+    background: var(--card-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.nav-profile-icon:hover {
+    transform: scale(1.05);
+    border-color: var(--accent-1);
+}
+
+.nav-profile-img-inner {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.nav-profile-placeholder {
+    font-size: 1.2rem;
+}
+
+/* --- Modal Profile Image Fix --- */
+.modal-profile-img-container {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin: 0 auto 16px; /* Center horizontally */
+    border: 3px solid var(--accent-1);
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+    background: var(--card-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-profile-placeholder {
+    font-size: 3rem;
+}
+

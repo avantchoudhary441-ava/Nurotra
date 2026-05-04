@@ -1,0 +1,452 @@
+import React, { useState } from 'react';
+import { CheckCircle, Edit, X, FileText, File, Download, RefreshCw, Copy, Zap, ChevronDown, AlertTriangle } from 'lucide-react';
+import EntryPoint from './EntryPoint';
+import DynamicGraph from './DynamicGraph';
+import AnalyticsHub from './AnalyticsHub';
+import { generateWordDoc, generateExcelSheet, generatePresentation } from '../../../services/generatorService';
+import { docsAgentService } from '../../../services/docsAgentService';
+import DashboardRenderer from '../../../components/dashboard/DashboardRenderer';
+
+const LiveExecution = ({
+    projects,
+    executionState,
+    currentDoc,
+    analyticsData,
+    wordReportBuffer,
+    wordReportName,
+    liveUpdates,
+    onProjectCreated,
+    onDocCreated,
+    onApprovePlan,
+    onUpdateContent,
+    onCancelExecution
+}) => {
+    const [syncStatus, setSyncStatus] = useState(null);
+    // ... (existing state)
+    const [editMode, setEditMode] = useState(false);
+    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showPbiAlert, setShowPbiAlert] = useState(false);
+
+    const handleExport = async (format, force = false) => {
+        if (!currentDoc) return;
+
+        // Intercept Power BI to show Attention alert first
+        if (format === 'pbi' && !force) {
+            setShowExportMenu(false);
+            setShowPbiAlert(true);
+            return;
+        }
+
+        setShowExportMenu(false);
+        setShowPbiAlert(false);
+        setSyncStatus('syncing');
+
+        try {
+            // 1. TRIGGER BROWSER DOWNLOAD
+            // We pass the documentId, current name, and the requested format override
+            await docsAgentService.downloadFile(
+                currentDoc.id || currentDoc._id,
+                currentDoc.name,
+                format
+            );
+
+            // Backend sync removed as per local save disabled feature
+
+            setSyncStatus('success');
+            setTimeout(() => setSyncStatus(null), 6000);
+        } catch (e) {
+            console.error("Export failure:", e);
+
+            // Check for the specific "Not supported" error from backend
+            const errorMsg = e.response?.data?.message || e.message;
+            if (errorMsg.includes("not supported")) {
+                alert(errorMsg);
+            } else {
+                setSyncStatus('error');
+            }
+            setTimeout(() => setSyncStatus(null), 4000);
+        }
+    };
+
+    // 0. Analysis Report View — shown when document analysis completes
+    if (analyticsData) {
+        return (
+            <div className="live-execution-panel" style={{ padding: 0, overflow: 'hidden' }}>
+                <AnalyticsHub
+                    data={analyticsData}
+                    wordReportBuffer={wordReportBuffer}
+                    wordReportName={wordReportName}
+                    onClose={() => onCancelExecution && onCancelExecution()}
+                />
+            </div>
+        );
+    }
+
+    // 1. Idle / Entrance
+    if (executionState.status === 'idle' && !currentDoc) {
+        return (
+            <div className="live-execution-panel">
+                <EntryPoint
+                    onCreateProject={onProjectCreated}
+                    onCreateSingleDoc={onDocCreated}
+                />
+            </div>
+        );
+    }
+
+    // 1.5. Awaiting Input (User clicked Single Doc or created a Project — waiting for prompt)
+    if (executionState.status === 'awaiting_input' && !currentDoc) {
+        return (
+            <div className="live-execution-panel" style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '1.5rem',
+                padding: '3rem'
+            }}>
+                <div style={{
+                    width: '60px', height: '60px',
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(147,51,234,0.3) 0%, transparent 70%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    animation: 'pulse 2s ease-in-out infinite'
+                }}>
+                    <FileText size={28} style={{ color: 'rgba(147,51,234,0.9)' }} />
+                </div>
+                <h2 style={{
+                    fontSize: '1.4rem', fontWeight: '600',
+                    color: 'rgba(255,255,255,0.9)',
+                    margin: 0
+                }}>
+                    Ready for your command.
+                </h2>
+                <p style={{
+                    fontSize: '0.9rem',
+                    color: 'rgba(255,255,255,0.5)',
+                    textAlign: 'center',
+                    maxWidth: '320px',
+                    lineHeight: '1.6',
+                    margin: 0
+                }}>
+                    Describe what you need in the chat panel →<br />
+                    I'll generate the document for you.
+                </p>
+            </div>
+        );
+    }
+
+    // 2. Planning Phase
+    if (executionState.status === 'planning') {
+        return (
+            <div className="live-execution-panel planning-mode">
+                <div className="plan-header">
+                    <h2>IMPLEMENTATION PLAN</h2>
+                    <p>I've analyzed your request. Here is how I plan to proceed:</p>
+                </div>
+
+                <div className="plan-card">
+                    <h3 className="plan-goal">{executionState.plan?.goal}</h3>
+                    <div className="plan-steps">
+                        {executionState.plan?.steps.map((step, idx) => (
+                            <div key={idx} className="plan-step-item">
+                                <span className="step-num">{idx + 1}</span>
+                                <span className="step-label">{step.label}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="plan-risks">
+                        <h4><Zap size={14} style={{ marginRight: '8px' }} /> Potential Optimization</h4>
+                        <p>I will use Smart Memory to ensure this aligns with your previous Expert Standards.</p>
+                    </div>
+
+                    <div className="plan-actions">
+                        <button className="plan-btn secondary" onClick={onCancelExecution}>
+                            <X size={16} /> Cancel
+                        </button>
+                        <button className="plan-btn primary" onClick={onApprovePlan}>
+                            <CheckCircle size={16} /> Approve & Execute
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // 3. Execution Phase
+    if (executionState.status === 'executing') {
+        const progress = (executionState.currentStep / executionState.totalSteps) * 100;
+        return (
+            <div className="working-context-glow">
+                <div className="live-execution-panel focus-mode">
+                    <div className="action-timeline">
+                        <div className="timeline-content">
+                            <span className="timeline-step">STEP {executionState.currentStep}/{executionState.totalSteps}</span>
+                            <span className="timeline-task">Working on your document...</span>
+                        </div>
+                        <div className="timeline-progress">
+                            <div
+                                className="timeline-bar"
+                                style={{ width: `${progress}%` }}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="execution-activity dynamic-logs" ref={el => { if (el) el.scrollTop = el.scrollHeight; }}>
+                        {liveUpdates && liveUpdates.length > 0 ? (
+                            liveUpdates.map((log, i) => (
+                                <div
+                                    key={`log-${i}-${log.substring(0, 10)}`}
+                                    className={`activity-item ${i === liveUpdates.length - 1 ? 'active' : 'historical'}`}
+                                    style={{ animationDelay: `${i * 0.08}s` }}
+                                >
+                                    <div className="activity-dot"></div>
+                                    <div className="activity-text">{log}</div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="activity-item active">
+                                <div className="activity-dot"></div>
+                                <div className="activity-text">Getting things started...</div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mini-canvas-preview">
+                        <div className="preview-header">
+                            <FileText size={14} />
+                            <span>Live Preview</span>
+                        </div>
+                        <div className="preview-snippet">
+                            {currentDoc?.type === 'dashboard' ? (
+                                <p>Optimizing visual intelligence board...</p>
+                            ) : currentDoc?.content ? (
+                                <pre>{currentDoc.content}</pre>
+                            ) : (
+                                <p>Building real-time content...</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // 4. Editor / Preview Canvas (When a doc is open)
+    if (currentDoc) {
+        return (
+            <div className="working-context-glow">
+                <div className="live-execution-panel editor-mode">
+                    <div className="editor-toolbar" style={{ position: 'relative', zIndex: 500 }}>
+                        <div className="doc-detail-meta">
+                            <FileText size={16} />
+                            <span className="doc-name-display">{currentDoc.name}</span>
+                        </div>
+                        <div className="toolbar-actions">
+
+                            <div style={{ position: 'relative' }}>
+                                <button
+                                    className="tool-btn highlight"
+                                    onClick={() => setShowExportMenu(!showExportMenu)}
+                                >
+                                    <Download size={14} /> Export <ChevronDown size={14} />
+                                </button>
+                                {showExportMenu && (
+                                    <div className="export-dropdown" style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        right: 0,
+                                        marginTop: '0.5rem',
+                                        background: '#000000',
+                                        border: '1px solid rgba(255,255,255,0.15)',
+                                        borderRadius: '8px',
+                                        padding: '0.5rem',
+                                        zIndex: 1000,
+                                        minWidth: '160px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '0.25rem',
+                                        boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+                                    }}>
+                                        <button
+                                            className="export-dropdown-item export-item-word"
+                                            onClick={() => handleExport('docx')}
+                                        >
+                                            <FileText size={14} /> As Word (.docx)
+                                        </button>
+                                        <button
+                                            className="export-dropdown-item export-item-excel"
+                                            onClick={() => handleExport('xlsx')}
+                                        >
+                                            <FileText size={14} /> As Excel (.xlsx)
+                                        </button>
+                                        <button
+                                            className="export-dropdown-item export-item-ppt"
+                                            onClick={() => handleExport('pptx')}
+                                        >
+                                            <FileText size={14} /> As PowerPoint (.pptx)
+                                        </button>
+                                        <button
+                                            className="export-dropdown-item export-item-pdf"
+                                            onClick={() => handleExport('pdf')}
+                                        >
+                                            <FileText size={14} /> As PDF (.pdf)
+                                        </button>
+                                        <button
+                                            className="export-dropdown-item export-item-pbi"
+                                            onClick={() => handleExport('pbi')}
+                                        >
+                                            <Zap size={14} /> Power BI Source (.xlsx)
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <button className="tool-btn" onClick={() => {
+                                navigator.clipboard.writeText(currentDoc.content);
+                                alert("Copied to clipboard! Ready to paste into Google Docs.");
+                            }}>
+                                <Copy size={14} /> Copy for G-Docs
+                            </button>
+                            <button
+                                className={`tool-btn ${editMode ? 'active' : ''}`}
+                                onClick={() => setEditMode(!editMode)}
+                            >
+                                <Edit size={14} /> {editMode ? 'Preview' : 'Edit'}
+                            </button>
+                        </div>
+
+                        {/* Workspace Sync Notification */}
+                        {syncStatus === 'syncing' && (
+                            <div className="sync-notification info">
+                                <RefreshCw size={14} className="animate-spin" /> Synchronizing to Workspace...
+                            </div>
+                        )}
+                        {syncStatus === 'success' && (
+                            <div className="sync-notification success">
+                                <CheckCircle size={14} />
+                                <span>File exported to <strong
+                                    className="clickable-path"
+                                    onClick={() => {
+                                        let projectName = "";
+                                        if (currentDoc.projectId && projects) {
+                                            const project = projects.find(p => String(p.id) === String(currentDoc.projectId));
+                                            projectName = project ? project.name : "";
+                                        }
+                                        console.log("[DocsAgent] Requesting to open workspace for project:", projectName || "Standalone");
+                                        docsAgentService.openWorkspace(projectName);
+                                    }}
+                                    title="Click to open in File Explorer"
+                                > nurotra workplace</strong></span>
+                            </div>
+                        )}
+                        {syncStatus === 'error' && (
+                            <div className="sync-notification error">
+                                <X size={14} /> Failed to sync. Check server logs.
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="canvas-content-wrapper">
+                        {editMode ? (
+                            <textarea
+                                className="rich-editor"
+                                value={currentDoc.content || ''}
+                                onChange={(e) => onUpdateContent(e.target.value)}
+                                placeholder="Begin your masterpiece..."
+                            />
+                        ) : (
+                            <div className="markdown-preview">
+                                {currentDoc.type === 'dashboard' ? (
+                                    <DashboardRenderer
+                                        dashboard={currentDoc.rawStructure}
+                                        onUpdateWidget={() => { }}
+                                    />
+                                ) : currentDoc.content ? (
+                                    <div className="preview-container">
+                                        {/* Visual Add-ons */}
+                                        {currentDoc.rawStructure?.image_url && (
+                                            <div className="preview-image-container mb-6">
+                                                <img
+                                                    src={currentDoc.rawStructure.image_url}
+                                                    alt="Generated Visual"
+                                                    className="rounded-lg shadow-lg max-w-full h-auto border border-gray-800"
+                                                />
+                                                <p className="text-xs text-gray-500 mt-2 italic text-center">AI Generated Image</p>
+                                            </div>
+                                        )}
+
+                                        {currentDoc.rawStructure?.graph_config && (
+                                            <DynamicGraph config={currentDoc.rawStructure.graph_config} />
+                                        )}
+
+                                        <pre className="preview-text">{currentDoc.content}</pre>
+                                    </div>
+                                ) : (
+                                    <div className="empty-canvas">
+                                        <File size={40} className="empty-icon" />
+                                        <p>No content available to preview.</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Power BI Attention Modal */}
+                {showPbiAlert && (
+                    <div className="pbi-alert-overlay" style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        width: '100%', height: '100%',
+                        background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+                        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '2rem'
+                    }}>
+                        <div className="pbi-alert-card" style={{
+                            background: '#111111', border: '1px solid rgba(185, 28, 28, 0.4)',
+                            borderRadius: '16px', padding: '2.5rem', maxWidth: '450px', width: '90%',
+                            textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
+                            position: 'relative', zIndex: 10000
+                        }}>
+                            <div style={{
+                                width: '64px', height: '64px', borderRadius: '50%',
+                                background: 'rgba(185, 28, 28, 0.1)', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem'
+                            }}>
+                                <AlertTriangle size={32} style={{ color: '#b91c1c' }} />
+                            </div>
+                            <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#FFFFFF', marginBottom: '1rem' }}>Attention</h2>
+                            <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.7)', lineHeight: '1.6', marginBottom: '1.5rem' }}>
+                                Nurotra generates a high-fidelity **Power BI Data Model (.xlsx)** with separate sheets for KPIs, Charts, and Maps. To use it, simply open Power BI Desktop and select **Get Data → Excel**.
+                            </p>
+                            <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', marginTop: '-0.5rem', marginBottom: '2rem' }}>
+                                (Note: Native .pbix files are proprietary binary packages; the .xlsx source is the standard professional workflow for data automation.)
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                                <button
+                                    className="plan-btn secondary"
+                                    onClick={() => setShowPbiAlert(false)}
+                                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF', padding: '0.75rem 1.5rem', borderRadius: '8px', cursor: 'pointer' }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className="plan-btn primary"
+                                    onClick={() => handleExport('pbi', true)}
+                                    style={{ background: '#b91c1c', border: 'none', color: '#ffffff', padding: '0.75rem 2rem', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer', boxShadow: 'none' }}
+                                >
+                                    Export Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+                }
+            </div >
+        );
+    }
+
+    return null;
+};
+
+export default LiveExecution;

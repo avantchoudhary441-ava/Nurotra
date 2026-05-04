@@ -15,29 +15,46 @@ const jwt = require("jsonwebtoken");
 // 1. Redirect to Google
 router.get(
     "/google",
-    passport.authenticate("google", { scope: ["profile", "email"] })
+    passport.authenticate("google", { 
+        scope: ["profile", "email"],
+        accessType: "offline",
+        prompt: "consent"
+    })
 );
 
 // 2. Callback from Google
 router.get(
     "/google/callback",
-    passport.authenticate("google", { failureRedirect: "/login", session: false }),
-    (req, res) => {
-        try {
-            // Generate JWT
-            const token = jwt.sign({ id: req.user._id }, process.env.JWT_SECRET, {
-                expiresIn: "30d",
-            });
+    (req, res, next) => {
+        passport.authenticate("google", { session: false }, (err, user, info) => {
+            // Support comma-separated list, take the first one or default to localhost
+            const rawURL = process.env.CLIENT_URL || "http://localhost:5173";
+            const clientURL = rawURL.split(',')[0].trim();
 
-            // Redirect to Frontend with Token
-            // In production, use client URL from env
-            const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
-            res.redirect(`${clientURL}/login?token=${token}`);
-        } catch (error) {
-            console.error("Google Callback Error:", error);
-            const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
-            res.redirect(`${clientURL}/login?error=AuthFailed`);
-        }
+            // Handle Errors (including our custom EmailExists)
+            if (err) {
+                console.error("Google Auth Error:", err);
+                return res.redirect(`${clientURL}/#/login?error=ServerErr`);
+            }
+
+            // Handle "false" user (rejected login)
+            if (!user) {
+                // If we passed a message in passport.js, use it
+                const errorType = info && info.message ? info.message : 'AuthFailed';
+                return res.redirect(`${clientURL}/#/login?error=${errorType}`);
+            }
+
+            // Success
+            try {
+                const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+                    expiresIn: "30d",
+                });
+                res.redirect(`${clientURL}/#/login?token=${token}`);
+            } catch (error) {
+                console.error("Token Gen Error:", error);
+                res.redirect(`${clientURL}/#/login?error=TokenError`);
+            }
+        })(req, res, next);
     }
 );
 

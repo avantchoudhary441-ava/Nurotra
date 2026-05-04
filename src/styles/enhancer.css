@@ -1,3 +1,7 @@
+/* ---------------------------------------------------------
+   Profile Enhancer (AI Studio 2.0) — Glassmorphism UI
+--------------------------------------------------------- */
+
 /* Glassmorphism Overlay */
 .enhancer-overlay {
     position: fixed;
@@ -15,8 +19,10 @@
 
 /* Main Window */
 .enhancer-window {
-    width: 900px;
-    height: 600px;
+    width: 95%;
+    max-width: 900px;
+    height: 85vh;
+    max-height: 600px;
     background: rgba(15, 23, 42, 0.9);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
@@ -43,6 +49,7 @@
     background: linear-gradient(to right, #a78bfa, #f472b6);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .eh-title span {
@@ -213,7 +220,6 @@
 
 .eh-alert-card {
     background: rgba(245, 158, 11, 0.1);
-    /* Amber Tint */
     border-left: 4px solid #f59e0b;
     padding: 1.2rem;
     border-radius: 8px;
@@ -279,7 +285,7 @@
 }
 
 .you-fill {
-    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     position: absolute;
     top: 0;
     left: 0;
@@ -584,4 +590,148 @@
 .comp-insight {
     font-size: 0.8rem;
     color: rgba(255, 255, 255, 0.5);
+}
+
+/* -------------------------------------
+   MOBILE OPTIMIZATIONS (Max-Width 1024px)
+   ------------------------------------- */
+/* -------------------------------------
+   MOBILE OPTIMIZATIONS (Max-Width 1024px)
+   ------------------------------------- */
+@media (max-width: 1024px) {
+
+    /* Reset Overlay to simple fixed full screen */
+    .enhancer-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 99999 !important;
+        /* Force top z-index */
+        background: #0f172a;
+        /* Solid background for mobile performance */
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+        margin: 0;
+    }
+
+    /* Force Window to fill Overlay */
+    /* Remove 'fixed' from window, let it flow in the flex overlay */
+    .enhancer-window {
+        position: relative !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+        border: none !important;
+        background: transparent !important;
+        /* Overlay has background */
+        box-shadow: none !important;
+        transform: none !important;
+        /* Override framer motion scale */
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Header Compact */
+    .enhancer-header {
+        padding: 1rem;
+        flex-shrink: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .eh-title h2 {
+        font-size: 1.1rem;
+    }
+
+    /* Body flex flow */
+    .enhancer-body {
+        flex-direction: column;
+        flex: 1;
+        overflow: hidden;
+        /* Internal scrolling */
+    }
+
+    /* Horizontal Nav Bar */
+    .enhancer-sidebar {
+        width: 100% !important;
+        height: auto;
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 10px;
+        gap: 10px;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 23, 42, 0.5);
+        flex-shrink: 0;
+    }
+
+    /* Hide scrollbar for nav */
+    .enhancer-sidebar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .eh-nav-item {
+        white-space: nowrap;
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        flex-shrink: 0;
+    }
+
+    .eh-nav-item.active {
+        background: var(--accent-1, #6366f1);
+        color: white;
+    }
+
+    .eh-nav-icon {
+        margin-right: 6px;
+    }
+
+    .eh-dot {
+        display: none;
+    }
+
+    /* Content Area */
+    .enhancer-content {
+        padding: 1.5rem;
+        width: 100%;
+        overflow-y: auto;
+        flex: 1;
+        padding-bottom: 100px;
+        /* Safe area for bottom */
+    }
+
+    /* Single Column Layouts */
+    .eh-dashboard-grid,
+    .compatibility-grid,
+    .eh-split-cols {
+        grid-template-columns: 1fr;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .eh-section-full {
+        grid-column: span 1;
+    }
+
+    .eh-impact-row {
+        flex-direction: row;
+        gap: 1rem;
+    }
+
+    .bio-card {
+        min-width: unset;
+        width: 100%;
+    }
+
+    .eh-bios-grid {
+        flex-direction: column;
+    }
 }

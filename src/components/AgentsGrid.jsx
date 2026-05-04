@@ -3,6 +3,7 @@ import AgentCard from "./AgentCard";
 import { useAuth } from "../context/AuthContext";
 import { useState } from "react";
 import LoginModal from "./LoginModal";
+import { Users, FileText, Calendar, MessageSquare } from "lucide-react";
 
 export default function AgentsGrid() {
   const navigate = useNavigate();
@@ -21,30 +22,39 @@ export default function AgentsGrid() {
     },
     {
       id: 2,
-      name: "Code Engineer AI",
-      role: "Senior Developer",
-      icon: "👨‍💻",
-      skills: "Bug fixing • Code generation",
+      name: "Docs Agent",
+      role: "Bored of creating & maintaining docs?",
+      icon: "📄",
+      skills: "This is the right place",
       status: "online",
-      route: "coming-soon",
+      route: "/docs-agent",
     },
     {
       id: 3,
-      name: "Marketing Expert AI",
-      role: "Brand Strategist",
-      icon: "📣",
-      skills: "Ads • Reels • Branding",
+      name: "Time Agent",
+      role: "AI Scheduling Assistant",
+      icon: "📅",
+      skills: "Task Planning • Calendar Sync • Reminders",
       status: "online",
-      route: "coming-soon",
+      route: "/time-agent",
     },
     {
       id: 4,
-      name: "Research Analyst AI",
-      role: "Problem Solver",
-      icon: "🔍",
-      skills: "Insights • Summaries",
-      status: "idle",
-      route: "coming-soon",
+      name: "Communication Agent",
+      role: "Unified Communication Hub",
+      icon: "📩",
+      skills: "Gmail Sync • Slack Support • Follow-ups",
+      status: "online",
+      route: "/communication-agent",
+    },
+    {
+      id: 5,
+      name: "Action Agent",
+      role: "Cross-Platform Action Execution",
+      icon: "⚡",
+      skills: "API Triggering • Workflow Execution",
+      status: "online",
+      route: "/action-agent",
     },
   ];
 

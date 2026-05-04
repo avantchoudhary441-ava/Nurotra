@@ -1,0 +1,16 @@
+{
+    "layout": "hero",
+    "elements": [
+        {
+            "type": "title"
+        },
+        {
+            "type": "subtitle"
+        },
+        {
+            "type": "background_image"
+        }
+    ],
+    "style": "premium",
+    "alignment": "center"
+}

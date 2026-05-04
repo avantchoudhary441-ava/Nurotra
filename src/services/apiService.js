@@ -8,6 +8,7 @@ const API_URL = `${BASE_URL}/api/auth`;
 // Create axios instance
 const api = axios.create({
     baseURL: `${BASE_URL}/api`,
+    timeout: 600000, // 10 minutes for long AI generation tasks
 });
 
 // Add token to headers if it exists
@@ -22,9 +23,6 @@ api.interceptors.request.use((config) => {
 export const authService = {
     register: async (userData) => {
         const response = await axios.post(`${API_URL}/register`, userData);
-        if (response.data) {
-            localStorage.setItem("nurotra_user", JSON.stringify(response.data));
-        }
         return response.data;
     },
 
@@ -36,8 +34,21 @@ export const authService = {
         return response.data;
     },
 
+    verifyOtp: async (email, otp) => {
+        const response = await axios.post(`${API_URL}/verify-otp`, { email, otp });
+        if (response.data && response.data.token) {
+            localStorage.setItem("nurotra_user", JSON.stringify(response.data));
+        }
+        return response.data;
+    },
+
     logout: () => {
         localStorage.removeItem("nurotra_user");
+    },
+
+    resendOtp: async (email) => {
+        const response = await axios.post(`${API_URL}/resend-otp`, { email });
+        return response.data;
     },
 
     getMe: async (token) => {
@@ -61,7 +72,7 @@ export const authService = {
 
 export const profileService = {
     saveBrand: async (data, token) => {
-        console.log("Saving brand...", data); // Debug
+        // Saving brand...
         const config = {
             headers: { Authorization: `Bearer ${token}` }
         };
@@ -83,6 +94,14 @@ export const profileService = {
     getInfluencer: async (token) => {
         const config = { headers: { Authorization: `Bearer ${token}` } };
         const response = await axios.get(`${API_URL.replace("/auth", "")}/influencer`, config);
+        return response.data;
+    },
+    getInfluencerById: async (userId) => {
+        const response = await api.get(`/influencer/${userId}`);
+        return response.data;
+    },
+    getBrandById: async (userId) => {
+        const response = await api.get(`/brand/${userId}`);
         return response.data;
     }
 };
@@ -119,9 +138,11 @@ export const chatService = {
     uploadFile: async (file) => {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await api.post("/upload", formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-        });
+        const response = await api.post("/upload", formData);
+        return response.data;
+    },
+    recordCollaboration: async (chatId, status) => {
+        const response = await api.post("/chat/collab/record", { chatId, status });
         return response.data;
     }
 };
@@ -147,6 +168,157 @@ export const aiService = {
     analyzeProfile: async (profileData) => {
         const response = await api.post("/chat/ai/analyze-profile", { profileData });
         return response.data;
+    }
+};
+
+export const nuroService = {
+    getMemory: async () => {
+        const response = await api.get("/nuro/memory");
+        return response.data;
+    },
+    getPublicMemory: async (userId) => {
+        const response = await api.get(`/nuro/memory/${userId}`);
+        return response.data;
+    },
+    saveFeedback: async (response, context) => {
+        const res = await api.post("/nuro/feedback", { response, context });
+        return res.data;
+    },
+    markGuideSeen: async (guideId) => {
+        const res = await api.post("/nuro/guide-seen", { guideId });
+        return res.data;
+    }
+};
+
+export const adminService = {
+    getStats: async (params) => {
+        const response = await api.get("/admin/stats", { params });
+        return response.data;
+    },
+    getUsers: async (params) => {
+        const response = await api.get("/admin/users", { params });
+        return response.data;
+    },
+    updateUser: async (userId, data) => {
+        const response = await api.patch(`/admin/users/${userId}`, data);
+        return response.data;
+    },
+    addNote: async (userId, data) => {
+        const response = await api.post(`/admin/users/${userId}/notes`, data);
+        return response.data;
+    },
+    getUserTimeline: async (userId) => {
+        const response = await api.get(`/admin/users/${userId}/timeline`);
+        return response.data;
+    },
+    triggerBulkAction: async (data) => {
+        const response = await api.post(`/admin/bulk-action`, data);
+        return response.data;
+    }
+};
+
+export const timeAgentService = {
+    planTask: async (prompt, history = []) => {
+        const response = await api.post("/time-agent/plan", { prompt, history });
+        return response.data;
+    }
+};
+
+export const workspaceService = {
+    downloadFile: async (docId, fileName, format) => {
+        try {
+            const url = format
+                ? `/workspace/download/${docId}?format=${format}`
+                : `/workspace/download/${docId}`;
+
+            const response = await api.get(url, {
+                responseType: 'blob'
+            });
+
+            // Extract filename and mime type from headers
+            let finalName = fileName || 'document';
+            const headers = response.headers || {};
+            const cdHeader = headers['content-disposition'] || headers['Content-Disposition'];
+            const mimeType = headers['content-type'] || headers['Content-Type'] || 'application/octet-stream';
+
+            if (cdHeader) {
+                const match = cdHeader.match(/filename="?([^"]+)"?/);
+                if (match && match[1]) {
+                    finalName = match[1];
+                }
+            }
+
+            // Ensure correct extension based on format or mime type
+            if (format && typeof format === 'string' && !finalName.toLowerCase().endsWith('.' + format.toLowerCase())) {
+                finalName = finalName.split('.')[0] + '.' + format.replace('.', '');
+            } else if (!finalName.includes('.')) {
+                if (mimeType.includes('wordprocessingml')) finalName += '.docx';
+                else if (mimeType.includes('spreadsheetml')) finalName += '.xlsx';
+                else if (mimeType.includes('presentationml')) finalName += '.pptx';
+                else if (mimeType.includes('pdf')) finalName += '.pdf';
+            }
+
+            const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }));
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.setAttribute('download', finalName);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Failed to download file:', error);
+            throw error;
+        }
+    },
+
+    downloadByUrl: async (fullUrl, fileName) => {
+        if (!fullUrl) return;
+
+        // Ensure we only use the path if it's a relative/same-origin URL
+        const path = fullUrl.includes('http')
+            ? fullUrl.replace(window.location.origin, "").replace(/^https?:\/\/[^\/]+/, "")
+            : fullUrl;
+
+        try {
+            const response = await api.get(path, {
+                responseType: 'blob'
+            });
+
+            const headers = response.headers || {};
+            const cdHeader = headers['content-disposition'] || headers['Content-Disposition'];
+            const mimeType = headers['content-type'] || headers['Content-Type'] || 'application/octet-stream';
+
+            let finalName = fileName || 'document';
+            if (cdHeader) {
+                const match = cdHeader.match(/filename="?([^"]+)"?/);
+                if (match && match[1]) {
+                    finalName = match[1];
+                }
+            } else if (!finalName.includes('.')) {
+                // Fallback extensions based on MIME
+                if (mimeType.includes('wordprocessingml')) finalName += '.docx';
+                else if (mimeType.includes('spreadsheetml')) finalName += '.xlsx';
+                else if (mimeType.includes('presentationml')) finalName += '.pptx';
+                else if (mimeType.includes('pdf')) finalName += '.pdf';
+            }
+
+            const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }));
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.setAttribute('download', finalName);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Download by URL failed:', error);
+            return { success: false, error: error.message };
+        }
     }
 };
 

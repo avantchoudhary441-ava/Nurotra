@@ -31,8 +31,8 @@ export function AuthProvider({ children }) {
     const signup = async (data) => {
         try {
             const userData = await authService.register(data);
-            setUser(userData);
-            // localStorage.setItem("nurotra_user", JSON.stringify(userData)); // apiService handles this
+            // We do NOT setUser here because they are not verified yet.
+            // verifyOtp will call setUser once they enter the code.
             return userData;
         } catch (error) {
             throw new Error(error.response?.data?.message || "Signup failed");
@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, signup, logout, loginWithToken, updateUser, loading }}>
+        <AuthContext.Provider value={{ user, token: user?.token, login, signup, logout, loginWithToken, updateUser, loading }}>
             {!loading && children}
         </AuthContext.Provider>
     );

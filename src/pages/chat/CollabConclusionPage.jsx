@@ -1,0 +1,153 @@
+import React, { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { chatService } from "../../services/apiService";
+import BackgroundEffects from "../../components/BackgroundEffects";
+import { useAuth } from "../../context/AuthContext";
+import "../../styles/global.css";
+
+export default function CollabConclusionPage() {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { user } = useAuth(); // Get user to check role
+    const { chatId } = location.state || {}; // Expecting chatId passed in state
+
+    const [loading, setLoading] = useState(false);
+
+    const handleConclusion = async (status) => {
+        if (!chatId) {
+            alert("Error: No chat context found.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await chatService.recordCollaboration(chatId, status);
+            alert(status === 'Collaboration Successful' ? "Collaboration Marked as Successful! 🎉" : "Collaboration Marked as Unsuccessful.");
+
+            // Redirect based on Role
+            const role = user?.role?.toLowerCase();
+            if (role === 'brand') {
+                navigate('/brand/dashboard');
+            } else {
+                navigate('/influencer/dashboard');
+            }
+        } catch (error) {
+            console.error("Failed to record collaboration", error);
+            alert("Failed to update status. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '100vh',
+            textAlign: 'center',
+            padding: '20px',
+            color: 'white',
+            position: 'relative',
+            zIndex: 10
+        }}>
+            <BackgroundEffects />
+
+            <div style={{
+                maxWidth: '600px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                backdropFilter: 'blur(10px)',
+                padding: '40px',
+                borderRadius: '20px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                position: 'relative'
+            }}>
+                <h1 style={{ marginBottom: '20px', fontSize: '2rem' }}>Collaboration Decision</h1>
+                <p style={{ fontSize: '1.2rem', marginBottom: '40px', lineHeight: '1.6', color: '#e0e0e0' }}>
+                    If you want to make your collaboration successful or not, click the buttons accordingly.
+                </p>
+
+                {/* Close Button */}
+                <button
+                    onClick={() => navigate(-1)}
+                    style={{
+                        position: 'absolute',
+                        top: '15px',
+                        right: '15px',
+                        background: 'rgba(255,255,255,0.1)',
+                        border: 'none',
+                        color: 'white',
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '50%',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'background 0.2s',
+                        zIndex: 20
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+                    onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                    title="Close"
+                >
+                    ✕
+                </button>
+
+                <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button
+                        onClick={() => handleConclusion('Collaboration Successful')}
+                        disabled={loading}
+                        style={{
+                            padding: '15px 30px',
+                            fontSize: '1.1rem',
+                            fontWeight: 'bold',
+                            borderRadius: '12px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            background: 'linear-gradient(135deg, #10b981, #059669)',
+                            color: 'white',
+                            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
+                            transition: 'transform 0.2s',
+                            opacity: loading ? 0.7 : 1
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                        {loading ? "Processing..." : "Collaboration Successful ✅"}
+                    </button>
+
+                    <button
+                        onClick={() => handleConclusion('Collaboration Unsuccessful')}
+                        disabled={loading}
+                        style={{
+                            padding: '15px 30px',
+                            fontSize: '1.1rem',
+                            fontWeight: 'bold',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(239, 68, 68, 0.5)',
+                            cursor: 'pointer',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#fca5a5',
+                            transition: 'all 0.2s',
+                            opacity: loading ? 0.7 : 1
+                        }}
+                        onMouseOver={(e) => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                        }}
+                        onMouseOut={(e) => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                    >
+                        Collaboration Unsuccessful ❌
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}

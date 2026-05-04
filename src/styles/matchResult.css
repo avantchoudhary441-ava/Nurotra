@@ -5,7 +5,7 @@
     /* Keep light borders for glass effect even in dark mode usually, or adjust */
 
     /* In Light mode, we might want different glass */
-    --accent-gradient: linear-gradient(135deg, var(--accent-1, #06b6d4), var(--accent-2, #a855f7));
+    --accent-gradient: linear-gradient(90deg, var(--accent-1), var(--accent-2));
     --card-hover-lift: -8px;
 }
 
@@ -233,11 +233,38 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    margin-bottom: 2rem;
+    margin-bottom: 0.5rem;
+    /* Reduced bottom margin to bring button closer */
     /* DOUBLE Drop Shadow for Intense Glow */
     filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.6)) drop-shadow(0 0 20px rgba(168, 85, 247, 0.4));
     text-transform: uppercase;
     letter-spacing: 1px;
+}
+
+/* Platform Profile Button */
+.platform-profile-btn {
+    background: transparent;
+    border: 1px solid var(--accent-1);
+    color: var(--text-main);
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 1.5rem;
+    /* Add spacing below this button before meta */
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.platform-profile-btn:hover {
+    background: var(--accent-1);
+    color: white;
+    /* Ensure text is readable on hover */
+    box-shadow: 0 0 10px var(--accent-1);
+    transform: translateY(-2px);
 }
 
 /* Details Section */
@@ -360,7 +387,27 @@
 /* Responsive */
 @media (max-width: 768px) {
     .match-header {
-        padding: 1rem;
+        padding: 0.8rem 1rem;
+        height: 60px;
+    }
+
+    .brand-name {
+        font-size: 1.1rem;
+    }
+
+    .brand-logo {
+        height: 24px;
+    }
+
+    .theme-btn-minimal {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+    }
+
+    .match-hero {
+        margin-top: 60px;
+        /* Reduced from 100px */
     }
 
     .hero-title {
@@ -369,9 +416,110 @@
 
     .pyramid-container {
         grid-template-columns: 1fr;
+        gap: 1.5rem;
     }
 
     .card-wrapper:nth-child(3) {
         width: 100%;
     }
+
+    .premium-card {
+        padding: 1.5rem;
+    }
+
+    .card-actions-row {
+        flex-direction: column;
+    }
+
+    .inspact-btn {
+        opacity: 1;
+        transform: translateY(0);
+        background: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* ---------------- EXHAUSTION STATE ---------------- */
+.exhaustion-container {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    padding: 2rem 0;
+}
+
+.exhaustion-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--border-subtle);
+    border-radius: 24px;
+    padding: 3rem;
+    text-align: center;
+    max-width: 500px;
+    width: 100%;
+    box-shadow: var(--shadow-soft);
+}
+
+.exhaustion-icon {
+    font-size: 4rem;
+    margin-bottom: 1.5rem;
+    filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.2));
+}
+
+.exhaustion-card h2 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.exhaustion-card p {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+}
+
+.nuro-note {
+    background: rgba(99, 102, 241, 0.05);
+    border-left: 4px solid var(--accent-1);
+    padding: 1.2rem;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    margin-bottom: 2rem;
+}
+
+.nuro-note strong {
+    color: var(--accent-1);
+    display: block;
+    margin-bottom: 0.3rem;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+}
+
+.reset-search-btn {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-main);
+    padding: 1rem 2rem;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.reset-search-btn:hover {
+    background: var(--accent-1);
+    border-color: var(--accent-1);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.3);
 }

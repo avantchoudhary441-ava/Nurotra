@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const Brand = require("../models/Brand");
 const User = require("../models/User");
+const { logEvent } = require("../utils/eventLogger");
+
 const jwt = require("jsonwebtoken");
 
 // Middleware to verify token (Simple version for speed, robust version is in middleware/authMiddleware.js if exists, but we'll implement inline for simplicity or reuse if available)
@@ -25,7 +27,20 @@ const protect = async (req, res, next) => {
 // @desc    Get current user's brand profile
 router.get("/", protect, async (req, res) => {
     try {
-        const brand = await Brand.findOne({ userId: req.user._id }).populate("userId", ["name", "email"]);
+        const brand = await Brand.findOne({ userId: req.user._id }).populate("userId", ["name", "email", "totalCollabs", "successfulCollabs"]);
+        if (!brand) return res.status(404).json({ msg: "Brand profile not found" });
+        res.json(brand);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send("Server Error");
+    }
+});
+
+// @route   GET /api/brand/:userId
+// @desc    Get brand profile by userId
+router.get("/:userId", protect, async (req, res) => {
+    try {
+        const brand = await Brand.findOne({ userId: req.params.userId }).populate("userId", ["name", "email", "totalCollabs", "successfulCollabs"]);
         if (!brand) return res.status(404).json({ msg: "Brand profile not found" });
         res.json(brand);
     } catch (err) {
@@ -38,36 +53,37 @@ router.get("/", protect, async (req, res) => {
 // @desc    Create/Update Brand Profile & Upgrade User Role
 router.post("/", protect, async (req, res) => {
     try {
-        const {
-            nuroId, brandName, website, companyType, contact, industry, contentTypes, budget, profileImg,
-            campaignGoal, influencerCategory, minEngagement, platform, collabDuration, noteToInfluencer
-        } = req.body;
+        const updateData = {};
+        const fields = [
+            "nuroId", "brandName", "website", "companyType", "contact", "industry", "contentTypes", "budget", "profileImg",
+            "campaignGoal", "influencerCategory", "minEngagement", "platform", "collabDuration", "noteToInfluencer"
+        ];
 
-        const brandFields = {
-            userId: req.user._id,
-            nuroId, brandName, website, companyType, contact, industry, contentTypes, budget, profileImg,
-            campaignGoal, influencerCategory, minEngagement, platform, collabDuration, noteToInfluencer
-        };
+        fields.forEach(field => {
+            if (req.body[field] !== undefined) {
+                updateData[field] = req.body[field];
+            }
+        });
 
-        // Check if profile exists
-        let brand = await Brand.findOne({ userId: req.user._id });
+        let brand = await Brand.findOneAndUpdate(
+            { userId: req.user._id },
+            { $set: updateData },
+            { new: true, upsert: true }
+        );
 
-        if (brand) {
-            // Update
-            brand = await Brand.findOneAndUpdate(
-                { userId: req.user._id },
-                { $set: brandFields },
-                { new: true }
-            );
-        } else {
-            // Create
-            brand = new Brand(brandFields);
-            await brand.save();
-
-            // Update User Role only on creation/first time
-            req.user.role = "brand";
-            await req.user.save();
+        // Always sync profileImg to User model if provided
+        if (req.body.profileImg) {
+            req.user.profileImg = req.body.profileImg;
         }
+
+        // Advance User Lifecycle
+        req.user.lifecycleStatus = "onboarded";
+        req.user.lastActivityAt = new Date();
+        req.user.onboardingProgress.profileCompleted = true;
+        await req.user.save();
+
+        // Log event
+        await logEvent(req.user._id, "profile_completed");
 
         res.json({ success: true, brand, role: "brand" });
 
