@@ -29,6 +29,7 @@ const commMessageSchema = new mongoose.Schema({
     platform: {
         type: String,
         enum: ["email", "slack", "whatsapp"],
+        lowercase: true,
         default: "email"
     },
     subject: {

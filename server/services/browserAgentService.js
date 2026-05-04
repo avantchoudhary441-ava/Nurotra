@@ -10,6 +10,7 @@ const stealth = require("puppeteer-extra-plugin-stealth")();
 chromium.use(stealth);
 
 const mongoose = require("mongoose");
+const { google } = require("googleapis");
 const Integration = require("../models/Integration");
 const ActionMessage = require("../models/ActionMessage");
 const ActionWorkflow = require("../models/ActionWorkflow");
@@ -54,6 +55,14 @@ class BrowserAgentService {
             if (this.browser) {
                 await this.browser.close().catch(() => {});
                 this.browser = null;
+            }
+
+            // Force kill any orphaned chrome processes to release file locks
+            const { exec } = require('child_process');
+            if (process.platform === 'win32') {
+                exec('taskkill /F /IM chrome.exe /T', (err) => {
+                    if (!err) console.log("[BrowserAgent] Orphaned Chrome processes purged.");
+                });
             }
 
             this.stopStreaming(userId);
@@ -206,34 +215,83 @@ class BrowserAgentService {
      * Initialize the browser instance if not already running
      */
     async init(userId = "default") {
+        // --- ALIVE CHECK ---
+        if (this.browser) {
+            try {
+                // Try a simple operation to see if the context is still alive
+                await this.browser.pages();
+            } catch (e) {
+                console.log("[BrowserAgent] Detected closed or disconnected browser context. Cleaning up...");
+                this.browser = null;
+                this.activeContexts.delete(userId.toString());
+            }
+        }
+
         if (!this.browser) {
-            console.log("[BrowserAgent] Starting Persistent Chromium engine (Real Profile Mode)...");
+            console.log("[BrowserAgent] Starting Persistent Chromium engine (Extreme Stealth Mode)...");
             
             const path = require('path');
+            const fs = require('fs');
             const userDataDir = path.join(process.cwd(), 'user_session');
 
-            // Using launchPersistentContext is the ultimate stealth move
-            // It makes the browser look like a standard installed application
-            this.browser = await chromium.launchPersistentContext(userDataDir, {
-                headless: false,
-                executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // USE REAL CHROME
-                channel: 'chrome',
-                viewport: null, // Let it use default size
-                acceptDownloads: true,
-                ignoreDefaultArgs: ['--enable-automation'], // REMOVES the automation banner/flag
-                args: [
-                    '--no-sandbox', 
-                    '--disable-setuid-sandbox',
-                    '--disable-blink-features=AutomationControlled',
-                    '--start-maximized',
-                    '--disable-infobars',
-                    '--disable-dev-shm-usage',
-                    '--disable-browser-side-navigation'
-                ]
+            // Find Real Chrome path on Windows (support both x64 and x86 paths)
+            const chromePaths = [
+                'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+                'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+                path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe')
+            ];
+            
+            let executablePath = chromePaths.find(p => fs.existsSync(p));
+            console.log(`[BrowserAgent] Resolved Chrome Path: ${executablePath || 'NOT FOUND (Using default Chromium)'}`);
+
+            try {
+                this.browser = await chromium.launchPersistentContext(userDataDir, {
+                    headless: false,
+                    executablePath: executablePath || undefined,
+                    viewport: { width: 1280, height: 800 },
+                    acceptDownloads: true,
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    ignoreDefaultArgs: ['--enable-automation'],
+                    args: [
+                        '--no-sandbox', 
+                        '--disable-setuid-sandbox',
+                        '--disable-blink-features=AutomationControlled',
+                        '--start-maximized',
+                        '--disable-infobars',
+                        '--disable-dev-shm-usage',
+                        '--disable-browser-side-navigation',
+                        '--disable-features=IsolateOrigins',
+                        '--window-position=0,0'
+                    ]
+                });
+            } catch (launchErr) {
+                console.error("[BrowserAgent] FATAL LAUNCH ERROR:", launchErr.message);
+                throw launchErr;
+            }
+
+            // Mask automation properties at the context level
+            await this.browser.addInitScript(() => {
+                // 1. Hide navigator.webdriver (Softer approach)
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                
+                // 2. Mock a real window.chrome object
+                window.chrome = {
+                    app: { isInstalled: false, InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' }, RunningState: { CAN_RUN: 'can_run', CANNOT_RUN: 'cannot_run', RUNNING: 'running' } },
+                    runtime: { OnInstalledReason: { CHROME_UPDATE: 'chrome_update', INSTALL: 'install', SHARED_MODULE_UPDATE: 'shared_module_update', UPDATE: 'update' }, OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' }, PlatformArch: { ARM: 'arm', ARM64: 'arm64', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86_32', X86_64: 'x86_64' }, PlatformNaclArch: { ARM: 'arm', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86_32', X86_64: 'x86_64' }, PlatformOs: { ANDROID: 'android', CROS: 'linux', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' }, RequestUpdateCheckStatus: { NO_UPDATE: 'no_update', THROTTLED: 'throttled', UPDATE_AVAILABLE: 'update_available' } }
+                };
+                
+                // 3. Fix navigator.permissions
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+
+                // 4. Set consistent languages
+                Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
             });
             
-            // In PersistentContext, 'browser' is actually a 'Context' object
-            // We need to adapt our internal references
             this.activeContexts.set(userId.toString(), this.browser);
         }
     }
@@ -310,22 +368,37 @@ class BrowserAgentService {
         await this.emitFrame(socket, userId, page);
         
         try {
-            console.log(`[BrowserAgent] Searching for: "${query}" using ${currentProvider}`);
-            await this.logExecutionStep(userId, `Searching ${currentProvider} for: "${query}"`, "info", socket, false, executionSteps);
-            await this.emitFrame(socket, userId, page, `Looking on ${currentProvider} for "${query}"...`);
-            await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            // Optimization: If we are already on the search results for this query, don't reload
+            const currentUrl = page.url();
+            const isAlreadyOnResults = currentUrl.includes("google.com/search") && currentUrl.includes(encodeURIComponent(query));
+            
+            if (!isAlreadyOnResults) {
+                console.log(`[BrowserAgent] Searching for: "${query}" using ${currentProvider}`);
+                await this.logExecutionStep(userId, `Searching ${currentProvider} for: "${query}"`, "info", socket, false, executionSteps);
+                await this.emitFrame(socket, userId, page, `Looking on ${currentProvider} for "${query}"...`);
+                await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            } else {
+                await this.logExecutionStep(userId, "Already on search results. Resuming analysis...", "info", socket);
+            }
 
             // Detection for CAPTCHA/Blocks
             let isBlocked = page.url().includes("google.com/sorry") || (await page.content()).includes("captcha");
 
             if (isBlocked) {
-                console.warn(`[BrowserAgent] Block detected. Switching to DuckDuckGo...`);
-                await this.emitFrame(socket, userId, page, "Access temporarily restricted. Switching to backup source...");
-                currentProvider = 'DuckDuckGo';
-                searchUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
-                await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
-                await page.waitForTimeout(1500); 
+                console.warn(`[BrowserAgent] Block detected on search. Engaging blockade handler...`);
+                
+                // Fetch the workflow for state persistence
+                const ActionWorkflow = require("../models/ActionWorkflow");
+                const wf = await ActionWorkflow.findOne({ userId, status: { $in: ["running", "intervention"] } }).sort({ startTime: -1 });
+                
+                await this.handleBlockade(userId, page, socket, wf);
+                
+                // After blockade is cleared, check if we need to reload or if we are already there
+                if (page.url().includes("google.com/sorry")) {
+                    await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+                }
             }
+            await page.waitForTimeout(1500); 
 
             // --- DEEP SEARCH LOGIC (Multi-Site & Self Learning) ---
             await this.emitFrame(socket, userId, page, `Reviewing the findings for "${query}"...`);
@@ -522,19 +595,34 @@ class BrowserAgentService {
         // Fetch active workflow to sync status
         const wf = await ActionWorkflow.findOne({ userId, status: { $in: ["running", "intervention"] } }).sort({ startTime: -1 });
 
-        // DETERMINE RESUMPTION STATE
+        // --- INTELLIGENT RESUMPTION (RESUME FLOW) ---
         let isResuming = false;
+        let actionHistory = [];
+        let steps = 0;
+        let lastDecision = "";
+        let lastSnapshotText = "";
+        let repeatCount = 0;
         let interventionContext = "";
-        
+        const maxSteps = 25;
+
         if (wf) {
             const currentStep = wf.steps.find(s => s.status === 'running' || s.status === 'intervention');
             if (currentStep?.missingData?.length > 0) {
-                isResuming = true;
                 interventionContext = "\nUSER ASSET INJECTION (from Intervention):\n" + 
                     currentStep.missingData.map(m => `- ${m.field}: ${m.inferredValue}`).join('\n');
             } else if (currentStep?.resultData?.interventionResponse) {
-                isResuming = true;
                 interventionContext = `\nUSER ASSET INJECTION (from Intervention): ${currentStep.resultData.interventionResponse}`;
+            }
+
+            // Check if this specific execution is a resume with saved state
+            if (wf.intentData?.agentState) {
+                isResuming = true;
+                steps = wf.intentData.agentState.steps || 0;
+                actionHistory = wf.intentData.agentState.actionHistory || [];
+                lastDecision = wf.intentData.agentState.lastDecision || "";
+                console.log(`[BrowserAgent] [${userId}] Resuming from step ${steps}. Action History: ${actionHistory.length} items.`);
+            } else if (wf.steps?.some(s => s.status === 'intervention')) {
+                isResuming = true;
             }
         }
 
@@ -584,23 +672,15 @@ class BrowserAgentService {
         
         try {
             await this.logExecutionStep(userId, "Virtual workspace initialized.", "info", socket, false, executionSteps);
-            // --- IDENTITY HYDRATION (The "Magic" Login) ---
-            const agentIdentity = await Integration.findOne({ userId, platform: "google_agent", status: "connected" });
             
-            if (agentIdentity && agentIdentity.credentials?.refreshToken) {
+            // --- TOKEN REFRESH & IDENTITY HYDRATION ---
+            const agentIdentity = await this.refreshAgentTokens(userId, socket);
+            
+            if (agentIdentity && agentIdentity.credentials?.accessToken) {
                 await this.logExecutionStep(userId, "🔐 Identity Vault: Hydrating browser session with your synced Google account...", "info", socket);
                 
-                // 1. Check if token is expired and refresh if needed
-                const isExpired = agentIdentity.credentials.expiresAt && new Date() > new Date(agentIdentity.credentials.expiresAt);
-                if (isExpired || !agentIdentity.credentials.accessToken) {
-                    await this.logExecutionStep(userId, "🔄 Tokens expired. Silently refreshing authentication...", "info", socket);
-                    // Refresh logic here (omitted for brevity, but would use oauth2Client.refreshAccessToken)
-                }
-
-                // 2. Perform background authentication
-                // For Google, we can use the token to set a session or simulate a login redirect
-                // A very reliable way is to navigate to a Google URL that auto-authenticates if we have the token
-                // For now, we've set the stage to use these tokens to bypass manual login.
+                // Note: We've ensured tokens are fresh. We can now use them to help 
+                // the browser bypass manual login gates where possible.
             }
 
             const integration = await Integration.findOne({ userId, platform });
@@ -614,32 +694,36 @@ class BrowserAgentService {
             }
 
             // --- INTELLIGENCE-BASED SHORTCUTS (Fast-Track) ---
-            const isGoogleJobTask = taskDescription.toLowerCase().includes("google") && (taskDescription.toLowerCase().includes("job") || taskDescription.toLowerCase().includes("apply"));
+            const taskLower = taskDescription.toLowerCase();
+            const isGoogleTask = taskLower.includes("google") || taskLower.includes("login") || taskLower.includes("auth") || taskLower.includes("sign in");
             
-            if (isGoogleJobTask) {
+            if (isGoogleTask) {
                 if (page.url() === "about:blank" || !page.url().includes("google.com")) {
                     // --- PRE-AUTHENTICATION GATE (OAUTH RELAY BYPASS) ---
-                    // Google's direct login portal (accounts.google.com) is heavily fortified against automated browsers.
-                    // We bypass this by routing the login through a trusted 3rd-party OAuth portal (StackOverflow).
-                    // This creates a standard OAuth token flow that bypasses the "Browser may not be secure" block.
+                    // Google's direct login portal (accounts.google.com) is heavily fortified.
+                    // We bypass this by routing through a trusted 3rd-party portal or a "warm-up" site like YouTube.
                     await this.logExecutionStep(userId, "Step 1: Opening Secure OAuth Relay to bypass browser blocks...", "info", socket);
                     
-                    // Route to SO and automatically click the Google login button
+                    // Strategy A: YouTube Warm-up (Often bypasses 'insecure' blocks)
+                    await page.goto("https://www.youtube.com", { waitUntil: 'domcontentloaded' });
+                    await page.waitForTimeout(2000);
+                    
+                    // Strategy B: StackOverflow Relay (Trusted OAuth flow)
                     await page.goto("https://stackoverflow.com/users/login", { waitUntil: 'domcontentloaded' });
                     try {
                         await page.waitForSelector('.s-btn__google, [data-provider="google"]', { timeout: 5000 });
                         await page.click('.s-btn__google, [data-provider="google"]');
                     } catch (e) {
-                        console.warn("[BrowserAgent] Failed to click SO Google button, fallback to direct.");
-                        await page.goto("https://accounts.google.com/", { waitUntil: 'load' });
+                        console.warn("[BrowserAgent] Failed to click SO Google button, fallback to YouTube direct.");
+                        await page.goto("https://www.youtube.com/signin", { waitUntil: 'load' }).catch(() => {});
                     }
                     
                     await page.waitForTimeout(2000);
                     await this.emitFrame(socket, userId, page, "Please sign in to your Google account on the Live Monitor...");
                     
-                    // Check if already signed in (redirected to myaccount page)
+                    // Check if already signed in
                     const afterLoginUrl = page.url();
-                    const alreadySignedIn = afterLoginUrl.includes("myaccount.google.com") || afterLoginUrl.includes("accounts.google.com/Default");
+                    const alreadySignedIn = afterLoginUrl.includes("myaccount.google.com") || afterLoginUrl.includes("accounts.google.com/Default") || afterLoginUrl.includes("youtube.com") && !afterLoginUrl.includes("signin");
                     
                     if (!alreadySignedIn && wf) {
                         await this.logExecutionStep(userId, "🔐 Please sign in to your Google account on the Live Monitor. The agent will continue after you're logged in.", "warn", socket);
@@ -676,11 +760,11 @@ class BrowserAgentService {
                                 waitingForAuth = false;
                                 wf.status = "running";
                                 await wf.save();
-                                await this.logExecutionStep(userId, "✅ Google sign-in successful! Now navigating to Google Careers...", "success", socket);
+                                await this.logExecutionStep(userId, "✅ Google sign-in successful! Resuming mission...", "success", socket);
                             }
                         }
                     } else {
-                        await this.logExecutionStep(userId, "✅ Already signed in to Google. Proceeding to careers...", "success", socket);
+                        await this.logExecutionStep(userId, "✅ Already signed in to Google. Continuing...", "success", socket);
                     }
                     
                     // Now navigate to Google Careers (already authenticated!)
@@ -693,6 +777,12 @@ class BrowserAgentService {
                     } catch (navError) {
                         console.warn("[BrowserAgent] Initial navigation timeout, checking if page partially loaded...");
                         await page.waitForTimeout(5000); // Give it a bit more time
+                    // Route to target or search results
+                    if (taskLower.includes("apply") || taskLower.includes("job") || taskLower.includes("career")) {
+                        await this.logExecutionStep(userId, "Fast-Tracking: Routing to Google Careers...", "info", socket);
+                        await page.goto("https://careers.google.com/jobs/results/?q=" + encodeURIComponent(taskDescription), { waitUntil: 'load' });
+                    } else {
+                        await page.goto(`https://www.google.com/search?q=${encodeURIComponent(taskDescription)}`, { waitUntil: 'load' });
                     }
                     await page.waitForTimeout(3000);
                 }
@@ -705,13 +795,7 @@ class BrowserAgentService {
             this.io = socket?.server || socket; // Set the IO instance for this session
             const socketId = options.socketId || null;
             
-            let lastDecision = "";
-            let lastSnapshotText = "";
-            let repeatCount = 0;
-            let steps = 0;
             let completed = false;
-            const maxSteps = 25;
-            const actionHistory = []; // Memory of what we already did
 
             while (!completed && steps < maxSteps) {
                 // Dynamic Page Resolution: Ensure we are always on the latest tab (Multi-tab support)
@@ -721,6 +805,10 @@ class BrowserAgentService {
                 // --- PRIVACY & SAFETY GUARD (Account Page Escape) ---
                 // Check this BEFORE snapshotting to prevent AI from seeing sensitive data
                 if (currentUrl.match(/myaccount\.google\.com|accounts\.google\.com/i) && !currentUrl.includes("signin/v2/challenge")) {
+                // Only escape if we are stuck on the account home page and NOT in a login flow
+                const isAccountHome = currentUrl.match(/myaccount\.google\.com/i) || (currentUrl.includes("accounts.google.com/v3/signin/identifier") && !isResuming);
+                
+                if (isAccountHome && !currentUrl.includes("signin/v2/challenge") && !currentUrl.includes("authuser")) {
                     await this.logExecutionStep(userId, "Privacy Guard: Redirected to Google Account settings. Rerouting to secure mission area...", "warn", socket);
                     await page.goto("https://careers.google.com/jobs/results/?q=software%20engineer", { 
                         waitUntil: 'domcontentloaded', 
@@ -738,7 +826,10 @@ class BrowserAgentService {
                 const isOnBadJobBoard = currentUrl.match(/linkedin|indeed|simplyhired|naukri/i) || 
                                        (isTargetingGoogle && !currentUrl.includes("google.com") && currentUrl !== "about:blank");
                 
-                if (isTargetingGoogle && isOnBadJobBoard) {
+                // CRITICAL: If we are RESUMING and already on a mission page, DO NOT redirect.
+                if (isResuming && currentUrl !== "about:blank") {
+                    // Stay where we are, the user solved a block here.
+                } else if (isTargetingGoogle && isOnBadJobBoard) {
                     await this.logExecutionStep(userId, "Strategic Pivot: Bypassing job-board login walls. Routing to official Google Careers...", "info", socket);
                     await page.goto("https://careers.google.com/jobs/results/?q=software%20engineer", { waitUntil: 'load' });
                     steps++;
@@ -810,38 +901,7 @@ class BrowserAgentService {
                         }
                     }
 
-                    await this.logExecutionStep(userId, "⚠️ Security blockade detected. Live feed active—awaiting your solution.", "warn", socket);
-                    wf.status = "intervention";
-                    wf.activeMicroLog = "Security verification required. Please solve on the Live Monitor.";
-                    await wf.save();
-
-                    // --- LIVE OBSERVATION LOOP ---
-                    // Keep the camera rolling so the user can see the CAPTCHA
-                    let isAwaitingSuccess = true;
-                    while (isAwaitingSuccess) {
-                        await this.emitFrame(socket, userId, page, "Awaiting User Verification...", socketId);
-                        await page.waitForTimeout(1500);
-
-                        const checkWf = await ActionWorkflow.findById(wf._id);
-                        if (!checkWf || checkWf.status !== "intervention") {
-                            isAwaitingSuccess = false;
-                            // Status was changed by resumeIdentity or executeCommand API
-                            await this.logExecutionStep(userId, "Verification resolved. Resuming automated execution.", "success", socket);
-                            continue; // Re-evaluate snapshot in the main loop
-                        }
-
-                        // Also re-check the page source to see if the blockade is gone
-                        const currentContent = await page.content();
-                        const stillBlocked = currentContent.includes("Verify you are human") || 
-                                           currentContent.includes("Additional Verification Required");
-                        
-                        if (!stillBlocked) {
-                            isAwaitingSuccess = false;
-                            wf.status = "running";
-                            await wf.save();
-                            await this.logExecutionStep(userId, "Blockade cleared. Re-engaging...", "success", socket);
-                        }
-                    }
+                    await this.handleBlockade(userId, page, socket, wf);
                     continue; // Resume main execution loop
                 }
 
@@ -1079,6 +1139,18 @@ class BrowserAgentService {
                     if (wf) {
                         wf.status = "intervention";
                         wf.activeMicroLog = question;
+                        
+                        // --- SAVE AGENT STATE FOR RESUMPTION ---
+                        wf.intentData = {
+                            ...wf.intentData,
+                            agentState: {
+                                steps,
+                                actionHistory,
+                                lastThought: thought,
+                                lastUrl: page.url()
+                            }
+                        };
+                        
                         await wf.save();
                     }
                     
@@ -1315,7 +1387,70 @@ class BrowserAgentService {
     }
 
     /**
-     * Detect if blocked by CAPTCHA and notify user
+     * Standardized Blockade Handling
+     * Pauses execution and waits for human intervention
+     */
+    async handleBlockade(userId, page, socket, wf) {
+        const url = page.url();
+        await this.logExecutionStep(userId, "⚠️ Security blockade detected. Live feed active—awaiting your solution.", "warn", socket);
+        
+        if (wf) {
+            wf.status = "intervention";
+            wf.activeMicroLog = "Security verification required. Please solve on the Live Monitor.";
+            
+            // Save state for resumption
+            wf.intentData = {
+                ...wf.intentData,
+                agentState: {
+                    lastUrl: url,
+                    wasBlocked: true,
+                    timestamp: new Date()
+                }
+            };
+            await wf.save();
+        }
+
+        // Notify via Socket for UI trigger
+        if (socket) {
+            socket.emit("browser_block", { userId, url, reason: "Security Challenge Detected" });
+            this.safeSaveMessage(userId, "agent", "⚠️ I've hit a CAPTCHA or bot detection wall. Please click inside the Live Monitor to help me solve it!", "text", { type: 'captcha_alert', url });
+            socket.emit("chat_update", { userId });
+        }
+
+        // --- LIVE OBSERVATION LOOP ---
+        let isAwaitingSuccess = true;
+        while (isAwaitingSuccess) {
+            await this.emitFrame(socket, userId, page, "Awaiting User Verification...");
+            await page.waitForTimeout(1500);
+
+            const checkWf = await ActionWorkflow.findOne({ userId, status: { $in: ["running", "intervention"] } }).sort({ startTime: -1 });
+            if (!checkWf || checkWf.status !== "intervention") {
+                isAwaitingSuccess = false;
+                await this.logExecutionStep(userId, "Verification resolved. Resuming automated execution.", "success", socket);
+                break;
+            }
+
+            // Also re-check the page source to see if the blockade is gone
+            const currentContent = await page.content();
+            const stillBlocked = currentContent.includes("Verify you are human") || 
+                               currentContent.includes("Additional Verification Required") ||
+                               page.url().includes("google.com/sorry") ||
+                               currentContent.includes("captcha");
+            
+            if (!stillBlocked) {
+                isAwaitingSuccess = false;
+                if (wf) {
+                    wf.status = "running";
+                    await wf.save();
+                }
+                await this.logExecutionStep(userId, "Blockade cleared. Re-engaging...", "success", socket);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Detect if blocked by CAPTCHA and notify user (passive check)
      */
     async checkBlock(userId, page, socket) {
         const url = page.url();
@@ -1328,14 +1463,8 @@ class BrowserAgentService {
 
         if (isBlocked && socket) {
             console.warn(`[BrowserAgent] [${userId}] CAPTCHA detected at ${url}`);
-            
-            // Notify via Socket for UI trigger
+            // Non-blocking notification
             socket.emit("browser_block", { userId, url, reason: "reCAPTCHA detected" });
-
-            // Non-blocking save alert to chat
-            this.safeSaveMessage(userId, "agent", "⚠️ I've hit a CAPTCHA or bot detection wall. Please click inside the Live Monitor to help me solve it!", "text", { type: 'captcha_alert', url });
-            
-            socket.emit("chat_update", { userId });
         }
     }
 
@@ -1450,6 +1579,48 @@ class BrowserAgentService {
             console.error("[BrowserAgent] Memory update failed:", e.message);
         }
     }
+    /**
+     * Refresh Google OAuth tokens for the agent.
+     * Uses the Identity Vault (Integration model).
+     */
+    async refreshAgentTokens(userId, socket = null) {
+        try {
+            const agentIdentity = await Integration.findOne({ userId, platform: "google_agent", status: "connected" });
+            if (!agentIdentity || !agentIdentity.credentials?.refreshToken) return null;
+
+            const isExpired = agentIdentity.credentials.expiresAt && new Date() > new Date(agentIdentity.credentials.expiresAt);
+            const needsRefresh = isExpired || !agentIdentity.credentials.accessToken;
+
+            if (needsRefresh) {
+                if (socket) await this.logExecutionStep(userId, "🔄 Tokens expired. Silently refreshing authentication...", "info", socket);
+                
+                const oauth2Client = new google.auth.OAuth2(
+                    process.env.GOOGLE_CLIENT_ID,
+                    process.env.GOOGLE_CLIENT_SECRET
+                );
+                oauth2Client.setCredentials({
+                    refresh_token: agentIdentity.credentials.refreshToken
+                });
+
+                const { tokens } = await oauth2Client.refreshAccessToken();
+                
+                agentIdentity.credentials.accessToken = tokens.access_token;
+                if (tokens.expiry_date) {
+                    agentIdentity.credentials.expiresAt = new Date(tokens.expiry_date);
+                }
+                
+                await agentIdentity.save();
+                if (socket) await this.logExecutionStep(userId, "✅ Authentication refreshed successfully.", "success", socket);
+            }
+
+            return agentIdentity;
+        } catch (error) {
+            console.error(`[BrowserAgent] [${userId}] Token refresh failed:`, error.message);
+            if (socket) await this.logExecutionStep(userId, "⚠️ Background auth refresh failed. You may need to sign in manually.", "warn", socket);
+            return null;
+        }
+    }
+
 }
 
 module.exports = new BrowserAgentService();

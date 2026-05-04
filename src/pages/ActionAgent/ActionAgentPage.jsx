@@ -64,6 +64,9 @@ const ActionAgentPage = () => {
     const [lastPulse, setLastPulse] = useState(null);
     const [expandedMessages, setExpandedMessages] = useState({}); // Tracking expanded cards
     const [executionLogs, setExecutionLogs] = useState([]); // Live activity logs
+    const [isExtensionConnected, setIsExtensionConnected] = useState(false);
+    const [extensionToken, setExtensionToken] = useState(null);
+    const [showExtensionModal, setShowExtensionModal] = useState(false);
 
     // Vertical Resizing Logic
     useEffect(() => {
@@ -139,6 +142,34 @@ const ActionAgentPage = () => {
                 "Generate a weekly report",
                 "What happened in tech news today?"
             ]);
+        }
+    };
+
+    const fetchExtensionStatus = async () => {
+        try {
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            if (!token) return;
+            const res = await fetch("http://localhost:5000/api/action-agent/extension/status", {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) setIsExtensionConnected(data.isConnected);
+        } catch (e) {
+            console.error("Extension status check failed", e);
+        }
+    };
+
+    const fetchExtensionToken = async () => {
+        try {
+            const token = (JSON.parse(localStorage.getItem('nurotra_user') || '{}') || {}).token;
+            if (!token) return;
+            const res = await fetch("http://localhost:5000/api/action-agent/extension-token", {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) setExtensionToken(data.token);
+        } catch (e) {
+            console.error("Extension token fetch failed", e);
         }
     };
 
@@ -231,6 +262,8 @@ const ActionAgentPage = () => {
         fetchTasks(token);
         fetchSuggestions(token);
         fetchHistory(token);
+        fetchExtensionStatus();
+        fetchExtensionToken();
 
         const userData = localStorage.getItem('nurotra_user');
         if (userData) {
@@ -284,6 +317,7 @@ const ActionAgentPage = () => {
     useEffect(() => {
         const pollInterval = setInterval(() => {
             fetchTasks();
+            fetchExtensionStatus();
         }, 3000);
         return () => clearInterval(pollInterval);
     }, []);
@@ -552,8 +586,6 @@ const ActionAgentPage = () => {
     const renderStructuredContent = (text, animate = false) => {
         if (!text) return null;
 
-            const isHeadline = (trimmed === trimmed.toUpperCase() && trimmed.length > 4 && !/^[•\-\*⚠]/.test(trimmed) && !trimmed.includes(':'))
-                || trimmed.startsWith('✅') || trimmed.startsWith('📌');
         // Split into paragraphs first (double newline = paragraph break)
         const paragraphs = text.split(/\n{2,}/);
 
@@ -561,51 +593,42 @@ const ActionAgentPage = () => {
             const lines = para.split('\n').map(l => l.trim()).filter(Boolean);
             if (lines.length === 0) return null;
 
-            // Check if this paragraph is a bullet list
-            const isBulletBlock = lines.every(l => /^[•\-\*]/.test(l));
-
-            // Check if it's a section header (✅ 📌 ⚠️ or ALL CAPS short line)
-            const isHeader = lines.length === 1 && (
-                lines[0].startsWith('✅') ||
-                lines[0].startsWith('📌') ||
-                lines[0].startsWith('⚠') ||
-                (lines[0] === lines[0].toUpperCase() && lines[0].length > 3 && lines[0].length < 60 && !/[a-z]/.test(lines[0]))
-            );
+            const firstLine = lines[0];
 
             // Check if it's a "Source:" line
-            const isSource = lines.length === 1 && /^source:/i.test(lines[0]);
-
+            const isSource = lines.length === 1 && /^source:/i.test(firstLine);
             if (isSource) {
                 return (
                     <div key={pIdx} style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #1e1e1e', fontSize: '11px', color: '#444', letterSpacing: '0.3px' }}>
-                        {renderInline(lines[0])}
+                        {renderInline(firstLine)}
                     </div>
                 );
             }
 
-            if (trimmed.startsWith('⚠')) {
-                return <div key={i} style={{ color: '#b8986a', fontSize: '12px', marginBottom: 4 }}>
-                    {animate ? <TypewriterText text={trimmed} speed={10} /> : trimmed}
-                </div>;
-            }
+            // Check if it's a section header (✅ 📌 ⚠ or ALL CAPS short line)
+            const isHeader = lines.length === 1 && (
+                firstLine.startsWith('✅') ||
+                firstLine.startsWith('📌') ||
+                firstLine.startsWith('⚠') ||
+                (firstLine === firstLine.toUpperCase() && firstLine.length > 3 && firstLine.length < 60 && !/[a-z]/.test(firstLine))
+            );
 
-            if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*') || trimmed.startsWith('  •')) {
-                const content = trimmed.replace(/^[•\-\*]\s*|^\s+•\s*/, '');
             if (isHeader) {
                 return (
                     <div key={pIdx} style={{ fontWeight: '700', fontSize: '13px', color: '#d0d0d0', marginTop: pIdx > 0 ? 18 : 0, marginBottom: 8, letterSpacing: '0.2px' }}>
-                        {animate ? <TypewriterText text={lines[0]} speed={10} /> : lines[0]}
+                        {animate ? <TypewriterText text={firstLine} speed={10} /> : firstLine}
                     </div>
                 );
             }
 
-            if (trimmed.includes(':') && !trimmed.startsWith('Source')) {
-                const colonIdx = trimmed.indexOf(':');
-                const key = trimmed.substring(0, colonIdx).trim();
-                const value = trimmed.substring(colonIdx + 1).trim();
+            // Check for key-value pair in single line
+            if (lines.length === 1 && firstLine.includes(':') && !firstLine.startsWith('Source')) {
+                const colonIdx = firstLine.indexOf(':');
+                const key = firstLine.substring(0, colonIdx).trim();
+                const value = firstLine.substring(colonIdx + 1).trim();
                 if (key && value) {
                     return (
-                        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                        <div key={pIdx} style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap', alignItems: 'baseline' }}>
                             <span style={{ color: '#666', fontWeight: '500', fontSize: '11px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{key}</span>
                             <span style={{ color: '#e0e0e0', fontSize: '13px' }}>
                                 {animate ? <TypewriterText text={value} speed={15} /> : value}
@@ -615,18 +638,22 @@ const ActionAgentPage = () => {
                 }
             }
 
+            // Check if this paragraph is a bullet list
+            const isBulletBlock = lines.every(l => /^[•\-\*]/.test(l));
             if (isBulletBlock) {
                 return (
                     <div key={pIdx} style={{ marginBottom: 10 }}>
                         {lines.map((line, lIdx) => {
                             const content = line.replace(/^[•\-\*]\s*/, '');
                             return (
-                                <div key={lIdx} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 5 }}>
-                                    <span style={{ color: '#3d3d3d', fontSize: '14px', lineHeight: '1.5', flexShrink: 0, marginTop: 1 }}>–</span>
-                                    <span style={{ fontSize: '14px', color: '#c0c0c0', lineHeight: '1.65' }}>
-                                        {animate ? <TypewriterText text={content} speed={12} /> : renderInline(content)}
-                                    </span>
-                                </div>
+                                (
+                                    <div key={lIdx} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 5 }}>
+                                        <span style={{ color: '#3d3d3d', fontSize: '14px', lineHeight: '1.5', flexShrink: 0, marginTop: 1 }}>–</span>
+                                        <span style={{ fontSize: '14px', color: '#c0c0c0', lineHeight: '1.65' }}>
+                                            {animate ? <TypewriterText text={content} speed={12} /> : renderInline(content)}
+                                        </span>
+                                    </div>
+                                )
                             );
                         })}
                     </div>
@@ -949,6 +976,35 @@ const ActionAgentPage = () => {
                                 <Menu size={18} style={{ color: isSidebarOpen ? '#a29bfe' : '#666' }} />
                             </button>
                             <span style={{ fontSize: '13px', fontWeight: '800', letterSpacing: '1px', color: '#fff' }}>COMMAND CENTER</span>
+                            
+                            {/* --- Extension Connection Badge --- */}
+                            <div 
+                                onClick={() => setShowExtensionModal(true)}
+                                style={{ 
+                                    marginLeft: 20, 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: 8, 
+                                    background: isExtensionConnected ? 'rgba(0, 255, 136, 0.05)' : 'rgba(108, 92, 231, 0.05)',
+                                    padding: '5px 12px',
+                                    borderRadius: '20px',
+                                    border: `1px solid ${isExtensionConnected ? 'rgba(0, 255, 136, 0.2)' : 'rgba(108, 92, 231, 0.2)'}`,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
+                                }}
+                                className="extension-badge-hover"
+                            >
+                                <div style={{ 
+                                    width: 6, height: 6, borderRadius: '50%', 
+                                    background: isExtensionConnected ? '#00ff88' : '#6c5ce7',
+                                    boxShadow: isExtensionConnected ? '0 0 8px #00ff88' : 'none',
+                                    animation: isExtensionConnected ? 'pulse 2s infinite' : 'none'
+                                }} />
+                                <span style={{ fontSize: '9px', fontWeight: '700', color: isExtensionConnected ? '#00ff88' : '#a29bfe', letterSpacing: '0.5px' }}>
+                                    {isExtensionConnected ? 'EXTENSION CONNECTED' : 'CONNECT EXTENSION'}
+                                </span>
+                            </div>
+
                             {activeTasks.length > 0 && (
                                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
                                     <div className={`status-pill ${activeTasks[0].status}`}>
@@ -1192,6 +1248,84 @@ const ActionAgentPage = () => {
                     </div>
                 </div>
             </div>
+
+            {/* --- Extension Setup Modal --- */}
+            <AnimatePresence>
+                {showExtensionModal && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="extension-modal-overlay"
+                        onClick={() => setShowExtensionModal(false)}
+                    >
+                        <motion.div 
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="extension-modal-content"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="modal-header">
+                                <div className="modal-title-area">
+                                    <Globe size={20} color="#6c5ce7" />
+                                    <h2>Browser Agent Setup</h2>
+                                </div>
+                                <button className="modal-close" onClick={() => setShowExtensionModal(false)}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div className="modal-body">
+                                <div className="setup-step">
+                                    <div className="step-number">1</div>
+                                    <div className="step-text">
+                                        <h3>Install Nurotra Extension</h3>
+                                        <p>Load the extension from the <code>nurotra-extension</code> folder into Chrome using "Load unpacked".</p>
+                                    </div>
+                                </div>
+
+                                <div className="setup-step">
+                                    <div className="step-number">2</div>
+                                    <div className="step-text">
+                                        <h3>Zero-Touch Sync</h3>
+                                        <p>Just stay logged into this dashboard. The extension will automatically detect your session and link itself. No manual setup required.</p>
+                                    </div>
+                                </div>
+
+                                <div className="setup-step">
+                                    <div className="step-number">3</div>
+                                    <div className="step-text">
+                                        <h3>Ready to Apply</h3>
+                                        <p>Once the status below turns green, you can start asking Nurotra to apply for jobs on LinkedIn, Naukri, or Indeed!</p>
+                                    </div>
+                                </div>
+
+                                <div style={{ marginTop: 10, padding: 15, background: 'rgba(108, 92, 231, 0.05)', borderRadius: '12px', border: '1px solid rgba(108, 92, 231, 0.1)' }}>
+                                    <p style={{ fontSize: '11px', color: '#666', marginBottom: 8 }}>MANUAL FALLBACK (If auto-sync fails)</p>
+                                    <div className="token-box" style={{ marginTop: 0 }}>
+                                        <code>{extensionToken || "Generating token..."}</code>
+                                        <button 
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(extensionToken);
+                                                alert("Token copied to clipboard!");
+                                            }}
+                                            className="copy-btn"
+                                        >
+                                            COPY
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="connection-status-footer">
+                                    <div className={`status-indicator ${isExtensionConnected ? 'connected' : 'disconnected'}`} />
+                                    <span>{isExtensionConnected ? 'CONNECTED: Ready for autonomous applications' : 'NOT CONNECTED: Waiting for extension link...'}</span>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nurotra Job Agent</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            width: 300px;
+            background: #0d0d1a;
+            color: #fff;
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 13px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 16px;
+            border-bottom: 1px solid rgba(108, 92, 231, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 14px;
+            color: white;
+        }
+
+        .header-text h1 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .header-text p {
+            font-size: 11px;
+            color: #a29bfe;
+        }
+
+        .status-bar {
+            padding: 10px 16px;
+            background: rgba(108, 92, 231, 0.1);
+            border-bottom: 1px solid rgba(108, 92, 231, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff6b6b;
+            flex-shrink: 0;
+        }
+
+        .status-dot.connected {
+            background: #00b894;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-text {
+            font-size: 11px;
+            color: #ccc;
+        }
+
+        .content {
+            padding: 16px;
+        }
+
+        .section-title {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #6c5ce7;
+            margin-bottom: 8px;
+        }
+
+        .token-input {
+            width: 100%;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(108, 92, 231, 0.3);
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px 12px;
+            font-size: 12px;
+            outline: none;
+            margin-bottom: 10px;
+            font-family: monospace;
+        }
+
+        .token-input:focus {
+            border-color: #6c5ce7;
+        }
+
+        .token-input::placeholder {
+            color: rgba(255,255,255,0.3);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+        }
+
+        .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        .btn-danger {
+            background: rgba(255, 107, 107, 0.15);
+            color: #ff6b6b;
+            border: 1px solid rgba(255, 107, 107, 0.3);
+        }
+
+        .btn-danger:hover { background: rgba(255, 107, 107, 0.25); }
+
+        .divider {
+            height: 1px;
+            background: rgba(255,255,255,0.06);
+            margin: 14px 0;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+        }
+
+        .info-label { color: #888; font-size: 11px; }
+        .info-value { color: #a29bfe; font-size: 11px; font-weight: 600; }
+
+        .current-job {
+            background: rgba(108, 92, 231, 0.1);
+            border: 1px solid rgba(108, 92, 231, 0.2);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-top: 12px;
+        }
+
+        .current-job-label {
+            font-size: 10px;
+            color: #6c5ce7;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .current-job-name {
+            font-size: 12px;
+            color: #fff;
+        }
+
+        .footer {
+            padding: 12px 16px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            text-align: center;
+        }
+
+        .footer a {
+            color: #6c5ce7;
+            text-decoration: none;
+            font-size: 11px;
+        }
+
+        .footer a:hover { text-decoration: underline; }
+
+        #disconnect-section { display: none; }
+        #connect-section { display: block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">N</div>
+        <div class="header-text">
+            <h1>Nurotra Job Agent</h1>
+            <p>Autonomous Application Engine</p>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-dot" id="status-dot"></div>
+        <span class="status-text" id="status-text">Not connected to Nurotra</span>
+    </div>
+
+    <div class="content">
+        <!-- CONNECT SECTION -->
+        <div id="connect-section">
+            <div class="section-title">Connect to Nurotra</div>
+            <input 
+                type="password" 
+                class="token-input" 
+                id="token-input" 
+                placeholder="Paste your Nurotra API token..."
+            />
+            <p style="font-size:11px; color:#888; margin-bottom:10px;">
+                Find your token in Nurotra → Action Agent → Settings → Extension Token
+            </p>
+            <button class="btn btn-primary" id="connect-btn">🔗 Connect</button>
+        </div>
+
+        <!-- CONNECTED SECTION -->
+        <div id="disconnect-section">
+            <div class="info-row">
+                <span class="info-label">User ID</span>
+                <span class="info-value" id="user-id-display">—</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Status</span>
+                <span class="info-value" id="agent-status">Waiting for commands</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Applied today</span>
+                <span class="info-value" id="applied-count">0 jobs</span>
+            </div>
+
+            <div class="current-job" id="current-job-box" style="display:none;">
+                <div class="current-job-label">⚡ Active Task</div>
+                <div class="current-job-name" id="current-job-name">—</div>
+            </div>
+
+            <div class="divider"></div>
+            <button class="btn btn-danger" id="disconnect-btn">🔌 Disconnect</button>
+        </div>
+    </div>
+
+    <div class="footer">
+        <a href="http://localhost:5173" target="_blank">Open Nurotra Dashboard →</a>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

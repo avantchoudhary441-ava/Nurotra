@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Nurotra Job Agent",
+  "version": "1.0.0",
+  "description": "Connect your browser to Nurotra's Action Agent for autonomous job applications.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "notifications",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://*.linkedin.com/*",
+    "https://*.naukri.com/*",
+    "https://*.indeed.com/*",
+    "https://*.internshala.com/*",
+    "https://*.glassdoor.com/*",
+    "https://*.google.com/*",
+    "http://localhost:5173/*",
+    "http://localhost:5000/*",
+    "https://nurotra.online/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.linkedin.com/*",
+        "https://*.naukri.com/*",
+        "https://*.indeed.com/*",
+        "https://*.internshala.com/*",
+        "https://*.glassdoor.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "http://localhost:5173/*",
+        "https://nurotra.online/*"
+      ],
+      "js": ["sync_script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

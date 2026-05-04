@@ -12,6 +12,7 @@ const { getTemporalContext } = require("../utils/timeHelper");
 const { runDocumentAnalysis } = require("./documentAnalysisService");
 const NuroMemory = require("../models/NuroMemory");
 const Contact = require("../models/Contact");
+const resourceEngineService = require("./resourceEngineService");
 
 /**
  * Docs Agent Service
@@ -219,6 +220,15 @@ const docsAgentService = {
                     { upsert: true, new: true }
                 );
             }
+            
+            // 6. Ingest into Resource Engine for cross-agent grounding
+            await resourceEngineService.autoIngest(
+                user._id, 
+                'file', 
+                { name: document.name, type: document.type, status: document.status }, 
+                document.name, 
+                document._id
+            );
 
             return {
                 success: true,

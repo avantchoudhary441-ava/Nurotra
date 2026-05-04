@@ -1,10 +1,24 @@
 const express = require("express");
 const router = express.Router();
 const actionAgentController = require("../controllers/actionAgentController");
+const extensionBridgeController = require("../controllers/extensionBridgeController");
 const { protect } = require("../middleware/authMiddleware");
 
-// Apply protect middleware to all action agent routes to ensure correct userId attribution
+// ─── EXTENSION BRIDGE (No auth middleware — uses own token system) ───
+router.post("/extension/auth", extensionBridgeController.extensionAuth);
+router.get("/extension/poll", extensionBridgeController.extensionPoll);
+router.post("/extension/report", extensionBridgeController.extensionReport);
+router.post("/extension/result", extensionBridgeController.extensionResult);
+router.post("/extension/frame", extensionBridgeController.extensionFrame);
+router.post("/extension/solve", extensionBridgeController.extensionSolve);
+
+// Apply protect middleware to all other action agent routes
 router.use(protect);
+
+router.get("/extension/status", (req, res) => {
+    const isConnected = extensionBridgeController.isExtensionConnected(req.user._id);
+    res.json({ success: true, isConnected });
+});
 
 // --- Core execution ---
 router.post("/execute", actionAgentController.executeCommand);
@@ -32,5 +46,16 @@ router.post("/webhook/:webhookId", actionAgentController.triggerWebhook);
 
 // --- Execution Logs ---
 router.get("/logs/:workflowId", actionAgentController.getWorkflowLogs);
+
+// --- Extension Token for UI ---
+router.get("/extension-token", (req, res) => {
+    const crypto = require('crypto');
+    const extensionToken = crypto.randomUUID(); // Fresh, unique token every time
+    
+    // Link this fresh token to the user
+    extensionBridgeController.registerExtensionToken(extensionToken, req.user._id);
+    
+    res.json({ success: true, token: extensionToken });
+});
 
 module.exports = router;

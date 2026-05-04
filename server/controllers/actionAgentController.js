@@ -20,8 +20,11 @@ const DEV_USER_ID = new mongoose.Types.ObjectId("000000000000000000000001");
 // ===========================================
 exports.executeCommand = async (req, res) => {
     try {
+        console.log("---- EXECUTE REQUEST RECEIVED ----");
+        console.log("BODY:", req.body);
         const { command } = req.body;
         if (!command) {
+            console.log("RETURNING 400: Command is required");
             return res.status(400).json({ success: false, message: "Command is required." });
         }
 
@@ -144,9 +147,43 @@ exports.executeCommand = async (req, res) => {
             });
         }
 
+        // 2b. Handle orphaned resume uploads (if activeTask was lost due to previous validation error or crash)
+        const orphanedResumeMatch = command.match(/I've uploaded my resume: ([a-f0-9]{24})/i);
+        if (!activeTask && orphanedResumeMatch) {
+            const documentId = orphanedResumeMatch[1];
+            const doc = await Document.findById(documentId);
+            if (doc) {
+                await agentResourceService.ingestResume(userId, doc.content, documentId);
+                await new ActionMessage({
+                    userId,
+                    role: "agent",
+                    content: "I have successfully saved your resume details to my Resource Engine. I lost track of the original job you wanted to apply for, so please ask me to apply for the job again!",
+                    type: "text"
+                }).save();
+            }
+            if (req.io) req.io.to(userId.toString()).emit('chat_update', { userId });
+            return res.json({ success: true, message: "Resume ingested successfully." });
+        }
+
         // 3. Block if another task is actually running (not intervention)
         if (activeTask && activeTask.status !== "intervention") {
-            return res.status(400).json({ success: false, message: "A task is already in progress. Please wait for it to finish or pause it before starting a new one." });
+            // AUTO-STOP: If it's an extension task stuck running, force-stop it and allow new command
+            const isExtensionTask = activeTask.activeMicroLog?.includes('Browser Extension') || activeTask.activeMicroLog?.includes('Extension');
+            const isStale = activeTask.startTime && (Date.now() - new Date(activeTask.startTime).getTime()) > 5 * 60 * 1000; // 5 mins
+            
+            if (isExtensionTask || isStale) {
+                console.log(`[ActionAgent] Auto-stopping stale task ${activeTask._id} to allow new command.`);
+                activeTask.status = 'stopped';
+                activeTask.activeMicroLog = 'Task auto-stopped. Starting new command...';
+                await activeTask.save();
+                
+                // Send STOP to extension
+                const extensionBridge = require('../controllers/extensionBridgeController');
+                extensionBridge.sendCommandToExtension(userId, { action: 'stop' });
+            } else {
+                console.log("RETURNING 400: activeTask exists", activeTask._id, activeTask.status);
+                return res.status(400).json({ success: false, message: "A task is already in progress. Please wait for it to finish or stop it before starting a new one." });
+            }
         }
 
         // 1. Save User Message
@@ -185,6 +222,83 @@ exports.executeCommand = async (req, res) => {
         // RESUME & IDENTITY GUARD (Multi-Stage Flag)
         const isJobTask = command.toLowerCase().match(/apply|job|internship|resume|career|vacancy/i);
         // Note: Logic moved to workflow constructor for better continuity
+
+        // ─── EXTENSION ROUTING: If user has Chrome Extension connected, use it ───
+        // The extension runs inside the user's real browser session — no bot detection.
+        if (isJobTask) {
+            const extensionBridge = require('../controllers/extensionBridgeController');
+            const isExtConnected = extensionBridge.isExtensionConnected(userId);
+            
+            if (isExtConnected) {
+                console.log(`[ExtensionBridge] Routing job task to Chrome Extension for user ${userId}`);
+
+                // Build the workflow for tracking purposes
+                const extWorkflow = new (require('../models/ActionWorkflow'))({
+                    userId,
+                    title: command,
+                    type: 'active',
+                    status: 'running',
+                    steps: [
+                        { id: 1, label: 'Scanning job listings', icon: 'search', status: 'running' },
+                        { id: 2, label: 'Filling application forms', icon: 'edit', status: 'pending' },
+                        { id: 3, label: 'Submitting applications', icon: 'send', status: 'pending' }
+                    ],
+                    activeMicroLog: 'Browser Extension engaged — searching for matching jobs...',
+                    startTime: new Date()
+                });
+                await extWorkflow.save();
+
+                // Fetch user profile & resume for the extension to use
+                const masterProfile = await require('../services/agentResourceService').getMasterProfile(userId).catch(() => null);
+                const preferredEmail = await require('../services/agentResourceService').getPreferredEmail(userId).catch(() => null);
+
+                // Parse keywords and platform from command
+                const keywords = parsedData.workflow?.metadata?.keywords || command;
+                const platform = command.toLowerCase().includes('linkedin') ? 'linkedin'
+                    : command.toLowerCase().includes('naukri') ? 'naukri'
+                    : command.toLowerCase().includes('indeed') ? 'indeed'
+                    : command.toLowerCase().includes('internshala') ? 'internshala'
+                    : 'linkedin'; // Default to LinkedIn
+
+                // Queue command for extension
+                extensionBridge.sendCommandToExtension(userId, {
+                    action: 'apply_jobs',
+                    platform,
+                    keywords,
+                    location: parsedData.workflow?.metadata?.location || 'India',
+                    workflowId: extWorkflow._id.toString(),
+                    resumeData: masterProfile,
+                    userProfile: {
+                        name: user?.name,
+                        email: preferredEmail || user?.email,
+                        phone: user?.phone
+                    }
+                });
+
+                // Notify frontend
+                const extMsg = await new ActionMessage({
+                    userId,
+                    role: 'agent',
+                    content: `✅ **Browser Extension Engaged!**\n\nYour Nurotra Chrome Extension is now searching for **${keywords}** positions on **${platform}**. It will apply using your real account — no bot detection possible.\n\n🔔 You'll receive notifications as each application is submitted. Check your ${platform} account to track the applications.`,
+                    type: 'text',
+                    timestamp: new Date()
+                }).save();
+
+                if (req.io) {
+                    const plainMsg = extMsg.toObject();
+                    plainMsg._id = plainMsg._id.toString();
+                    plainMsg.userId = plainMsg.userId?.toString();
+                    req.io.to(userId.toString()).emit('chat_update', { userId: userId.toString(), message: plainMsg });
+                }
+
+                return res.json({ 
+                    success: true, 
+                    intent: 'EXTENSION_ROUTED',
+                    workflowId: extWorkflow._id,
+                    message: 'Command routed to Chrome Extension.'
+                });
+            }
+        }
 
         if (parsedData.intent === "CLARIFICATION") {
             await new ActionMessage({
@@ -304,7 +418,7 @@ exports.executeCommand = async (req, res) => {
                 });
             }
         }
-        if (parsedData.intent === "WORKFLOW_EXECUTION") {
+        if (parsedData.intent === "WORKFLOW_EXECUTION" || parsedData.intent === "FORM_AUTOMATION") {
             const workflowData = parsedData.workflow;
             const isEventDriven = parsedData.isEventDriven || false;
 
@@ -545,6 +659,7 @@ exports.executeCommand = async (req, res) => {
             });
         }
 
+        console.log("RETURNING 400: Unknown intent parsed");
         return res.status(400).json({ success: false, message: "Unknown intent parsed." });
 
     } catch (error) {
@@ -564,6 +679,7 @@ exports.executeCommand = async (req, res) => {
         
         // Return specific validation error if possible
         if (error.name === 'ValidationError') {
+            console.log("RETURNING 400: ValidationError", error);
             return res.status(400).json({ 
                 success: false, 
                 message: "Validation Error: " + Object.values(error.errors).map(e => e.message).join(", ") 
@@ -908,11 +1024,17 @@ exports.stopWorkflow = async (req, res) => {
 
         wf.status = "stopped";
         wf.activeMicroLog = "Execution stopped by user.";
+        wf.endTime = new Date();
         addLog(wf, null, null, "error", "Execution stopped by user.", req.io, null, true);
         await wf.save();
 
+        // Send STOP command to the Chrome Extension so it stops clicking jobs
+        const extensionBridge = require('../controllers/extensionBridgeController');
+        extensionBridge.sendCommandToExtension(wf.userId, { action: 'stop' });
+        console.log(`[ActionAgent] STOP command sent to extension for user ${wf.userId}`);
+
         // Also terminate browser if it was a browser task
-        await browserAgentService.restartSession(wf.userId);
+        await browserAgentService.restartSession(wf.userId).catch(() => {});
 
         res.json({ success: true, message: "Task stopped." });
     } catch (err) {

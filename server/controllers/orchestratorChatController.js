@@ -119,3 +119,19 @@ exports.deleteChat = async (req, res) => {
         res.status(500).json({ error: "Failed to delete chat" });
     }
 };
+/**
+ * Get simplified history for AI context
+ */
+exports.getHistory = async (chatId) => {
+    if (!chatId) return [];
+    try {
+        const messages = await Message.find({ chat: chatId }).sort({ createdAt: 1 });
+        return messages.map(m => ({
+            role: m.sender ? 'user' : 'assistant',
+            content: m.content
+        }));
+    } catch (e) {
+        console.error("[ChatController] History retrieval failed:", e);
+        return [];
+    }
+};

@@ -15,6 +15,7 @@ const UserSchema = new mongoose.Schema({
     successfulCollabs: { type: Number, default: 0 },
     gmailAccessToken: { type: String },
     gmailRefreshToken: { type: String },
+    gmailEmail: { type: String },
     googleAccessToken: { type: String },
     googleRefreshToken: { type: String },
     zoomAccessToken: { type: String },
@@ -62,7 +63,8 @@ const UserSchema = new mongoose.Schema({
         type: Map,
         of: String,
         default: {}
-    }
+    },
+    extensionToken: { type: String }
 });
 
 // Encrypt password before save
