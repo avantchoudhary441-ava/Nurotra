@@ -582,7 +582,6 @@ const ActionAgentPage = () => {
         });
     };
 
-    // Smart prose renderer — handles markdown naturally without forcing structure
     const renderStructuredContent = (text, animate = false) => {
         if (!text) return null;
 
@@ -595,8 +594,17 @@ const ActionAgentPage = () => {
 
             const firstLine = lines[0];
 
+            // Check if it's a section header (✅ 📌 ⚠️ or ALL CAPS short line)
+            const isHeader = lines.length === 1 && (
+                firstLine.startsWith('✅') ||
+                firstLine.startsWith('📌') ||
+                firstLine.startsWith('⚠') ||
+                (firstLine === firstLine.toUpperCase() && firstLine.length > 3 && firstLine.length < 60 && !/[a-z]/.test(firstLine))
+            );
+
             // Check if it's a "Source:" line
             const isSource = lines.length === 1 && /^source:/i.test(firstLine);
+
             if (isSource) {
                 return (
                     <div key={pIdx} style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid #1e1e1e', fontSize: '11px', color: '#444', letterSpacing: '0.3px' }}>
@@ -605,37 +613,12 @@ const ActionAgentPage = () => {
                 );
             }
 
-            // Check if it's a section header (✅ 📌 ⚠ or ALL CAPS short line)
-            const isHeader = lines.length === 1 && (
-                firstLine.startsWith('✅') ||
-                firstLine.startsWith('📌') ||
-                firstLine.startsWith('⚠') ||
-                (firstLine === firstLine.toUpperCase() && firstLine.length > 3 && firstLine.length < 60 && !/[a-z]/.test(firstLine))
-            );
-
             if (isHeader) {
                 return (
                     <div key={pIdx} style={{ fontWeight: '700', fontSize: '13px', color: '#d0d0d0', marginTop: pIdx > 0 ? 18 : 0, marginBottom: 8, letterSpacing: '0.2px' }}>
-                        {animate ? <TypewriterText text={firstLine} speed={10} /> : firstLine}
+                        {animate ? <TypewriterText text={firstLine} speed={10} /> : renderInline(firstLine)}
                     </div>
                 );
-            }
-
-            // Check for key-value pair in single line
-            if (lines.length === 1 && firstLine.includes(':') && !firstLine.startsWith('Source')) {
-                const colonIdx = firstLine.indexOf(':');
-                const key = firstLine.substring(0, colonIdx).trim();
-                const value = firstLine.substring(colonIdx + 1).trim();
-                if (key && value) {
-                    return (
-                        <div key={pIdx} style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                            <span style={{ color: '#666', fontWeight: '500', fontSize: '11px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{key}</span>
-                            <span style={{ color: '#e0e0e0', fontSize: '13px' }}>
-                                {animate ? <TypewriterText text={value} speed={15} /> : value}
-                            </span>
-                        </div>
-                    );
-                }
             }
 
             // Check if this paragraph is a bullet list
@@ -660,6 +643,23 @@ const ActionAgentPage = () => {
                 );
             }
 
+            // Key-Value pairs check (e.g. "Status: Complete")
+            if (lines.length === 1 && firstLine.includes(':') && !firstLine.startsWith('Source')) {
+                const colonIdx = firstLine.indexOf(':');
+                const key = firstLine.substring(0, colonIdx).trim();
+                const value = firstLine.substring(colonIdx + 1).trim();
+                if (key && value && key.length < 30) {
+                    return (
+                        <div key={pIdx} style={{ display: 'flex', gap: 8, marginBottom: 5, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                            <span style={{ color: '#666', fontWeight: '500', fontSize: '11px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{key}</span>
+                            <span style={{ color: '#e0e0e0', fontSize: '13px' }}>
+                                {animate ? <TypewriterText text={value} speed={15} /> : renderInline(value)}
+                            </span>
+                        </div>
+                    );
+                }
+            }
+
             // Default: render as flowing prose paragraph
             const fullPara = lines.join(' ');
             return (
@@ -669,6 +669,7 @@ const ActionAgentPage = () => {
             );
         });
     };
+
 
     const [clickPulse, setClickPulse] = useState(null);
 
@@ -1042,7 +1043,7 @@ const ActionAgentPage = () => {
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: isUser ? 'flex-end' : 'flex-start' }}>
                                                 {msg.metadata?.meetingData ? (
                                                     <div className="premium-result-card" style={{ background: '#111', border: '1px solid #222', borderRadius: '16px', overflow: 'hidden' }}>
-                                                        <div style={{ padding: '15px 20px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <div style={{ padding: '15px 20px', borderBottom: '1px solid #222', display: 'space-between', alignItems: 'center' }}>
                                                             <div style={{ color: '#00ff88', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: 8 }}>
                                                                 <CheckCircle2 size={12} /> MEETING SCHEDULED
                                                             </div>

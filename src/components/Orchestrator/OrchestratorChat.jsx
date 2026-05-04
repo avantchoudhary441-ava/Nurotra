@@ -443,7 +443,9 @@ const OrchestratorChat = ({ activeChatId, setActiveChatId, onChatCreated }) => {
       setStream(prev => [...prev, { 
         type: 'completion', 
         content: 'Mission Successful', 
-        deliverables: data.data?.deliverables || [] 
+        summary: data.content, // This is the finalSummary from orchestratorController
+        deliverables: data.data?.deliverables || [],
+        result: { message: data.content } // Map to the expected 'result.message' in the renderer
       }]);
     }
   };

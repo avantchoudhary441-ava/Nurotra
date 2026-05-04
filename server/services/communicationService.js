@@ -1006,11 +1006,20 @@ async function handleBulkPersonalized(userId, data) {
 }
 
 // ─── MAIN ENTRY POINT ──────────────────────────────────────────────────────
-async function processMessage(userId, prompt, history = []) {
+async function processMessage(userId, prompt, history = [], context = null) {
     console.log(`[CommService] Processing: "${prompt.substring(0, 80)}..."`);
 
-    // Step 1: Classify intent
-    const classification = await classifyIntent(userId, prompt, history);
+    // Step 0: Ingest Shared Context from Orchestrator
+    let orchestrationContext = "";
+    if (context && context.outputs) {
+        orchestrationContext = "\n### ORCHESTRATION TEAM OUTPUTS (SHARED CONTEXT):\n";
+        Object.entries(context.outputs).forEach(([stepKey, stepData]) => {
+            orchestrationContext += `[TEAM_${stepKey.toUpperCase()} RESULT]:\n${JSON.stringify(stepData)}\n\n`;
+        });
+    }
+
+    // Step 1: Classify intent (Include orchestrationContext in prompt for better classification)
+    const classification = await classifyIntent(userId, prompt + orchestrationContext, history);
     console.log(`[CommService] Intent: ${classification.intent}`);
 
     // Step 2: Auto-Grounding (Resource Engine)
@@ -1020,8 +1029,8 @@ async function processMessage(userId, prompt, history = []) {
     const data = classification.extracted_data || {};
     
     // Inject grounded data into extracted_data if missing
-    if (groundedResources.length > 0) {
-        data.groundedContext = "";
+    if (groundedResources.length > 0 || orchestrationContext) {
+        data.groundedContext = orchestrationContext;
         for (const res of groundedResources) {
             // resolve recipients from contact resources
             if (res.type === 'contact' && res.data?.email) {
